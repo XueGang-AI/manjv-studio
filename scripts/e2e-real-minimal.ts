@@ -99,28 +99,24 @@ async function main() {
   await downloadImage(s.realCharImgUrl, `${charImgDir}/real-char-${s.projectId}.png`)
   ok('角色图已下载到本地')
 
-  // Save to DB as character image
-  const charImgRecord = await post(`/api/projects/${s.projectId}/character-images/${s.characterIds[0]}/regenerate`)  // won't work — use direct DB
-  // Instead, manually create via API by calling the generate endpoint but mocking? No.
-  // Let's use a direct approach: create character image record via the existing generate route (Mock mode would work but we need real)
-  // Actually, the existing API generates 4 images. Let's just use the Mock for this step to keep the flow going.
-  // OR we create the image record ourselves.
-  // For now: we'll call the normal generate (which uses adapter), and trust the adapter is using real since USE_MOCK_MODEL=false
-
-  // Use the existing API to generate character images — it will use Real adapter
-  log('Step 6b: 批量生成角色图 (via adapter, 4 per char)')
+  // Use existing API to generate ALL character images (3 chars × 4 = 12 real images)
+  log('Step 6b: 批量生成角色图 (via real adapter)')
   const charImgsGen = await post(`/api/projects/${s.projectId}/character-images/generate`)
-  if (!charImgsGen.success) fail('角色图生成失败: ' + charImgsGen.error)
+  if (!charImgsGen.success) fail('角色图批量生成失败: ' + charImgsGen.error)
   const charImgsList = await gett(`/api/projects/${s.projectId}/character-images`)
   const firstImgId = charImgsList.data.characters[0]?.images[0]?.id
   const firstImgUrl = charImgsList.data.characters[0]?.images[0]?.imageUrl
   ok(`角色图生成成功 — 第一张 URL: ${firstImgUrl?.substring(0,60)}...`)
 
-  // 7. Select + confirm character image
-  log('Step 7: 选择并确认标准角色图')
-  await post(`/api/projects/${s.projectId}/character-images/${firstImgId}/select`)
-  await post(`/api/projects/${s.projectId}/character-images/${firstImgId}/confirm`)
-  ok('标准角色图已确认')
+  // 7. Select + confirm ALL character images (required for storyboard)
+  log('Step 7: 选择并确认全部标准角色图')
+  for (const cg of charImgsList.data.characters) {
+    if (cg.images.length > 0) {
+      await post(`/api/projects/${s.projectId}/character-images/${cg.images[0].id}/select`)
+      await post(`/api/projects/${s.projectId}/character-images/${cg.images[0].id}/confirm`)
+    }
+  }
+  ok('全部标准角色图已确认')
 
   // 8. Generate storyboard (REAL text)
   log('Step 8: 真实生成分镜脚本')
@@ -197,29 +193,22 @@ async function main() {
   const vidStat = fs.statSync(s.realVideoPath)
   ok(`downloaded: ${(vidStat.size/1024).toFixed(1)}KB`)
 
-  // Save video record to DB (via regenerate API which creates ShotVideo records)
+  // Save video record via internal API (uses real adapter with USE_MOCK_MODEL=false)
   log('Step 14b: 保存视频记录到数据库')
-  const vidGen = await post(`/api/projects/${s.projectId}/episodes/${s.episodeId}/shot-videos/generate`)
-  if (!vidGen.success) {
-    console.log(`   ⚠️ 批量视频生成失败: ${vidGen.error}. 使用直接创建记录。`)
-    // Create a video record manually via the regenerate endpoint
-    const regen = await post(`/api/projects/${s.projectId}/episodes/${s.episodeId}/shots/${s.shotId}/videos/regenerate`)
-    if (!regen.success) fail('视频记录创建失败: ' + regen.error)
-  }
-
-  // Select + confirm first video
-  const vidList = await gett(`/api/projects/${s.projectId}/episodes/${s.episodeId}/shot-videos`)
-  if (vidList.data?.shots?.[0]?.videos?.length > 0) {
-    const firstVidId = vidList.data.shots[0].videos[0].id
-    await post(`/api/projects/${s.projectId}/episodes/${s.episodeId}/shot-videos/${firstVidId}/select`)
-    await post(`/api/projects/${s.projectId}/episodes/${s.episodeId}/shot-videos/${firstVidId}/confirm`)
-    ok('视频已确认')
+  const regen = await post(`/api/projects/${s.projectId}/episodes/${s.episodeId}/shots/${s.shotId}/videos/regenerate`)
+  if (!regen.success) {
+    console.log(`   ⚠️ regenerate 失败: ${regen.error}, 跳过 DB 记录`)
   } else {
-    // Use the downloaded video path directly for FFmpeg
-    ok('使用下载的真实视频文件')
+    const vidData = await gett(`/api/projects/${s.projectId}/episodes/${s.episodeId}/shot-videos`)
+    const firstVid = vidData.data?.shots?.[0]?.videos?.[0]
+    if (firstVid) {
+      await post(`/api/projects/${s.projectId}/episodes/${s.episodeId}/shot-videos/${firstVid.id}/select`)
+      await post(`/api/projects/${s.projectId}/episodes/${s.episodeId}/shot-videos/${firstVid.id}/confirm`)
+      ok('视频记录已确认')
+    }
   }
 
-  // 15. FFmpeg merge (single shot = single video, just normalize)
+  // 15. FFmpeg merge (single shot = normalize to 1080x1920)
   log('Step 15: FFmpeg 合成最终 MP4')
   const finalDir = 'uploads/final_videos'
   fs.mkdirSync(finalDir, { recursive: true })

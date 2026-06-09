@@ -31,7 +31,7 @@ export class AgnesImageAdapter extends BaseImageAdapter {
     if (request.negativePrompt) body.negative_prompt = request.negativePrompt
     if (request.seed) body.seed = request.seed
     if (request.referenceImages?.length) body.reference_images = request.referenceImages
-    if (request.style) body.style = request.style
+    // Note: `style` is not supported by the Agnes image API; include it in the prompt instead
 
     const response = await fetch(`${this.baseUrl}/images/generations`, {
       method: 'POST',

@@ -1,4 +1,4 @@
-# 真实 Agnes API 探针报告
+# 真实 Agnes API 探针与闭环测试报告
 
 ## 基础配置
 
@@ -10,146 +10,152 @@
 | video_model | `agnes-video-v2.0` |
 | auth_header | `Authorization: Bearer <API_KEY>` |
 
+## 探针结果
+
+| 探针 | 端点 | 状态码 | 结果 |
+|------|------|--------|------|
+| text_probe | `/chat/completions` | 200 | ✅ JSON 输出正常 |
+| image_probe | `/images/generations` | 200 | ✅ 返回 `url` + `b64_json` |
+| video_probe | `/videos` (create) | 200 | ✅ 返回 `task_id` |
+
 ## 文本模型 Agnes-2.0-Flash
 
-### 探针结果
+### 验证结果
 
-- **端点**: `POST /v1/chat/completions`
-- **状态码**: 200 ✅
-- **JSON 输出**: ✅ 严格输出 JSON，无 markdown
+- **JSON 输出**: ✅ 严格 JSON，无 markdown
 - **中文支持**: ✅ 正常
 - **System Prompt**: ✅ 支持
-- **response_format**: ✅ 支持 `{type: "json_object"}`
+- **response_format**: ✅ `{type: "json_object"}`
+- **实际测试**: 故事方案、角色设定、分镜脚本全部真实生成成功
 
-### 请求示例
+### 请求格式
 
 ```json
+POST /v1/chat/completions
 {
   "model": "agnes-2.0-flash",
-  "messages": [
-    {"role": "system", "content": "你是一个严格输出 JSON 的助手。"},
-    {"role": "user", "content": "请返回 {\"ok\": true}"}
-  ],
-  "temperature": 0.2,
-  "max_tokens": 256
-}
-```
-
-### 响应格式
-
-```json
-{
-  "choices": [{"message": {"content": "{\"ok\": true}"}}],
-  "usage": {"prompt_tokens": 50, "completion_tokens": 10}
+  "messages": [...],
+  "temperature": 0.2-0.7,
+  "max_tokens": 256-8192,
+  "response_format": {"type": "json_object"}
 }
 ```
 
 ## 图片模型 Agnes-Image-2.0-Flash
 
-### 探针结果
+### 验证结果
 
-- **端点**: `POST /v1/images/generations`
-- **状态码**: 200 ✅
-- **返回格式**: `url` + `b64_json`
-- **size 参数**: ❌ 使用 `size` 返回 500，需用 `aspect_ratio`
-- **num_outputs**: ✅ 支持
+- **返回格式**: ✅ `url` (Agnes CDN) + `b64_json`
+- **aspect_ratio**: ✅ `9:16` 正常
+- **num_outputs**: ✅ 1-4 正常
 - **negative_prompt**: ✅ 支持
-- **seed**: ✅ 待确认
-- **reference_images**: ✅ 待确认（字段名 `reference_images`）
+- **size 参数**: ❌ 不支持，返回 500
+- **style 参数**: ❌ 不支持，返回 400 错误
+- **reference_images**: ⚠️ 字段名存在但未实测
+- **实际测试**: 3 个角色图 + 8 个分镜图全部真实生成成功
 
-### 请求示例
+### 请求格式
 
 ```json
+POST /v1/images/generations
 {
   "model": "agnes-image-2.0-flash",
-  "prompt": "Korean manhwa style, beautiful Chinese woman portrait, elegant",
+  "prompt": "...",
   "aspect_ratio": "9:16",
-  "num_outputs": 1
-}
-```
-
-### 响应格式
-
-```json
-{
-  "data": [{
-    "url": "https://platform-outputs.agnes-ai.space/images/...",
-    "b64_json": "...",
-    "revised_prompt": "..."
-  }]
+  "num_outputs": 4,
+  "negative_prompt": "ugly, deformed, low quality, blurry"
 }
 ```
 
 ### 已知限制
 
-- 不支持 `size` 参数（如 `1080x1920`），需使用 `aspect_ratio`
-- 图片 URL 为外部 CDN，可能需要下载到本地存储避免外链失效
+- **不支持**: `size`, `style` 参数（已在 Adapter 中移除）
+- **图片 URL**: 外部 CDN，建议下载到本地存储
 
 ## 视频模型 Agnes-Video-V2.0
 
-### 探针结果
+### 验证结果
 
-- **端点**: `POST /v1/videos`
-- **状态码**: 200 ✅
-- **异步模式**: ✅ 返回 `task_id`，需轮询
-- **轮询端点**: `GET /v1/videos/{task_id}`
-- **status 字段**: `processing` → `completed` / `failed`
-- **progress**: ✅ 0-100
+- **创建任务**: ✅ 返回 `task_id`, `status: "queued"`
 - **text-to-video**: ✅ 支持
-- **image-to-video**: ✅ 支持（`image` 字段）
+- **image-to-video**: ⚠️ 创建成功但一直排队
+- **轮询**: ✅ `GET /v1/videos/{task_id}` 正常返回 status
+- **实际测试**: task 创建成功，但 10 分钟内 status 一直为 `queued`
 
-### 请求示例
+### 请求格式（创建）
 
 ```json
+POST /v1/videos
 {
   "model": "agnes-video-v2.0",
-  "prompt": "A young woman standing in rainy street, slow push-in camera, cinematic lighting",
+  "prompt": "...",
+  "image": "https://platform-outputs.../confirmed-shot.png",
   "duration": 5,
   "aspect_ratio": "9:16"
 }
 ```
 
-### 响应格式（创建）
+### 轮询格式
 
 ```json
-{
-  "id": "task_xxx",
-  "task_id": "task_xxx",
-  "status": "processing",
-  "progress": 0,
-  "seconds": 5
-}
+GET /v1/videos/{task_id}
+// Response: {"status": "queued|processing|completed|failed", "progress": 0-100}
 ```
 
-### 响应格式（轮询完成）
+### 已知限制
 
-```json
-{
-  "status": "completed",
-  "video_url": "https://...",
-  "seconds": 5
-}
+- **队列拥堵**: task 创建后可能在队列中等待超过 10 分钟
+- **progress 字段**: 探针返回中未包含 progress 数值（显示 `?%`）
+- **建议**: 增加最大等待时间至 30 分钟，或使用 webhook 回调
+
+## 真实闭环测试详细结果
+
+### 项目信息
+
+```
+project_id:              758478ba-2a80-4033-ab88-83948c4eb113
+story_package_id:        0186b8ba-085d-44ad-8f77-318f86d27df5
+character_count:         3
+real_character_image_url: https://platform-outputs.agnes-ai.space/images/text-to-image/2026/06/...
+episode_id:              d4040f5a-7a12-43e2-aa9f-afb358a503a4
+shot_count:              8
+real_shot_image_url:     https://platform-outputs.agnes-ai.space/images/text-to-image/2026/06/...
+video_task_id:           task_dYE3zwrOUiLEQjqyrPpaqfae945VkUKS
+video_poll_status:       queued (120 polls, 10 min timeout)
 ```
 
-### 轮询策略
+### 各阶段结果
 
-- 间隔: 5 秒
-- 最大等待: 10 分钟 (120 次)
-- 状态: processing → completed / failed
+| 步骤 | 模型 | 结果 | 耗时 |
+|------|------|------|------|
+| 1. 创建项目 | - | ✅ | <1s |
+| 2. 故事方案 | Agnes Text | ✅ | ~3s |
+| 3. 确认故事 | - | ✅ | <1s |
+| 4. 角色设定 | Agnes Text | ✅ | ~5s |
+| 5. 确认角色 | - | ✅ | <1s |
+| 6. 角色图(1张) | Agnes Image | ✅ | ~3s |
+| 6b. 角色图(批量) | Agnes Image | ✅ (12张) | ~30s |
+| 7. 确认角色图 | - | ✅ | <1s |
+| 8. 分镜脚本 | Agnes Text | ✅ (8 shots) | ~8s |
+| 9. 确认分镜 | - | ✅ | <1s |
+| 10. 分镜图 | Agnes Image | ✅ (32张) | ~60s |
+| 11. 确认分镜图 | - | ✅ | <1s |
+| 12. 视频创建 | Agnes Video | ✅ | <1s |
+| 13. 视频轮询 | Agnes Video | ❌ 超时 | 600s |
 
-## 真实全流程状态
+## 当前结论
 
-| 阶段 | 状态 | 说明 |
-|------|------|------|
-| 文本模型 | ✅ 真实可用 | 故事/角色/分镜全部真实生成 |
-| 图片模型 | ✅ 真实可用 | 探针通过，Adapter 已更新 |
-| 视频模型 | ✅ 真实可用 | 探针通过，异步 task_id + 轮询 |
-| 全流程 | ⚠️ 待验证 | 需真实 API 完整端到端测试（需等待视频生成时间） |
+| 指标 | 状态 |
+|------|------|
+| 真实文本 API | ✅ 已接通，故事/角色/分镜均通过 |
+| 真实图片 API | ✅ 已接通，角色图+分镜图均生成 |
+| 真实视频 API | ⚠️ 已接通但队列耗时过长 |
+| Mock 全流程 | ✅ 一键通过 (`npm run test:e2e`) |
+| 最小真实闭环 | ⚠️ 文本+图片完成，视频需更长等待 |
 
-## 待验证项
+## 待继续验证
 
-1. 图片 `reference_images` 字段——用于角色一致性
-2. 视频 `image` 字段（图生视频）
-3. 图片 API 的 `seed` 固定能力
-4. 视频最长 duration 范围
-5. API 并发限制和 QPS
+1. 视频模型在非高峰期的实际生成时间和成功率
+2. `image` 参数对 i2v 是否生效（当前 task 未处理完无法确认输出质量）
+3. 视频输出质量（分辨率、时长、动态效果）
+4. 图片 `reference_images` 字段用于角色一致性

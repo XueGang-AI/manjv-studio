@@ -7,8 +7,16 @@ AI 驱动的漫剧创作平台，支持故事分析、角色设计、分镜生�
 - **前端**: Next.js 16 + TypeScript + TailwindCSS
 - **数据库**: PostgreSQL + Prisma 7
 - **任务队列**: BullMQ + Redis
-- **视频合成**: FFmpeg
-- **模型**: Agnes-2.0-Flash / Agnes-Image-2.0-Flash / Agnes-Video-2.0
+- **视频合成**: FFmpeg 8
+- **AI 模型**: Agnes-2.0-Flash / Agnes-Image-2.0-Flash / Agnes-Video-V2.0
+- **测试**: vitest
+
+## 当前状态
+
+| 模式 | 文本模型 | 图片模型 | 视频模型 | 全流程 |
+|------|----------|----------|----------|--------|
+| Mock | ✅ 可跑通 | ✅ 可跑通 | ✅ 可跑通 | ✅ `npm run test:e2e` |
+| 真实 API | ✅ 已接通 | ✅ 已接通 | ⚠️ 排队拥堵 | ⚠️ 视频需更长等待 |
 
 ## 快速开始
 
@@ -17,6 +25,7 @@ AI 驱动的漫剧创作平台，支持故事分析、角色设计、分镜生�
 - Node.js 20+
 - PostgreSQL 16+
 - Redis 7+
+- FFmpeg（推荐 8.x）
 
 ### 安装
 
@@ -31,13 +40,10 @@ cp .env.example .env
 # 3. 创建数据库
 createdb manjv_studio
 
-# 4. 生成 Prisma Client
-npm run db:generate
-
-# 5. 推送数据库 schema
+# 4. 推送数据库 schema
 npm run db:push
 
-# 6. 填充种子数据
+# 5. 填充种子数据
 npm run db:seed
 ```
 
@@ -52,11 +58,19 @@ npm run dev
 ### 测试
 
 ```bash
-# 健康检查
-curl http://localhost:3000/api/health
+# 单元测试
+npm test                    # 18 tests
 
-# 查看项目列表
-curl http://localhost:3000/api/projects
+# Mock 全流程 E2E
+npm run test:e2e            # 20 steps, auto confirm, → MP4
+
+# 真实 API 探针
+npm run probe:agnes:text    # /chat/completions
+npm run probe:agnes:image   # /images/generations
+npm run probe:agnes:video   # /videos (async poll)
+
+# 真实 API 最小闭环
+USE_MOCK_MODEL=false npx tsx scripts/e2e-real-minimal.ts
 ```
 
 ## 项目结构
@@ -64,42 +78,54 @@ curl http://localhost:3000/api/projects
 ```
 manjv-studio/
 ├── src/
-│   ├── app/                    # Next.js App Router 页面和 API
-│   │   ├── api/                # API 路由
-│   │   ├── projects/           # 项目页面
-│   │   ├── prompts/            # Prompt 模板管理页
-│   │   └── settings/           # 设置页
+│   ├── app/                    # Next.js App Router (页面 + API)
 │   ├── components/             # React 组件
-│   │   ├── layout/             # 布局组件 (Sidebar, TopBar)
-│   │   ├── project/            # 项目组件 (StepNavigator)
-│   │   └── ui/                 # UI 基础组件
-│   ├── lib/                    # 工具库
-│   ├── server/                 # 服务端代码
-│   │   ├── model-adapters/     # 模型适配层
-│   │   ├── queues/             # 任务队列
-│   │   ├── services/           # 服务
-│   │   ├── storage/            # 存储服务
-│   │   ├── validators/         # 校验器
-│   │   └── workflows/          # 工作流引擎
-│   └── hooks/                  # React Hooks
-├── prisma/                     # Prisma Schema + Seed
-├── prompts/                    # Prompt 模板库
-├── scripts/                    # 工具脚本
-├── uploads/                    # 文件上传目录
-└── docs/                       # 文档
+│   │   ├── layout/             # Sidebar, TopBar
+│   │   ├── project/            # ProjectForm, StoryDisplay, etc.
+│   │   └── ui/                 # Button, Card, Input, Badge
+│   ├── lib/                    # utils, prisma client, validators
+│   ├── server/
+│   │   ├── model-adapters/     # 统一适配层 (Text/Image/Video + Mock)
+│   │   ├── queues/             # BullMQ 任务队列
+│   │   ├── services/           # Prompt, FFmpeg, Version, QC
+│   │   ├── storage/            # 文件存储
+│   │   └── workflows/          # 工作流
+│   └── __tests__/              # 单元测试
+├── prisma/                     # Schema + Seed
+├── prompts/                    # 25 .prompt + 23 .json 素材库
+├── scripts/                    # E2E + 探针脚本
+├── uploads/                    # 文件上传 + 视频输出
+└── docs/                       # 完整文档
+```
+
+## 核心流程
+
+```
+创建项目 → 故事方案 → 角色设定 → 角色图 → 分镜脚本 → 分镜图 → 视频片段 → 成片 MP4
+   ↓           ↓         ↓        ↓         ↓         ↓         ↓          ↓
+ Phase 3    Phase 4   Phase 5  Phase 6   Phase 7   Phase 8   Phase 9   Phase 10
+     + Phase 11 (任务队列) + Phase 12 (版本管理) + Phase 13 (QC)
 ```
 
 ## 数据库
 
-核心数据模型（19 张表）：users, projects, story_packages, characters, character_images, episodes, shots, image_prompts, shot_images, video_prompts, shot_videos, voice_scripts, final_videos, generation_tasks, task_logs, prompt_templates, prompt_template_versions, model_configs, project_versions, qc_reports, asset_files
+21 张表: users, projects, story_packages, characters, character_images, episodes, shots, image_prompts, shot_images, video_prompts, shot_videos, voice_scripts, final_videos, generation_tasks, task_logs, prompt_templates, prompt_template_versions, model_configs, project_versions, qc_reports, asset_files
 
-## 开发阶段
+## 环境变量
 
-| Phase | 内容 | 状态 |
-|-------|------|------|
-| 1 | 项目初始化 | ✅ 完成 |
-| 2 | 文件解析 & Prompt 模板库 | ⏳ 待开始 |
-| 3+ | 后续阶段 | ⏳ 待开始 |
+见 [docs/ENV.md](docs/ENV.md)
+
+## 文档索引
+
+| 文档 | 内容 |
+|------|------|
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 开发指南 |
+| [docs/E2E_TEST.md](docs/E2E_TEST.md) | E2E 测试指南 |
+| [docs/API.md](docs/API.md) | API 文档 (60+ endpoints) |
+| [docs/ENV.md](docs/ENV.md) | 环境变量说明 |
+| [docs/PHASE_1_13_SUMMARY.md](docs/PHASE_1_13_SUMMARY.md) | 开发阶段总结 |
+| [docs/REAL_AGNES_API_PROBE_REPORT.md](docs/REAL_AGNES_API_PROBE_REPORT.md) | 真实 API 探针报告 |
+| [docs/REAL_AGNES_API_TODO.md](docs/REAL_AGNES_API_TODO.md) | API 接入待办 |
 
 ## npm 缓存注意
 
