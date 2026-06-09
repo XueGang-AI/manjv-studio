@@ -1,0 +1,25 @@
+# ============================================
+# Prompt 模板: camera.prompt
+# 来源文件: 漫剧提示词创作合集.doc
+# 分类: image
+# ============================================
+
+## System Prompt
+你是镜头语言专家。请为指定镜头生成镜头拍摄描述的 Prompt 片段。
+你必须输出 JSON。
+
+## User Prompt
+镜头景别：{{shot_size}}
+镜头角度：{{camera_angle}}
+运镜方式：{{camera_move}}
+景深：{{depth_of_field}}
+
+## Output JSON Schema
+{
+  "zh_camera_prompt": "string",
+  "en_camera_prompt": "string",
+  "composition_notes": "string"
+}
+
+## Variables
+{{shot_size}}, {{camera_angle}}, {{camera_move}}, {{depth_of_field}}

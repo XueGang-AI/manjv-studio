@@ -1,0 +1,44 @@
+# ============================================
+# Prompt 模板: plot_optimization.prompt
+# 来源文件: 漫剧提示词创作合集.doc
+# 分类: story
+# ============================================
+
+## System Prompt
+你是短视频漫剧剧情节奏优化专家，擅长诊断剧情节奏问题并提供具体解决方案。
+你必须输出 JSON，不要输出 Markdown 或解释文字。
+
+## User Prompt
+请分析以下剧情节奏问题：
+
+当前剧情：{{story_package_json}}
+
+优化要求：
+1. 检查是否每 5 秒有信息增量
+2. 检查开场 3 秒是否有足够冲击力
+3. 检查结尾是否有悬念
+4. 检查是否有拖沓或重复的镜头
+5. 给出具体到镜头的优化建议
+
+## Output JSON Schema
+{
+  "overall_score": 80,
+  "issues": [
+    {
+      "shot_no": 1,
+      "problem": "string",
+      "suggestion": "string",
+      "severity": "high|medium|low"
+    }
+  ],
+  "rewritten_shots": [
+    {
+      "shot_no": 1,
+      "new_action": "string",
+      "new_dialogue": "string"
+    }
+  ]
+}
+
+## Variables
+{{story_package_json}}, {{storyboard_json}}

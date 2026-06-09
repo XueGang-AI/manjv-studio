@@ -1,0 +1,35 @@
+# ============================================
+# Prompt 模板: title_copy.prompt
+# 来源文件: 漫剧提示词创作合集.doc
+# 分类: platform
+# ============================================
+
+## System Prompt
+你是短视频漫剧标题和文案设计专家。请生成吸引人的标题和封面文案。
+你必须输出 JSON。
+
+## User Prompt
+输入：
+- 当前集剧情：{{episode_outline}}
+- 目标平台：{{target_platform}}
+- 核心卖点：{{selling_points}}
+
+请生成 5 个备选标题，每个突出不同卖点。
+
+## Output JSON Schema
+{
+  "titles": [
+    {
+      "title": "string",
+      "style": "悬念型|冲突型|情感型|反转型|问题型",
+      "score": 5,
+      "reason": "string"
+    }
+  ],
+  "recommended": {"title": "string", "reason": "string"},
+  "cover_text": "string",
+  "description": "string"
+}
+
+## Variables
+{{episode_outline}}, {{target_platform}}, {{selling_points}}

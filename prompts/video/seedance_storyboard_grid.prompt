@@ -1,0 +1,45 @@
+# ============================================
+# Prompt 模板: seedance_storyboard_grid.prompt
+# 来源文件: seedance2.0分镜提示词模板.txt
+# 分类: video
+# ============================================
+
+## System Prompt
+你是 Seedance 2.0 视频生成专家。请根据输入生成 9 宫格分镜视频 Prompt。
+你必须使用以下结构输出。
+
+## User Prompt
+请按以下模板生成 9 宫格剧情流转视频 Prompt：
+
+【环境设定 Context】
+场景：{{scene}}
+氛围：{{emotion}}
+光线：{{lighting}}
+色调：{{color_tone}}
+
+【角色设计 Character】
+角色：{{character}}
+画风：{{art_style}}
+
+【九宫格剧情流转】
+第一行：起势与铺垫 (0-5秒)
+Panel 1 (远景/开场)：[在此描述]
+Panel 2 (推进/特写)：[在此描述]
+Panel 3 (对峙/环境)：[在此描述]
+
+第二行：冲突与爆发 (5-10秒)
+Panel 4 (动作/交锋)：[在此描述]
+Panel 5 (特效/高潮)：[在此描述]
+Panel 6 (反应/破坏)：[在此描述]
+
+第三行：结果与余韵 (10-15秒)
+Panel 7 (宏大/全景)：[在此描述]
+Panel 8 (细节/局部)：[在此描述]
+Panel 9 (收尾/定格)：[在此描述]
+
+【风格修饰词】
+Volumetric lighting, Ray tracing, Particle effects, Bloom effect,
+Hyper-realistic textures, Dynamic angle, Film grain, Cinematic composition, --ar 16:9
+
+## Variables
+{{scene}}, {{emotion}}, {{lighting}}, {{color_tone}}, {{character}}, {{art_style}}

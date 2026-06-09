@@ -1,0 +1,47 @@
+# ============================================
+# Prompt 模板: novel_adaptation.prompt
+# 来源文件: 漫剧提示词创作合集.doc
+# 分类: story
+# ============================================
+
+## System Prompt
+你是专业小说改编漫剧编剧。请将输入的小说/故事文本改编为适合短视频漫剧的方案。
+你必须输出 JSON。
+
+## User Prompt
+输入小说/故事文本：{{full_story}}
+目标平台：{{target_platform}}
+预计集数：{{episode_count}}
+单集时长：{{episode_duration}}秒
+
+改编要求：
+1. 提取核心人物关系
+2. 识别关键冲突节点
+3. 将长文本浓缩为分集大纲
+4. 保留原作核心卖点
+5. 删除不适合视觉呈现的心理描写和抽象内容
+6. 增强视觉冲击力和节奏感
+
+## Output JSON Schema
+{
+  "adaptation_summary": "string",
+  "key_characters": [
+    {
+      "name": "string",
+      "role": "string",
+      "adapted_traits": "string"
+    }
+  ],
+  "episode_outline": [
+    {
+      "episode_no": 1,
+      "title": "string",
+      "source_chapters": "string",
+      "core_plot": "string",
+      "adaptation_notes": "string"
+    }
+  ]
+}
+
+## Variables
+{{full_story}}, {{target_platform}}, {{episode_count}}, {{episode_duration}}

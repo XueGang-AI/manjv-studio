@@ -1,0 +1,106 @@
+{
+  "_meta": {
+    "file": "advanced_motion_combos.json",
+    "category": "video",
+    "source_file": "组合运镜2.docx",
+    "total_entries": 24
+  },
+  "entries": [
+    {
+      "text": "文生图 (Text-to-Image) - 创造富有动感和张力的静态画面",
+      "source": "组合运镜2.docx"
+    },
+    {
+      "text": "Low angle, extreme close-up on a trembling hand clutching a blood-stained letter, shallow depth of field (bokeh background), dramatic side lighting casting long shadows, Dutch angle for unease.\n(仰角，极度特写一只颤抖的手紧抓染血信件，浅景深（背景虚化），戏剧性的侧光投射长影，荷兰角制造不安感。)",
+      "source": "组合运镜2.docx"
+    },
+    {
+      "text": "Slow motion implied: Medium shot, backlit hero standing defiantly atop rubble, dust swirling around boots (motion blur suggested), low angle for grandeur, cinematic lens flare.\n(暗示慢动作：中景，逆光的英雄无畏地站在废墟之上，尘土在靴边盘旋（暗示运动模糊），仰角营造宏伟感，电影镜头光晕。)",
+      "source": "组合运镜2.docx"
+    },
+    {
+      "text": "Over-the-shoulder shot (OTS) from explorer looking into a dark cave entrance, handheld feel for rawness, beam of flashlight cutting through deep shadows, shallow DOF focusing on the mysterious object deep within.\n(过肩镜头，从探险者视角望向黑暗洞穴入口，手持感体现原始感，手电光束划破深影，浅景深聚焦于深处神秘物体。)",
+      "source": "组合运镜2.docx"
+    },
+    {
+      "text": "High angle, wide establishing shot of a sun-drenched, peaceful village nestled in a valley, deep depth of field, idyllic atmosphere. Subtle Dutch angle and gathering storm clouds on the horizon hint at impending doom.\n(俯角，山谷中阳光普照的宁静村庄广角定场镜头，深景深，田园氛围。微妙的荷兰角和地平线聚集的风暴云暗示即将到来的厄运。)",
+      "source": "组合运镜2.docx"
+    },
+    {
+      "text": "Split diopter shot: Extreme close-up on one lover's eye in sharp focus (left frame), while the other lover stands distant and slightly out of focus (right frame) in a crowded room (deep DOF elsewhere), conveying emotional distance.\n(分像镜镜头：极度特写一位情人的眼睛清晰聚焦（左帧），而另一位情人站在拥挤房间中（其他部分深景深）显得疏远且轻微失焦（右帧），传达情感距离。)",
+      "source": "组合运镜2.docx"
+    },
+    {
+      "text": "图生视频 (Image-to-Video) - 基于输入图片描述动态演变",
+      "source": "组合运镜2.docx"
+    },
+    {
+      "text": "(假设输入图片是文生图描述的起始画面)",
+      "source": "组合运镜2.docx"
+    },
+    {
+      "text": "【输入：悬疑开场-手特写】",
+      "source": "组合运镜2.docx"
+    },
+    {
+      "text": "Slow, shaky pull-out from the bloody hand to reveal a dimly lit study, tracking backwards as the camera discovers a shocked face in the foreground, shallow DOF shifting focus to the face.\n(缓慢、颤抖地从染血的手拉出，展现昏暗的书房，镜头向后移动时发现前景中一张震惊的脸，浅景深将焦点转移到脸上。)",
+      "source": "组合运镜2.docx"
+    },
+    {
+      "text": "【输入：英雄登场-废墟中景】",
+      "source": "组合运镜2.docx"
+    },
+    {
+      "text": "Hero slowly turns head towards camera with determination. Camera begins a majestic crane shot rising upwards, circling slightly while keeping hero centered, revealing the vast, devastated cityscape behind him. Epic orchestral score swells.\n(英雄缓缓转头，坚定地望向镜头。相机开始庄严的升降镜头向上抬升，轻微环绕同时保持英雄居中，展现其身后广阔的废墟城市。史诗管弦乐渐强。)",
+      "source": "组合运镜2.docx"
+    },
+    {
+      "text": "【输入：发现与揭示-洞穴OTS】",
+      "source": "组合运镜2.docx"
+    },
+    {
+      "text": "Explorer cautiously steps forward into the cave (slight camera jostle). Camera pushes in steadily past the shoulder towards the mysterious object. As we get closer, the object begins to emit a faint, pulsing light. Focus rack to the glowing object.\n(探险者谨慎地向前踏入洞穴（镜头轻微晃动）。镜头稳稳推进越过肩膀靠近神秘物体。随着靠近，物体开始发出微弱的脉动光芒。焦点转移到发光物体上。)",
+      "source": "组合运镜2.docx"
+    },
+    {
+      "text": "【输入：宁静村庄-俯视广角】",
+      "source": "组合运镜2.docx"
+    },
+    {
+      "text": "Slow, smooth zoom in towards the village center. As we get closer, subtle signs of disarray become visible (overturned cart, broken window). Camera then tilts down sharply to ground level, revealing fresh tracks leading into the forest (motion blur on tilt).\n(缓慢、平滑地推向村庄中心。靠近时，细微的混乱迹象显现（翻倒的推车，破碎的窗户）。镜头随即急速下摇至地面，展现通往森林的新鲜足迹（下摇时有运动模糊）。)",
+      "source": "组合运镜2.docx"
+    },
+    {
+      "text": "【输入：亲密与疏离-分像镜特写】",
+      "source": "组合运镜2.docx"
+    },
+    {
+      "text": "Focus shifts dramatically from the close eye to the distant lover. Camera then executes a slow, smooth dolly move sideways, circling around the close subject, breaking the split diopter effect and revealing the crowded room fully. The distant lover turns and walks away into the crowd.\n(焦点戏剧性地从特写的眼睛转移到远方情人身上。镜头随即缓慢、平稳地横向移动，环绕特写主体，打破分像镜效果，完整展现拥挤房间。远方情人转身走入人群。)",
+      "source": "组合运镜2.docx"
+    },
+    {
+      "text": "更复杂的动态组合 (图生视频为主)",
+      "source": "组合运镜2.docx"
+    },
+    {
+      "text": "(起始图：中景，A在巷口奔跑) Handheld tracking shot following Runner A closely from behind, shaky and urgent. As they turn a corner, camera whips pan left to reveal Runner B gaining ground in a parallel alley (brief static shot). Cut to (or prompt for): Low angle shot as Runner A jumps over an obstacle, camera tilting up quickly.\n(手持跟拍镜头紧随奔跑者A身后，晃动且紧迫。当其拐弯时，镜头快速向左摇摄，展现奔跑者B在平行小巷逼近（短暂静止镜头）。切到（或提示）：仰角镜头拍摄奔跑者A跳过障碍，镜头快速上摇。) 注：生成“Cut to”效果可能需要特定工具支持或分步生成。",
+      "source": "组合运镜2.docx"
+    },
+    {
+      "text": "(起始图：中景双人对话，A背对镜头，B面对) Camera slowly pushes in on Speaker B's intense expression (shallow DOF). As tension rises, camera begins a very slow orbiting move around the pair, keeping both in frame but shifting perspective. Speaker A suddenly turns towards camera (focus rack), interrupting the orbit.\n(镜头缓缓推向说话者B紧张的表情（浅景深）。随着张力升级，镜头开始非常缓慢地环绕两人移动，保持双方在画内但改变视角。说话者A突然转向镜头（焦点转移），打断环绕运动。)",
+      "source": "组合运镜2.docx"
+    },
+    {
+      "text": "(起始图：特写，手轻触古老石碑) As fingers touch the glyphs, camera tilts up rapidly to reveal glowing runes spreading across the entire monolith (motion blur on tilt). Then, a smooth crane shot pulls up and back, showing the monolith standing alone in a moonlit clearing, energy pulsing outwards in waves (visible ripple effect).\n(当手指触及符文，镜头急速上摇，展现发光的符文蔓延至整块巨石（上摇时有运动模糊）。接着，流畅的升降镜头拉高并后移，展现巨石孤立于月光林间空地，能量波状向外脉动（可见涟漪效果）。)",
+      "source": "组合运镜2.docx"
+    },
+    {
+      "text": "(起始图：第一人称POV，看着自己握枪的手) Shaky POV look down at the gun, then look up quickly (motion blur) to see the adversary across the room. Camera cuts to (or simulates cut by rapid movement/transition): Over-the-shoulder shot from adversary's perspective, aiming back. Camera pushes in slightly on the OTS shot, tightening the frame.\n(颤抖的第一人称视角看向手中的枪，然后快速抬头（运动模糊）看向房间对面的对手。镜头切到（或通过快速移动/转场模拟）：对手视角的过肩镜头，正瞄准回来。镜头在过肩镜头上轻微推进，压缩画面。)",
+      "source": "组合运镜2.docx"
+    },
+    {
+      "text": "(起始图：中景，人物蜷缩在雨中) Slow push-in on the despondent figure, shallow DOF isolating them from the rainy background. Suddenly, a shaft of sunlight breaks through clouds (lighting change). Camera tilts up slowly with the character as they rise, transforming to a low angle heroic framing. Slow zoom out to reveal the sunlit landscape.\n(缓缓推向雨中蜷缩的沮丧人物，浅景深将其与雨景背景隔离。突然，一束阳光穿透云层（光线变化）。镜头随人物起身缓慢上摇，转变为仰角的英雄式构图。缓慢拉远展现阳光普照的景色。)",
+      "source": "组合运镜2.docx"
+    }
+  ]
+}

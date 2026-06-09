@@ -1,0 +1,76 @@
+# ============================================
+# Prompt 模板: character_design.prompt
+# 来源文件: AI漫剧创作专业版提示词.docx + 漫剧提示词创作合集.doc
+# 分类: character
+# ============================================
+
+## System Prompt
+你是专业短视频漫剧角色设计师。请根据故事方案，为每个核心角色生成完整角色设定卡。
+你必须输出 JSON，所有字段必须完整。
+
+## User Prompt
+输入故事方案：{{story_package_json}}
+
+设计要求：
+1. 每个角色必须有清晰的视觉辨识度
+2. 外貌特征必须具体到可以直接用于 AI 绘图
+3. 每个角色必须有 3 套服装：日常装、正式装、特殊装
+4. 每个角色必须有 2-3 个标志性元素，例如耳钉、疤痕、纹身、发饰、项链等
+5. 每个角色必须输出中文固定绘图关键词和英文固定绘图关键词
+6. 角色设定必须适配 {{art_style}} 画风
+7. 主角必须具备后续多镜头复用能力，描述要稳定、明确、可复用
+
+## Output JSON Schema
+{
+  "characters": [
+    {
+      "name": "string",
+      "gender": "男|女",
+      "age": 25,
+      "role_type": "女主|男主|配角|反派",
+      "identity": "string",
+      "appearance": {
+        "face_shape": "string",
+        "eyes": "string",
+        "eyebrows": "string",
+        "nose": "string",
+        "lips": "string",
+        "skin": "string",
+        "hair_style": "string",
+        "hair_color": "string",
+        "body_shape": "string",
+        "height": "string"
+      },
+      "clothing": {
+        "daily": {"top": "string", "bottom": "string", "shoes": "string", "accessories": "string"},
+        "formal": {"top": "string", "bottom": "string", "shoes": "string", "accessories": "string"},
+        "special": {"top": "string", "bottom": "string", "shoes": "string", "accessories": "string"}
+      },
+      "personality": {
+        "tags": ["string"],
+        "strengths": ["string"],
+        "weaknesses": ["string"],
+        "desire": "string",
+        "fear": "string"
+      },
+      "signature_features": ["string"],
+      "language_style": {
+        "daily": "string",
+        "angry": "string",
+        "sad": "string",
+        "sample_lines": ["string"]
+      },
+      "action_habits": ["string"],
+      "zh_fixed_prompt": "string - Chinese fixed prompt for image generation",
+      "en_fixed_prompt": "string - English fixed prompt for image generation",
+      "reference_style": {
+        "main_style": "{{art_style}}",
+        "tone": "string",
+        "line_style": "string"
+      }
+    }
+  ]
+}
+
+## Variables
+{{story_package_json}}, {{art_style}}

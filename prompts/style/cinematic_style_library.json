@@ -1,0 +1,1510 @@
+{
+  "_meta": {
+    "file": "cinematic_style_library.json",
+    "category": "style",
+    "source_file": "300+电影风格提示词.csv",
+    "total_entries": 300
+  },
+  "entries": [
+    {
+      "category": "影视风格",
+      "prompt": "王家卫电影风格：慢镜头+模糊边缘+饱和色彩",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "诺兰式倒叙结构：非线性时间轴+暗色调",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "黑泽明剧场感：高反差黑白影调+固定机位",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "港片光影风格：霓虹反光+快速切换镜头",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "韩剧慢镜头浪漫：柔光+背景虚化+配乐旋律",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "宫崎骏动画感：自然色彩+清新构图+手绘质感",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "漫威大片感：大场景+爆炸特效+CG合成",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "皮克斯动画质感：明亮色彩+卡通建模+情感流动",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "张艺谋色彩对比风格：红绿对撞+对称构图",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "李安东方写实风：自然光线+内敛情绪",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "西部片风格：荒漠远景+冷暖对比+低角度",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "法式文艺风：碎片叙事+自然光影+低饱和",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "纪录片感：自然光+镜头抖动+真实色调",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "港风怀旧感：黄色滤镜+慢动作走位",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "黑色电影风格：强光阴影+硬汉独白+反光雨夜",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "美式青春片风格：明快节奏+活力色彩",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "印度歌舞片风格：高饱和+快速剪辑+群舞镜头",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "欧洲冷感系：灰白色调+极简构图",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "BBC纪录片感：精致构图+慢推镜头+旁白配音",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "Netflix惊悚剧风格：低光源+突变音效+细节特写",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "胶片颗粒感+复古色调",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "VHS旧录像风+画面噪点",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "高清8K画质+锐化边缘",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "油画风滤镜+厚重笔触感",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "水彩柔焦画感+手绘轮廓",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "赛博朋克噪点+冷紫蓝色调",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "黑白极简质感+强光阴影",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "HDR高动态对比+金属质感",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "质感磨砂风格+柔光过渡",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "蜡笔涂抹风格+颜色跳跃",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "金属银灰画面+冰冷质感",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "潮流闪烁画质+霓虹叠影",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "木刻风风格+线条粗糙感",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "像素马赛克风+90年代风情",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "胶片曝光风格+色彩晕染",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "梦幻画质+光斑散射效果",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "质感磨皮处理+奶油柔光",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "工业风画质+灰色调颗粒",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "超现实清晰风+异化边缘",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "复古明信片风+褪色怀旧",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "霓虹灯+紫蓝色冷调",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "日出金光+橙红过渡",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "阴雨天蓝灰色+湿润反光",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "清晨自然光+低对比",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "黄昏暖光+柔和高光",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "夜景灯火辉煌+反光地面",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "车灯反射+都市光污染",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "工业冷光+白蓝高亮",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "蜡烛光源+暖色微光",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "金属质感灯光+蓝紫边缘光",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "摄影棚高反差灯光+全白背景",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "窗户光影+植物投影",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "教堂彩色玻璃光+斑斓光斑",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "落日逆光+眩光高反差",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "办公室荧光灯+冷白打光",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "舞台聚光灯+色彩切换",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "水底反光+斑驳波纹",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "森林穿透光+轻微雾气",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "火焰照明+动态闪烁",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "天光洒落+反光纸折射",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "手持镜头+轻微晃动",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "航拍鸟瞰+大场景过渡",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "第一人称POV+真实体验",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "转场模糊拉动+快速推镜",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "定格拍摄+帧率降低",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "慢动作特写+延时轨迹",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "拉近面部镜头+情绪捕捉",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "360环绕镜头+情绪包围",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "滑轨平移镜头+画面稳定",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "无人机追拍+城市视角",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "双人跟随视角+同步镜头",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "镜头推进+背景虚化",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "过肩视角+对话感增强",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "反打镜头+情绪衔接",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "动态变焦+节奏感镜头",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "快速摇摄+混乱节奏",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "切换视角+主客交错",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "定格动画风+逐帧展示",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "近景切换+视觉聚焦",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "分屏并列镜头+对比叙事",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "小红书爆款视频风格+淡粉色调+卡点剪辑",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "抖音人物特写+动感音乐+BGM加速感",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "Tiktok变装卡点视频+滤镜变化节奏快",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "Instagram美妆风+柔焦+打光精准",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "Youtube vlog叙事风格+头戴GoPro视角",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "Bilibili二次元UP主风格+卡点特效+字幕跟随",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "品牌广告包装风+高饱和+字幕边框",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "电商短视频展示风+产品放大+定格+箭头",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "电视剧片头风+慢入+角色介绍文字",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "美食探店视频风+俯拍+特写+切换节奏快",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "种草安利类视频风+试用+测评+弹幕感",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "旅游纪实视频风+延时摄影+广角城市",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "影视混剪视频风格+黑白慢镜+叠化闪回",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "企业宣传片风格+清晰LOGO+蓝白基调",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "综艺感预热视频+人物边框+闪动字幕",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "AI换脸短视频风+脸部匹配+跳剪接",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "游戏混剪风格+高对比度+视角切换",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "情绪类视频风格+音乐主导+极简构图",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "萌宠短视频风格+圆头滤镜+字幕卡通",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "运动训练风格+高帧率+慢放动作+咔咔声效",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "纪录片手持风格：真实环境光+轻微镜头晃动",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "浪漫主义镜头：柔光+色彩渐变+慢速推镜",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "新浪潮电影风格：突兀剪辑+非逻辑叙事",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "荒诞剧风格：怪异构图+夸张表演+低饱和",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "剧场舞台风：静态构图+中心打光+对称",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "反乌托邦电影风格：灰蓝色调+压抑空间",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "80年代美剧风：颗粒感+怀旧音乐+大字体标题",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "90年代偶像剧风格：柔焦+梦幻滤镜+夸张表情",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "警匪片风格：紧张节奏+追逐镜头+低光场景",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "校园青春风格：明亮色彩+对称构图+轻音乐",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "灾难电影风格：剧烈晃动+闪回叠化+广角特写",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "科幻实验片风格：霓虹光+深色调+镜面反射",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "舞台剧改编影像风：高对比黑白+台词为主",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "宗教主题风格：庄严色调+静态构图",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "现实主义电影风格：自然光+非演员+长镜头",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "心理惊悚片风格：镜头错位+昏暗光影+变焦特写",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "城市犯罪片风：夜景霓虹+快节奏剪辑",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "民族文化电影风格：传统服饰+地方音乐+自然环境",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "未来科幻风格：金属感强+HUD叠加界面",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "复仇主题风格：慢镜头+阴郁配乐+特写眼神",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "流光质感+边缘炫光",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "漫画描边风格+黑白分明",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "低像素风格+8bit配色",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "牛皮纸质感+褪色画面",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "镜头泛黄质感+老胶片感",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "瓷砖反光质感+干净利落",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "刺绣线条风+平面化构图",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "金粉颗粒质感+梦幻模糊",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "火焰特效质感+橙红过渡",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "蓝色液态质感+流体转场",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "裂纹屏幕风+数字失真",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "雾面柔化质感+水汽遮挡",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "玻璃碎片纹理+冷色透明",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "科幻HUD质感+绿色扫描",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "网格结构质感+结构线条",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "纹理强化风格+粗糙画布",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "金属腐蚀感+工业废墟风",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "浓重素描风格+笔触交叠",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "梦中虚幻画质+模糊景深",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "霓虹倒影质感+街道水渍",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "青蓝夜色调+冷感氛围",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "玫瑰粉柔光+少女滤镜",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "绿色实验室灯+不安感",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "红蓝警灯交替闪烁",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "橘黄拂晓光线+暖意渐入",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "炽白阳光逆光拍摄",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "黄绿森林光+斑驳树影",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "紫色舞台灯+跳跃感",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "火光照明+动态色温变化",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "闪电亮光+黑白分明",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "车窗倒影灯+彩色动感",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "工业吊灯影+墙面长影",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "晨曦薄雾光+柔和无边界",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "窗边午后光+纸张飞舞",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "隧道低光照明+局部强光",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "教室日落光+金边发丝",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "高对比楼梯灯光+强影投射",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "夜色河畔灯光+折射波纹",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "货架上方灯+商品反光高光",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "电影院投影灯+粒子漂浮",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "超广角镜头拉伸感+透视极强",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "低机位仰拍+人物高大化",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "镜头虚焦切换+情绪递进",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "镜头推拉交替+混乱感增强",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "倒放镜头+时间回溯",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "交叉剪辑+不同时间线融合",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "镜头隐藏过渡+遮挡转场",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "渐显过度+光晕亮起",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "拉远切黑+暗示场景结束",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "慢拉近嘴角微笑+强化情绪",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "反光转场+镜面滑动",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "水面倒影接镜头+上下反转",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "分层镜头语言+远中近同时推进",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "主观镜头中插手部特写",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "慢变焦压缩空间+心理压迫",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "偏移构图+画面不稳定感",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "直线拉动轨道感+强烈动感",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "角色遮挡快速切换+节奏强",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "镜头穿墙接空间+无缝变化",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "边缘暗角镜头+集中焦点",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "小红书情绪配文风格+细文字+背景虚焦",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "抖音挑战赛卡点风+快剪+特效音符",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "Tiktok换装循环剪辑+对比前后",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "Youtube长篇Vlog风+节奏轻松+真实语音",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "淘宝商品讲解风+放大展示+解说口播",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "B站二创视频风格+搞笑剪辑+表情包",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "Instagram生活记录风+滤镜轻暖+低饱和",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "TVC广告感视频风+LOGO飞入+镜头干净",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "短剧热剧预告风+闪回+字幕压场",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "汽车测评视频风+低角度跟拍+引擎声同步",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "教育讲解视频风+白底+手势板书",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "知识类爆款短视频风+快语音+图文混剪",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "品牌预热视频风+慢推+标语字幕",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "抖音剧情反转类短剧风+黑白分隔镜头",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "商拍场景风+构图考究+产品核心突出",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "节日祝福类视频风+模板切换+庆祝音乐",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "科普动画视频风格+拟人+小人插图",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "悬疑剧情感风格+偏冷色+叠化闪现",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "宠物搞笑混剪风格+变声+字幕突出",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "街头采访短视频风格+字幕飞入+环境声真实",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "青春日剧风格：清淡色调+浅景深+柔和光线",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "英伦剧情风格：暗色复古+室内烛光+对称构图",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "战地纪实风格：手持抖动+高对比+爆炸环境",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "赛博东亚风：汉字霓虹+摩天楼林立+杂乱城市",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "欧美独立电影风：低饱和+空镜+叙事碎片化",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "短剧穿越风格：古今混搭+快速变装+场景拼接",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "荒野生存剧风：自然光+环境音强+沉浸追随",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "法语爱情片风格：长镜+低语对白+街拍质感",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "恐怖片风格：压暗光线+突变音效+主观镜头",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "真人童话风格：饱和梦境色+慢节奏",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "末世电影风格：破败城市+灰黄色调+广角",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "谍战片风格：暗房+电话亭+帽子眼神特写",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "俄式冷战风格：蓝灰调+低色温+大量字幕叠加",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "童年回忆片风格：黄调复古+慢镜头+自然音效",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "警探剧风格：玻璃写字板+白板推理+悬疑配乐",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "玄幻国风片：飘带+云雾特效+红青对撞",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "罪案还原剧风：现场还原+旁白+模糊人物",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "日式深夜剧风格：微光环境+封闭空间+吃饭动作",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "末日旅人风格：破败+独行+极简对话",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "影视风格",
+      "prompt": "希区柯克悬疑风：固定机位+交替剪辑+低音乐",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "压印纹理+棉纸肌理",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "水墨扩散风格+柔化边界",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "玻璃磨砂感+模糊斑点",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "瓷砖蓝调反射+边角清晰",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "折纸层叠感+立体分割",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "幻彩渐变光+反射折射感",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "编织纹理感+纸织视觉",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "彩笔涂鸦风格+边缘跳色",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "霓虹重影画质+偏色模糊",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "古画纸本感+斑驳色块",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "石头裂纹风格+硬边界感",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "数字虚焦风+像素模糊融合",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "海报风构图+边框和笔触",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "铁锈斑驳感+工业老旧",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "亚克力质感+高光透亮",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "指纹涂抹风格+残缺边缘",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "布料纹理感+轻柔颗粒",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "星轨叠加质感+动态光纹",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "陶瓷釉面质感+清亮饱和",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "画面质感",
+      "prompt": "闪粉质感+舞台背景感",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "湖边日落金黄光+水波反射",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "工地夜间强光+强烈阴影",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "天台霓虹光+人物剪影",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "红色信号灯+慢节奏光影",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "彩带反射光+运动虚化",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "警示灯旋转闪烁+黑背景",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "月光打脸侧光+蓝色主调",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "公交夜景外射灯+窗户投影",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "节日彩灯混色+跳动频率",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "照相机闪光灯+画面爆白",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "激光灯横扫+舞台感强",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "绿植下散射光+柔焦+自然",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "高光阴影交替灯光+强结构",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "信号灯三色跳变+场景定格",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "落地灯光环+暖色渐变",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "热带阳光硬打光+清晰投影",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "仓库天窗光柱+尘埃可见",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "隧道尾光+暗部拖影",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "地铁车厢荧光灯+人物打亮",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "灯光色调",
+      "prompt": "办公室投影灯打脸+背面阴影",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "建筑穿越镜头+楼层不断切换",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "倒地视角拍摄+倒影突出",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "车内后视镜镜头+人物交替露出",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "快速镜头推进+情绪高涨",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "过场黑屏节奏+音效匹配",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "全景叠化转场+人物定格",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "正上方旋转俯拍+集体行为聚焦",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "环绕定焦变景深+人静背景变",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "镜头从布帘中探出+渐显角色",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "走廊延伸镜头+推入紧张空间",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "俯冲镜头+快速压迫感",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "水下仰拍+气泡动态",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "地面跟拍奔跑动作+碎石飞溅",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "突然抬镜头+人物遮光进入",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "镜头切近+表情震颤细节",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "倒置还原镜头+画面旋转配乐",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "爆炸慢速推进+人物背影对光",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "纵深切换+长走廊时间错觉",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "倒放+物体回收特写",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "摄影手法",
+      "prompt": "转场碰撞剪辑+冲击配乐",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "短剧竖屏分镜感+人物遮挡切换",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "小红书滤镜测评风+左右对比",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "抖音美妆三连展示+卡点特写",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "Tiktok人物定格变装+三段结构",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "B站语录混剪风+情绪带字幕",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "品牌口播广告+LOGO落版+快节奏",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "长篇Vlog节奏剪+旅拍配音",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "电影解说短视频风+画外音+字幕分段",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "学习类竖屏快语速+图表飞入",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "生活日常安静风+自然光+ASMR音效",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "宠物拟人化配音视频+弹幕感字幕",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "短视频动画转绘风格+漫画风镜头",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "AI换装视频风+模型切换+镜头定格",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "产品对比实测视频风+标签标尺",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "情侣反应类视频风+多角度切换",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "街头实拍互动视频+人物突入+快剪",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "拆箱评测视频风+缓慢开盒+局部特写",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "短剧类角色台词字幕+表情突出",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "新闻速览类视频风+拼贴画面+高音效节奏",
+      "source": "300+电影风格提示词.csv"
+    },
+    {
+      "category": "平台风格",
+      "prompt": "短篇纪录类风格+慢镜长景+自然环境音",
+      "source": "300+电影风格提示词.csv"
+    }
+  ]
+}

@@ -1,0 +1,519 @@
+// ============================================
+// AI 漫剧 Web 平台 - Prisma Schema (v7)
+// ============================================
+// Prisma 7: datasource url 移至 prisma.config.ts
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================
+// 用户
+// ============================================
+model User {
+  id        String   @id @default(uuid())
+  email     String?  @unique
+  name      String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  projects Project[]
+
+  @@map("users")
+}
+
+// ============================================
+// 项目
+// ============================================
+model Project {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  projectName     String   @map("project_name")
+  storyType       String?  @map("story_type")
+  background      String?
+  mainCharacters  Json?    @map("main_characters")
+  coreConflict    String?  @map("core_conflict")
+  storySummary    String?  @map("story_summary")
+  fullStory       String?  @map("full_story")
+  artStyle        String?  @map("art_style")
+  targetPlatform  String?  @map("target_platform")
+  episodeCount    Int      @default(10) @map("episode_count")
+  episodeDuration Int      @default(90) @map("episode_duration")
+  aspectRatio     String   @default("9:16") @map("aspect_ratio")
+  audience        String?
+  endingType      String?  @map("ending_type")
+  status          String   @default("DRAFT") @map("status")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  user             User              @relation(fields: [userId], references: [id])
+  storyPackages    StoryPackage[]
+  characters       Character[]
+  characterImages  CharacterImage[]
+  episodes         Episode[]
+  shots            Shot[]
+  imagePrompts     ImagePrompt[]
+  shotImages       ShotImage[]
+  videoPrompts     VideoPrompt[]
+  shotVideos       ShotVideo[]
+  voiceScripts     VoiceScript[]
+  finalVideos      FinalVideo[]
+  generationTasks  GenerationTask[]
+  projectVersions  ProjectVersion[]
+  qcReports        QCReport[]
+  assetFiles       AssetFile[]
+
+  @@map("projects")
+}
+
+// ============================================
+// 故事方案包（支持多版本）
+// ============================================
+model StoryPackage {
+  id        String   @id @default(uuid())
+  projectId String   @map("project_id")
+  version   Int      @default(1)
+  content   Json     @default("{}")
+  confirmed Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@map("story_packages")
+}
+
+// ============================================
+// 角色
+// ============================================
+model Character {
+  id                String   @id @default(uuid())
+  projectId         String   @map("project_id")
+  name              String?
+  gender            String?
+  age               Int?
+  roleType          String?  @map("role_type")
+  identity          String?
+  appearance        Json?    @default("{}")
+  clothing          Json?    @default("{}")
+  personality       Json?    @default("{}")
+  signatureFeatures Json?    @map("signature_features") @default("[]")
+  languageStyle     Json?    @map("language_style") @default("{}")
+  actionHabits      Json?    @map("action_habits") @default("[]")
+  emotionalArc      String?  @map("emotional_arc")
+  zhFixedPrompt     String?  @map("zh_fixed_prompt")
+  enFixedPrompt     String?  @map("en_fixed_prompt")
+  referenceStyle    String?  @map("reference_style")
+  version           Int      @default(1)
+  confirmed         Boolean  @default(false)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  project         Project          @relation(fields: [projectId], references: [id])
+  characterImages CharacterImage[]
+
+  @@map("characters")
+}
+
+// ============================================
+// 角色图片候选
+// ============================================
+model CharacterImage {
+  id            String   @id @default(uuid())
+  characterId   String   @map("character_id")
+  projectId     String   @map("project_id")
+  imageUrl      String?  @map("image_url")
+  prompt        String?
+  negativePrompt String? @map("negative_prompt")
+  seed          String?
+  modelName     String?  @map("model_name")
+  params        Json?    @default("{}")
+  isSelected    Boolean  @default(false) @map("is_selected")
+  isConfirmed   Boolean  @default(false) @map("is_confirmed")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  character Character @relation(fields: [characterId], references: [id])
+  project   Project   @relation(fields: [projectId], references: [id])
+
+  @@map("character_images")
+}
+
+// ============================================
+// 剧集
+// ============================================
+model Episode {
+  id           String   @id @default(uuid())
+  projectId    String   @map("project_id")
+  episodeNo    Int      @map("episode_no")
+  title        String?
+  duration     Int?
+  outline      String?
+  coreTask     String?  @map("core_task")
+  emotionCurve String?  @map("emotion_curve")
+  openingHook  String?  @map("opening_hook")
+  endingHook   String?  @map("ending_hook")
+  status       String   @default("DRAFT")
+  version      Int      @default(1)
+  confirmed    Boolean  @default(false)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  project      Project       @relation(fields: [projectId], references: [id])
+  shots        Shot[]
+  voiceScripts VoiceScript[]
+  finalVideos  FinalVideo[]
+
+  @@map("episodes")
+}
+
+// ============================================
+// 镜头（分镜）
+// ============================================
+model Shot {
+  id             String   @id @default(uuid())
+  episodeId      String   @map("episode_id")
+  projectId      String   @map("project_id")
+  shotNo         Int      @map("shot_no")
+  shotName       String?  @map("shot_name")
+  startTime      Float?   @map("start_time")
+  endTime        Float?   @map("end_time")
+  sceneTime      String?  @map("scene_time")
+  location       String?
+  characters     Json?    @default("[]")
+  action         String?
+  details        String?
+  camera         Json?    @default("{}")
+  visual         Json?    @default("{}")
+  emotion        String?
+  sfx            String?
+  bgm            String?
+  dialogue       String?
+  purpose        String?
+  technicalNotes String?  @map("technical_notes")
+  confirmed      Boolean  @default(false)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  episode      Episode       @relation(fields: [episodeId], references: [id])
+  project      Project       @relation(fields: [projectId], references: [id])
+  imagePrompts ImagePrompt[]
+  shotImages   ShotImage[]
+  videoPrompts VideoPrompt[]
+  shotVideos   ShotVideo[]
+
+  @@map("shots")
+}
+
+// ============================================
+// 图片 Prompt
+// ============================================
+model ImagePrompt {
+  id                  String   @id @default(uuid())
+  shotId              String   @map("shot_id")
+  projectId           String   @map("project_id")
+  zhPrompt            String?  @map("zh_prompt")
+  enPrompt            String?  @map("en_prompt")
+  negativePrompt      String?  @map("negative_prompt")
+  consistencyKeywords String?  @map("consistency_keywords")
+  aspectRatio         String?  @map("aspect_ratio")
+  style               String?
+  seed                String?
+  params              Json?    @default("{}")
+  confirmed           Boolean  @default(false)
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  shot       Shot        @relation(fields: [shotId], references: [id])
+  project    Project     @relation(fields: [projectId], references: [id])
+  shotImages ShotImage[]
+
+  @@map("image_prompts")
+}
+
+// ============================================
+// 分镜图
+// ============================================
+model ShotImage {
+  id              String   @id @default(uuid())
+  shotId          String   @map("shot_id")
+  projectId       String   @map("project_id")
+  imageUrl        String?  @map("image_url")
+  promptId        String?  @map("prompt_id")
+  prompt          String?
+  negativePrompt  String?  @map("negative_prompt")
+  seed            String?
+  style           String?
+  aspectRatio     String?  @map("aspect_ratio")
+  modelName       String?  @map("model_name")
+  referenceImages Json?    @map("reference_images") @default("[]")
+  params          Json?    @default("{}")
+  isSelected      Boolean  @default(false) @map("is_selected")
+  isConfirmed     Boolean  @default(false) @map("is_confirmed")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  shot        Shot        @relation(fields: [shotId], references: [id])
+  project     Project     @relation(fields: [projectId], references: [id])
+  imagePrompt ImagePrompt? @relation(fields: [promptId], references: [id])
+
+  @@map("shot_images")
+}
+
+// ============================================
+// 视频 Prompt
+// ============================================
+model VideoPrompt {
+  id                String   @id @default(uuid())
+  shotId            String   @map("shot_id")
+  projectId         String   @map("project_id")
+  prompt            String?
+  duration          Float?
+  motionStrength    String?  @map("motion_strength")
+  cameraMotion      String?  @map("camera_motion")
+  characterMotion   String?  @map("character_motion")
+  environmentMotion String?  @map("environment_motion")
+  negativePrompt    String?  @map("negative_prompt")
+  params            Json?    @default("{}")
+  confirmed         Boolean  @default(false)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  shot       Shot        @relation(fields: [shotId], references: [id])
+  project    Project     @relation(fields: [projectId], references: [id])
+  shotVideos ShotVideo[]
+
+  @@map("video_prompts")
+}
+
+// ============================================
+// 视频片段
+// ============================================
+model ShotVideo {
+  id              String   @id @default(uuid())
+  shotId          String   @map("shot_id")
+  projectId       String   @map("project_id")
+  inputImageUrl   String?  @map("input_image_url")
+  videoUrl        String?  @map("video_url")
+  promptId        String?  @map("prompt_id")
+  prompt          String?
+  seed            String?
+  modelName       String?  @map("model_name")
+  referenceImages Json?    @map("reference_images") @default("[]")
+  duration        Float?
+  params          Json?    @default("{}")
+  isSelected      Boolean  @default(false) @map("is_selected")
+  isConfirmed     Boolean  @default(false) @map("is_confirmed")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  shot        Shot        @relation(fields: [shotId], references: [id])
+  project     Project     @relation(fields: [projectId], references: [id])
+  videoPrompt VideoPrompt? @relation(fields: [promptId], references: [id])
+
+  @@map("shot_videos")
+}
+
+// ============================================
+// 配音文案
+// ============================================
+model VoiceScript {
+  id        String   @id @default(uuid())
+  episodeId String   @map("episode_id")
+  projectId String   @map("project_id")
+  content   Json?    @default("{}")
+  srtUrl    String?  @map("srt_url")
+  confirmed Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  episode Episode @relation(fields: [episodeId], references: [id])
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@map("voice_scripts")
+}
+
+// ============================================
+// 最终成片
+// ============================================
+model FinalVideo {
+  id              String   @id @default(uuid())
+  episodeId       String   @map("episode_id")
+  projectId       String   @map("project_id")
+  videoUrl        String?  @map("video_url")
+  coverUrl        String?  @map("cover_url")
+  subtitleUrl     String?  @map("subtitle_url")
+  assetPackageUrl String?  @map("asset_package_url")
+  duration        Float?
+  aspectRatio     String?  @map("aspect_ratio")
+  fps             Int?
+  status          String   @default("PENDING")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  episode Episode @relation(fields: [episodeId], references: [id])
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@map("final_videos")
+}
+
+// ============================================
+// 生成任务
+// ============================================
+model GenerationTask {
+  id           String    @id @default(uuid())
+  projectId    String    @map("project_id")
+  episodeId    String?   @map("episode_id")
+  shotId       String?   @map("shot_id")
+  taskType     String    @map("task_type")
+  modelName    String?   @map("model_name")
+  status       String    @default("pending")
+  progress     Int       @default(0)
+  input        Json?     @default("{}")
+  output       Json?     @default("{}")
+  errorMessage String?   @map("error_message")
+  retryCount   Int       @default(0) @map("retry_count")
+  maxRetries   Int       @default(3) @map("max_retries")
+  startedAt    DateTime? @map("started_at")
+  finishedAt   DateTime? @map("finished_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id])
+  taskLogs TaskLog[]
+
+  @@map("generation_tasks")
+}
+
+// ============================================
+// 任务日志
+// ============================================
+model TaskLog {
+  id        String   @id @default(uuid())
+  taskId    String   @map("task_id")
+  level     String   @default("INFO")
+  message   String?
+  detail    Json?    @default("{}")
+  metadata  Json?    @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  task GenerationTask @relation(fields: [taskId], references: [id])
+
+  @@map("task_logs")
+}
+
+// ============================================
+// Prompt 模板
+// ============================================
+model PromptTemplate {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  category     String?
+  description  String?
+  template     String   @default("")
+  outputSchema Json?    @map("output_schema")
+  variables    Json?    @default("[]")
+  version      Int      @default(1)
+  enabled      Boolean  @default(true)
+  sourceFile   String?  @map("source_file")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  versions PromptTemplateVersion[]
+
+  @@map("prompt_templates")
+}
+
+// ============================================
+// Prompt 模板版本历史
+// ============================================
+model PromptTemplateVersion {
+  id          String   @id @default(uuid())
+  templateId  String   @map("template_id")
+  version     Int
+  content     String
+  changes     String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  promptTemplate PromptTemplate @relation(fields: [templateId], references: [id])
+
+  @@map("prompt_template_versions")
+}
+
+// ============================================
+// 模型配置
+// ============================================
+model ModelConfig {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  type      String // TEXT | IMAGE | VIDEO
+  baseUrl   String?  @map("base_url")
+  apiKey    String?  @map("api_key")
+  modelName String   @map("model_name")
+  params    Json?    @default("{}")
+  enabled   Boolean  @default(true)
+  isDefault Boolean  @default(false) @map("is_default")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("model_configs")
+}
+
+// ============================================
+// 项目版本记录
+// ============================================
+model ProjectVersion {
+  id            String   @id @default(uuid())
+  projectId     String   @map("project_id")
+  entityType    String   @map("entity_type")
+  entityId      String   @map("entity_id")
+  version       Int
+  snapshot      Json     @default("{}")
+  changeType    String   @default("GENERATE") @map("change_type")
+  description   String?
+  sourceTaskId  String?  @map("source_task_id")
+  isCurrent     Boolean  @default(false) @map("is_current")
+  isConfirmed   Boolean  @default(false) @map("is_confirmed")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@map("project_versions")
+}
+
+// ============================================
+// 质量检查报告
+// ============================================
+model QCReport {
+  id        String   @id @default(uuid())
+  projectId String   @map("project_id")
+  targetType String  @map("target_type")
+  targetId  String   @map("target_id")
+  score     Int?
+  passed    Boolean  @default(false)
+  issues    Json?    @default("[]")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@map("qc_reports")
+}
+
+// ============================================
+// 素材文件
+// ============================================
+model AssetFile {
+  id        String   @id @default(uuid())
+  projectId String   @map("project_id")
+  fileName  String   @map("file_name")
+  fileType  String   @map("file_type")
+  fileUrl   String   @map("file_url")
+  fileSize  Int?     @map("file_size")
+  metadata  Json?    @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@map("asset_files")
+}

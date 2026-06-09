@@ -1,0 +1,730 @@
+{
+  "_meta": {
+    "file": "cinematic_style_modifiers.json",
+    "category": "image",
+    "source_file": "300+电影风格提示词.csv",
+    "total_entries": 180
+  },
+  "entries": [
+    {
+      "category": "影视风格",
+      "modifier": "王家卫电影风格：慢镜头+模糊边缘+饱和色彩"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "诺兰式倒叙结构：非线性时间轴+暗色调"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "黑泽明剧场感：高反差黑白影调+固定机位"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "港片光影风格：霓虹反光+快速切换镜头"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "韩剧慢镜头浪漫：柔光+背景虚化+配乐旋律"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "宫崎骏动画感：自然色彩+清新构图+手绘质感"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "漫威大片感：大场景+爆炸特效+CG合成"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "皮克斯动画质感：明亮色彩+卡通建模+情感流动"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "张艺谋色彩对比风格：红绿对撞+对称构图"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "李安东方写实风：自然光线+内敛情绪"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "西部片风格：荒漠远景+冷暖对比+低角度"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "法式文艺风：碎片叙事+自然光影+低饱和"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "纪录片感：自然光+镜头抖动+真实色调"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "港风怀旧感：黄色滤镜+慢动作走位"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "黑色电影风格：强光阴影+硬汉独白+反光雨夜"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "美式青春片风格：明快节奏+活力色彩"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "印度歌舞片风格：高饱和+快速剪辑+群舞镜头"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "欧洲冷感系：灰白色调+极简构图"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "BBC纪录片感：精致构图+慢推镜头+旁白配音"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "Netflix惊悚剧风格：低光源+突变音效+细节特写"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "霓虹灯+紫蓝色冷调"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "日出金光+橙红过渡"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "阴雨天蓝灰色+湿润反光"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "清晨自然光+低对比"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "黄昏暖光+柔和高光"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "夜景灯火辉煌+反光地面"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "车灯反射+都市光污染"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "工业冷光+白蓝高亮"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "蜡烛光源+暖色微光"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "金属质感灯光+蓝紫边缘光"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "摄影棚高反差灯光+全白背景"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "窗户光影+植物投影"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "教堂彩色玻璃光+斑斓光斑"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "落日逆光+眩光高反差"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "办公室荧光灯+冷白打光"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "舞台聚光灯+色彩切换"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "水底反光+斑驳波纹"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "森林穿透光+轻微雾气"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "火焰照明+动态闪烁"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "天光洒落+反光纸折射"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "手持镜头+轻微晃动"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "航拍鸟瞰+大场景过渡"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "第一人称POV+真实体验"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "转场模糊拉动+快速推镜"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "定格拍摄+帧率降低"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "慢动作特写+延时轨迹"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "拉近面部镜头+情绪捕捉"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "360环绕镜头+情绪包围"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "滑轨平移镜头+画面稳定"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "无人机追拍+城市视角"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "双人跟随视角+同步镜头"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "镜头推进+背景虚化"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "过肩视角+对话感增强"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "反打镜头+情绪衔接"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "动态变焦+节奏感镜头"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "快速摇摄+混乱节奏"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "切换视角+主客交错"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "定格动画风+逐帧展示"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "近景切换+视觉聚焦"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "分屏并列镜头+对比叙事"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "纪录片手持风格：真实环境光+轻微镜头晃动"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "浪漫主义镜头：柔光+色彩渐变+慢速推镜"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "新浪潮电影风格：突兀剪辑+非逻辑叙事"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "荒诞剧风格：怪异构图+夸张表演+低饱和"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "剧场舞台风：静态构图+中心打光+对称"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "反乌托邦电影风格：灰蓝色调+压抑空间"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "80年代美剧风：颗粒感+怀旧音乐+大字体标题"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "90年代偶像剧风格：柔焦+梦幻滤镜+夸张表情"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "警匪片风格：紧张节奏+追逐镜头+低光场景"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "校园青春风格：明亮色彩+对称构图+轻音乐"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "灾难电影风格：剧烈晃动+闪回叠化+广角特写"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "科幻实验片风格：霓虹光+深色调+镜面反射"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "舞台剧改编影像风：高对比黑白+台词为主"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "宗教主题风格：庄严色调+静态构图"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "现实主义电影风格：自然光+非演员+长镜头"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "心理惊悚片风格：镜头错位+昏暗光影+变焦特写"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "城市犯罪片风：夜景霓虹+快节奏剪辑"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "民族文化电影风格：传统服饰+地方音乐+自然环境"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "未来科幻风格：金属感强+HUD叠加界面"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "复仇主题风格：慢镜头+阴郁配乐+特写眼神"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "青蓝夜色调+冷感氛围"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "玫瑰粉柔光+少女滤镜"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "绿色实验室灯+不安感"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "红蓝警灯交替闪烁"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "橘黄拂晓光线+暖意渐入"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "炽白阳光逆光拍摄"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "黄绿森林光+斑驳树影"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "紫色舞台灯+跳跃感"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "火光照明+动态色温变化"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "闪电亮光+黑白分明"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "车窗倒影灯+彩色动感"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "工业吊灯影+墙面长影"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "晨曦薄雾光+柔和无边界"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "窗边午后光+纸张飞舞"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "隧道低光照明+局部强光"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "教室日落光+金边发丝"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "高对比楼梯灯光+强影投射"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "夜色河畔灯光+折射波纹"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "货架上方灯+商品反光高光"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "电影院投影灯+粒子漂浮"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "超广角镜头拉伸感+透视极强"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "低机位仰拍+人物高大化"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "镜头虚焦切换+情绪递进"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "镜头推拉交替+混乱感增强"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "倒放镜头+时间回溯"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "交叉剪辑+不同时间线融合"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "镜头隐藏过渡+遮挡转场"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "渐显过度+光晕亮起"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "拉远切黑+暗示场景结束"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "慢拉近嘴角微笑+强化情绪"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "反光转场+镜面滑动"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "水面倒影接镜头+上下反转"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "分层镜头语言+远中近同时推进"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "主观镜头中插手部特写"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "慢变焦压缩空间+心理压迫"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "偏移构图+画面不稳定感"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "直线拉动轨道感+强烈动感"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "角色遮挡快速切换+节奏强"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "镜头穿墙接空间+无缝变化"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "边缘暗角镜头+集中焦点"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "青春日剧风格：清淡色调+浅景深+柔和光线"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "英伦剧情风格：暗色复古+室内烛光+对称构图"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "战地纪实风格：手持抖动+高对比+爆炸环境"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "赛博东亚风：汉字霓虹+摩天楼林立+杂乱城市"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "欧美独立电影风：低饱和+空镜+叙事碎片化"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "短剧穿越风格：古今混搭+快速变装+场景拼接"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "荒野生存剧风：自然光+环境音强+沉浸追随"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "法语爱情片风格：长镜+低语对白+街拍质感"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "恐怖片风格：压暗光线+突变音效+主观镜头"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "真人童话风格：饱和梦境色+慢节奏"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "末世电影风格：破败城市+灰黄色调+广角"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "谍战片风格：暗房+电话亭+帽子眼神特写"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "俄式冷战风格：蓝灰调+低色温+大量字幕叠加"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "童年回忆片风格：黄调复古+慢镜头+自然音效"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "警探剧风格：玻璃写字板+白板推理+悬疑配乐"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "玄幻国风片：飘带+云雾特效+红青对撞"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "罪案还原剧风：现场还原+旁白+模糊人物"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "日式深夜剧风格：微光环境+封闭空间+吃饭动作"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "末日旅人风格：破败+独行+极简对话"
+    },
+    {
+      "category": "影视风格",
+      "modifier": "希区柯克悬疑风：固定机位+交替剪辑+低音乐"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "湖边日落金黄光+水波反射"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "工地夜间强光+强烈阴影"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "天台霓虹光+人物剪影"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "红色信号灯+慢节奏光影"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "彩带反射光+运动虚化"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "警示灯旋转闪烁+黑背景"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "月光打脸侧光+蓝色主调"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "公交夜景外射灯+窗户投影"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "节日彩灯混色+跳动频率"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "照相机闪光灯+画面爆白"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "激光灯横扫+舞台感强"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "绿植下散射光+柔焦+自然"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "高光阴影交替灯光+强结构"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "信号灯三色跳变+场景定格"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "落地灯光环+暖色渐变"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "热带阳光硬打光+清晰投影"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "仓库天窗光柱+尘埃可见"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "隧道尾光+暗部拖影"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "地铁车厢荧光灯+人物打亮"
+    },
+    {
+      "category": "灯光色调",
+      "modifier": "办公室投影灯打脸+背面阴影"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "建筑穿越镜头+楼层不断切换"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "倒地视角拍摄+倒影突出"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "车内后视镜镜头+人物交替露出"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "快速镜头推进+情绪高涨"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "过场黑屏节奏+音效匹配"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "全景叠化转场+人物定格"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "正上方旋转俯拍+集体行为聚焦"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "环绕定焦变景深+人静背景变"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "镜头从布帘中探出+渐显角色"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "走廊延伸镜头+推入紧张空间"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "俯冲镜头+快速压迫感"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "水下仰拍+气泡动态"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "地面跟拍奔跑动作+碎石飞溅"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "突然抬镜头+人物遮光进入"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "镜头切近+表情震颤细节"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "倒置还原镜头+画面旋转配乐"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "爆炸慢速推进+人物背影对光"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "纵深切换+长走廊时间错觉"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "倒放+物体回收特写"
+    },
+    {
+      "category": "摄影手法",
+      "modifier": "转场碰撞剪辑+冲击配乐"
+    }
+  ]
+}

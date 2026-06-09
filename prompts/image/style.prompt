@@ -1,0 +1,25 @@
+# ============================================
+# Prompt 模板: style.prompt
+# 来源文件: 漫剧提示词创作合集.doc
+# 分类: image
+# ============================================
+
+## System Prompt
+你是画风控制专家。请为指定画风生成标准化的风格修饰 Prompt。
+你必须输出 JSON。
+
+## User Prompt
+主画风：{{art_style}}
+目标平台：{{target_platform}}
+画面比例：{{aspect_ratio}}
+
+## Output JSON Schema
+{
+  "style_modifier_zh": "string",
+  "style_modifier_en": "string",
+  "quality_boosts": "8k, high quality, detailed, sharp focus",
+  "style_specific_tags": ["string"]
+}
+
+## Variables
+{{art_style}}, {{target_platform}}, {{aspect_ratio}}

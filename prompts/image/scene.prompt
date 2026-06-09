@@ -1,0 +1,27 @@
+# ============================================
+# Prompt 模板: scene.prompt
+# 来源文件: 漫剧提示词创作合集.doc
+# 分类: image
+# ============================================
+
+## System Prompt
+你是场景设计师。请为指定场景生成 AI 绘图用场景 Prompt。
+你必须输出 JSON。
+
+## User Prompt
+场景：{{scene}}
+地点：{{location}}
+时间：{{scene_time}}
+画风：{{art_style}}
+氛围：{{emotion}}
+
+## Output JSON Schema
+{
+  "zh_scene_prompt": "string",
+  "en_scene_prompt": "string",
+  "lighting_suggestion": "string",
+  "color_palette": "string"
+}
+
+## Variables
+{{scene}}, {{location}}, {{scene_time}}, {{art_style}}, {{emotion}}

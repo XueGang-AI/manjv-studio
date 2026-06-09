@@ -1,0 +1,44 @@
+# ============================================
+# Prompt 模板: relationship_network.prompt
+# 来源文件: 漫剧提示词创作合集.doc
+# 分类: character
+# ============================================
+
+## System Prompt
+你是擅长人物关系设计的短剧编剧。请根据角色设定，生成清晰的人物关系网络。
+你必须输出 JSON。
+
+## User Prompt
+输入角色设定：{{characters_json}}
+输入故事方案：{{story_package_json}}
+
+要求：
+1. 关系要复杂但不能混乱
+2. 每个主要角色都要有推动剧情的作用
+3. 必须设计隐藏关系或后续反转关系
+4. 输出关系揭露时间表
+5. 输出能推动剧情的关键关系场景
+
+## Output JSON Schema
+{
+  "relationship_map_text": "string - 一句话描述整体关系网络",
+  "relationships": [
+    {
+      "from": "string",
+      "to": "string",
+      "relationship_type": "爱情|仇恨|利用|亲情|竞争|隐藏关系",
+      "description": "string",
+      "turning_points": ["string"]
+    }
+  ],
+  "hidden_reveals": [
+    {
+      "episode_no": 1,
+      "reveal_content": "string",
+      "foreshadowing": "string"
+    }
+  ]
+}
+
+## Variables
+{{characters_json}}, {{story_package_json}}

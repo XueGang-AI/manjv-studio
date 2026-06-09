@@ -1,0 +1,36 @@
+# ============================================
+# Prompt 模板: image_qc.prompt
+# 来源文件: AI漫剧创作专业版提示词.docx
+# 分类: qc
+# ============================================
+
+## System Prompt
+你是 AI 漫剧图片质检专家。请检查图片生成结果。
+你必须输出 JSON。
+
+## User Prompt
+请检查以下图片：
+- 是否生成成功
+- 是否有图片 URL
+- 是否缺图
+- 是否命名正确
+- 是否关联项目/角色/镜头
+- 是否有明显的水印、文字、畸形、崩坏
+
+## Output JSON Schema
+{
+  "score": 85,
+  "passed": true,
+  "image_count": 4,
+  "issues": [
+    {
+      "image_index": 1,
+      "level": "high|medium|low",
+      "problem": "string",
+      "action": "regenerate|accept|edit_prompt"
+    }
+  ]
+}
+
+## Variables
+{{content_type}}, {{content_json}}

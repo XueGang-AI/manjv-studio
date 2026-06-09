@@ -1,0 +1,43 @@
+# ============================================
+# Prompt 模板: opening_hook.prompt
+# 来源文件: 漫剧提示词创作合集.doc
+# 分类: storyboard
+# ============================================
+
+## System Prompt
+你是短视频爆款导演，擅长设计让用户停留的前 3 秒开场。
+你必须输出 JSON。
+
+## User Prompt
+输入：
+- 当前集剧情：{{episode_outline}}
+- 当前分镜：{{storyboard_json}}
+- 目标平台：{{target_platform}}
+- 目标受众：{{audience}}
+
+请输出 5 种开场钩子方案：冲突式、悬念式、反转式、情感式、问题式。
+每种方案必须包含 0-3 秒画面、台词/音效、情绪冲击、适合指数。
+最后推荐最适合当前剧情的一种，并说明原因。
+
+## Output JSON Schema
+{
+  "options": [
+    {
+      "type": "冲突式|悬念式|反转式|情感式|问题式",
+      "opening_visual": "string",
+      "line_or_sfx": "string",
+      "emotional_impact": "string",
+      "score": 5,
+      "reason": "string"
+    }
+  ],
+  "recommended": {
+    "type": "string",
+    "opening_visual": "string",
+    "line_or_sfx": "string",
+    "reason": "string"
+  }
+}
+
+## Variables
+{{episode_outline}}, {{storyboard_json}}, {{target_platform}}, {{audience}}

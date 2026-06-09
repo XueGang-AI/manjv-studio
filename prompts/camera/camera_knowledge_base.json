@@ -1,0 +1,90 @@
+{
+  "_meta": {
+    "file": "camera_knowledge_base.json",
+    "category": "camera",
+    "source_file": "运镜教学.doc",
+    "total_entries": 16
+  },
+  "entries": [
+    {
+      "term": "广角镜头",
+      "definition": "适用于需要拍摄广阔的场景。",
+      "source": "运镜教学.doc"
+    },
+    {
+      "term": "长焦镜头",
+      "definition": "适用于需要远距离拍摄或想要突出主体细节的情况。",
+      "source": "运镜教学.doc"
+    },
+    {
+      "term": "超长焦镜头",
+      "definition": "远距离拍摄，并可非常精细地捕捉远处的细节。",
+      "source": "运镜教学.doc"
+    },
+    {
+      "term": "鱼眼镜头",
+      "definition": "用于创意拍摄，强调景象的扭曲和变化。",
+      "source": "运镜教学.doc"
+    },
+    {
+      "term": "固定镜头",
+      "definition": "摄像机机位、角度、焦距等均保持不变，画面稳定，给人以平静客观的感觉",
+      "source": "运镜教学.doc"
+    },
+    {
+      "term": "手持镜头",
+      "definition": "摄像机由手持拍摄，画面会产生抖动，营造出真实、紧张、主观的氛围",
+      "source": "运镜教学.doc"
+    },
+    {
+      "term": "连续拍摄的一个较长的镜头，能保持时间和空",
+      "definition": "连续拍摄的一个较长的镜头，能保持时间和空间的连续性，增强故事的真实性",
+      "source": "运镜教学.doc"
+    },
+    {
+      "term": "平视角度",
+      "definition": "摄像机与被摄对象处于同一水平线上，给人以自然、平等、客观的感觉。",
+      "source": "运镜教学.doc"
+    },
+    {
+      "term": "仰视角度",
+      "definition": "摄像机低于被摄对象向上拍摄使被摄对象显得高大、威严。",
+      "source": "运镜教学.doc"
+    },
+    {
+      "term": "俯视角度",
+      "definition": "摄像机高于被摄对象向下拍摄可展示环境全貌，使被摄对象显得渺小无助倾斜角度",
+      "source": "运镜教学.doc"
+    },
+    {
+      "term": "摄像机倾斜拍摄，使画面产生不稳定感，常用",
+      "definition": "摄像机倾斜拍摄，使画面产生不稳定感，常用于营造紧张不安、悬疑的氛围",
+      "source": "运镜教学.doc"
+    },
+    {
+      "term": "背对视角",
+      "definition": "摄像机位于主体的背后，通常用于展示主体朝向或环境。",
+      "source": "运镜教学.doc"
+    },
+    {
+      "term": "摄像机模拟主角的视角。",
+      "definition": "光位方向",
+      "source": "运镜教学.doc"
+    },
+    {
+      "term": "运镜方式",
+      "definition": "强调主体的重要性或增强紧张感。",
+      "source": "运镜教学.doc"
+    },
+    {
+      "term": "景别摄像机与被拍摄主体的距离",
+      "definition": "空旷的大环境。",
+      "source": "运镜教学.doc"
+    },
+    {
+      "term": "远距离广角视图",
+      "definition": "上半身或腰部以上的画面。",
+      "source": "运镜教学.doc"
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "_meta": {
+    "file": "image_to_video_motion_pairs.json",
+    "category": "video",
+    "source_file": "组合运镜.docx",
+    "total_entries": 12
+  },
+  "entries": [
+    {
+      "text": "文生图 (Text-to-Image)",
+      "source": "组合运镜.docx"
+    },
+    {
+      "text": "Medium shot, low angle, looking up at a heroic warrior holding a sword, dramatic sunset lighting, shallow depth of field, cinematic.\n(中景，仰视一位手持长剑的英雄战士，戏剧性的日落光线，浅景深，电影感。)",
+      "source": "组合运镜.docx"
+    },
+    {
+      "text": "Extreme close-up on a weathered hand holding a rose, shallow depth of field, bokeh background, soft lighting, melancholic mood.\n(极度特写一只布满皱纹的手拿着一朵玫瑰，浅景深，背景虚化，柔和光线，忧郁氛围。)",
+      "source": "组合运镜.docx"
+    },
+    {
+      "text": "Dutch angle, wide shot of a futuristic city skyline at night, neon lights reflecting on wet streets, cyberpunk aesthetic, deep depth of field.\n(荷兰角，未来都市夜景广角镜头，霓虹灯在湿漉漉的街道上反射，赛博朋克美学，深景深。)",
+      "source": "组合运镜.docx"
+    },
+    {
+      "text": "Overhead shot of a chessboard, one piece being moved by an unseen hand, minimalist composition, dramatic shadow.\n(俯视镜头拍摄棋盘，一只无形的手正在移动棋子，极简构图，戏剧性阴影。)",
+      "source": "组合运镜.docx"
+    },
+    {
+      "text": "Long shot, back view of a lone figure standing on a cliff edge overlooking a vast ocean, stormy clouds, high winds (suggested by hair/clothing), epic scale.\n(远景，一个孤独的身影背对镜头站在悬崖边眺望浩瀚海洋，暴风云，强风（通过头发/衣物暗示），史诗感。)",
+      "source": "组合运镜.docx"
+    },
+    {
+      "text": "图生视频 (Image-to-Video)  (假设输入图片是示例描述的画面)",
+      "source": "组合运镜.docx"
+    },
+    {
+      "text": "(输入：英雄战士中景仰视图) Slow push-in on the warrior's determined face, wind blowing through his hair.\n(缓慢推进到战士坚毅的脸部，风吹动他的头发。)",
+      "source": "组合运镜.docx"
+    },
+    {
+      "text": "(输入：手拿玫瑰特写) Slow pull-out to reveal an old woman sitting alone in a dimly lit room, looking at the rose with tears in her eyes.\n(缓慢拉出，展现出一位老妇人独自坐在昏暗房间里，眼含泪水看着玫瑰。)",
+      "source": "组合运镜.docx"
+    },
+    {
+      "text": "(输入：未来城市广角荷兰角图) Camera slowly tilts up the towering skyscrapers, flying cars zooming by in the foreground.\n(镜头缓缓上摇高耸的摩天大楼，飞行汽车在前景疾驰而过。)",
+      "source": "组合运镜.docx"
+    },
+    {
+      "text": "(输入：俯视棋盘图) Close-up on the hand placing the chess piece decisively, then cut to (or pan to) the opponent's reaction shot (if generating multi-shot might需要更复杂提示或分步).\n(特写手果断放下棋子的瞬间，然后切到（或摇到）对手的反应镜头 - 生成多镜头可能更复杂。)",
+      "source": "组合运镜.docx"
+    },
+    {
+      "text": "(输入：悬崖边人物远景背影图) Camera slowly orbits around the figure, revealing the stormy sea crashing against the cliffs below, dramatic music swell.\n(镜头缓缓环绕人物移动，展现出下方波涛汹涌的大海拍打悬崖，戏剧性音乐渐强。)",
+      "source": "组合运镜.docx"
+    }
+  ]
+}

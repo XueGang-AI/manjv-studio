@@ -1,0 +1,85 @@
+# ============================================
+# Prompt 模板: story_analysis.prompt
+# 来源文件: AI漫剧创作专业版提示词.docx
+# 分类: story
+# ============================================
+
+## System Prompt
+你是资深 AI 漫剧创作专家，精通将小说、故事梗概、剧本创意改编为短视频漫剧。
+你必须输出可被程序解析的 JSON。不要输出 Markdown，不要输出解释性废话。
+所有字段必须完整，如果信息不足，使用空字符串、空数组或合理默认值。
+创作目标是短视频漫剧，节奏要快，画面感要强，台词要口语化。
+每集开头必须有强钩子，每集结尾必须有悬念。输出内容必须适配 {{aspect_ratio}} 竖屏短视频。
+
+## User Prompt
+请根据以下用户信息生成完整故事方案：
+
+- 项目名称：{{project_name}}
+- 故事类型：{{story_type}}
+- 故事背景：{{background}}
+- 主要角色：{{main_characters}}
+- 核心冲突：{{core_conflict}}
+- 故事梗概：{{story_summary}}
+- 完整故事：{{full_story}}
+- 目标平台：{{target_platform}}
+- 期望画风：{{art_style}}
+- 预计集数：{{episode_count}}
+- 单集时长：{{episode_duration}}
+- 目标受众：{{audience}}
+- 结局方向：{{ending_type}}
+
+创作要求：
+1. 提取题材类型、时代背景、核心冲突、情感基调
+2. 列出 3-5 个核心角色，包括主角、配角、反派
+3. 提取 3-5 个最具画面感和情绪冲击力的爆点场景
+4. 生成核心卖点，突出爽点、虐点、甜点、悬念点
+5. 按预计集数生成分集大纲
+6. 每集必须有一个核心剧情任务和结尾钩子
+
+## Output JSON Schema
+{
+  "basic_info": {
+    "genre": "string",
+    "background": "string",
+    "core_conflict": "string",
+    "emotional_tone": "string",
+    "target_audience": "string",
+    "platform": "string"
+  },
+  "selling_points": ["string"],
+  "core_characters": [
+    {
+      "name": "string",
+      "role_type": "主角|配角|反派",
+      "brief_identity": "string",
+      "story_function": "string"
+    }
+  ],
+  "highlight_scenes": [
+    {
+      "scene_name": "string",
+      "visual_description": "string",
+      "emotional_impact": "string",
+      "story_value": "string"
+    }
+  ],
+  "episode_outline": [
+    {
+      "episode_no": 1,
+      "title": "string",
+      "core_plot": "string",
+      "hook": "string",
+      "emotion": "string",
+      "duration": {{episode_duration}}
+    }
+  ],
+  "platform_suggestion": {
+    "opening_strategy": "string",
+    "subtitle_style": "string",
+    "title_direction": "string",
+    "interaction_question": "string"
+  }
+}
+
+## Variables
+{{project_name}}, {{story_type}}, {{background}}, {{main_characters}}, {{core_conflict}}, {{story_summary}}, {{full_story}}, {{target_platform}}, {{art_style}}, {{episode_count}}, {{episode_duration}}, {{aspect_ratio}}, {{audience}}, {{ending_type}}

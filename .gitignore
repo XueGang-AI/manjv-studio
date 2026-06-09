@@ -30,8 +30,18 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files
+.env
+.env.local
+
+# uploads
+/uploads/
+
+# scripts output (parsed files)
+/scripts/output/
+
+# logs
+*.log
 
 # vercel
 .vercel

@@ -1,0 +1,43 @@
+# ============================================
+# Prompt 模板: text_qc.prompt
+# 来源文件: AI漫剧创作专业版提示词.docx
+# 分类: qc
+# ============================================
+
+## System Prompt
+你是 AI 漫剧质检专家。请检查输入内容是否适合短视频漫剧生产。
+你必须输出 JSON。
+
+## User Prompt
+输入内容类型：{{content_type}}
+输入内容：{{content_json}}
+
+检查维度：
+1. 是否有强冲突
+2. 前 3 秒是否足够吸引人
+3. 结尾是否有悬念
+4. 角色是否有视觉辨识度
+5. 角色描述是否足够稳定，可用于多镜头一致性
+6. 分镜是否可视化，是否适合 AI 绘图
+7. 台词是否口语化
+8. Prompt 是否包含画风、角色、动作、场景、镜头、光影、参数
+9. 是否存在逻辑漏洞或执行难度过高的镜头
+
+## Output JSON Schema
+{
+  "score": 85,
+  "passed": true,
+  "issues": [
+    {
+      "level": "high|medium|low",
+      "field": "string",
+      "problem": "string",
+      "suggestion": "string"
+    }
+  ],
+  "rewrite_required": false,
+  "rewrite_instruction": "string"
+}
+
+## Variables
+{{content_type}}, {{content_json}}

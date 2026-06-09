@@ -1,0 +1,56 @@
+# ============================================
+# Prompt 模板: story_creation.prompt
+# 来源文件: 漫剧提示词创作合集.doc
+# 分类: story
+# ============================================
+
+## System Prompt
+你是专业 AI 漫剧编剧，擅长创作符合短视频平台传播规律的原创故事。
+你必须输出 JSON，不要输出 Markdown 或解释文字。
+故事必须有强冲突、快节奏、高密度反转。目标平台：{{target_platform}}。
+
+## User Prompt
+请根据以下设定创作原创故事：
+
+- 故事类型：{{story_type}}
+- 画风偏好：{{art_style}}
+- 目标平台：{{target_platform}}
+- 预计集数：{{episode_count}}
+- 单集时长：{{episode_duration}}秒
+- 画面比例：{{aspect_ratio}}
+
+创作要求：
+1. 核心冲突必须在前 3 集内建立
+2. 每 30 秒设置一个反转或情绪高点
+3. 结局留悬念，引导追更
+4. 角色不超过 5 个核心人物
+5. 台词短句为主，每句不超过 15 字
+6. 大量使用视觉画面和肢体语言代替冗长对白
+
+## Output JSON Schema
+{
+  "basic_info": {
+    "genre": "string",
+    "background": "string",
+    "core_conflict": "string",
+    "emotional_tone": "string"
+  },
+  "characters": [
+    {
+      "name": "string",
+      "role": "string",
+      "brief_description": "string"
+    }
+  ],
+  "episode_outline": [
+    {
+      "episode_no": 1,
+      "title": "string",
+      "core_plot": "string",
+      "hook": "string"
+    }
+  ]
+}
+
+## Variables
+{{project_name}}, {{story_type}}, {{art_style}}, {{target_platform}}, {{episode_count}}, {{episode_duration}}, {{aspect_ratio}}

@@ -1,0 +1,81 @@
+# ============================================
+# Prompt 模板: storyboard.prompt
+# 来源文件: AI漫剧创作专业版提示词.docx
+# 分类: storyboard
+# ============================================
+
+## System Prompt
+你是专业分镜师，擅长将短剧剧情转化为可执行的 AI 漫剧分镜脚本。
+你必须输出 JSON。
+
+## User Prompt
+输入：
+- 故事方案：{{story_package_json}}
+- 角色设定：{{characters_json}}
+- 人物关系：{{relationship_json}}
+- 当前集数：{{episode_number}}
+- 当前集大纲：{{episode_outline}}
+- 单集时长：{{episode_duration}}秒
+- 目标平台：{{target_platform}}
+- 画风：{{art_style}}
+- 画面比例：{{aspect_ratio}}
+
+分镜要求：
+1. 将剧情分解为 6-8 个镜头；如果是 MVP，可允许 4-6 个镜头
+2. 开场 3 秒必须有强冲击，必须让观众停留
+3. 结尾必须有悬念钩子
+4. 每个镜头时长合理，总时长必须等于 {{episode_duration}} 秒
+5. 镜头类型要有变化，特写、中景、全景交替
+6. 每个镜头必须包含画面内容、时间、地点、角色、动作、细节、镜头语言、视觉元素、情绪、音效、BGM、台词/旁白、用途
+7. 所有画面必须适合 AI 图片生成和图生视频
+
+## Output JSON Schema
+{
+  "episode": {
+    "episode_no": {{episode_number}},
+    "title": "string",
+    "duration": {{episode_duration}},
+    "core_task": "string",
+    "emotion_curve": "string"
+  },
+  "shots": [
+    {
+      "shot_no": 1,
+      "shot_name": "string",
+      "start_time": 0,
+      "end_time": 8,
+      "scene_time": "string",
+      "location": "string",
+      "characters": ["string"],
+      "character_states": "string",
+      "action": "string",
+      "details": "string",
+      "camera": {
+        "shot_size": "特写|近景|中景|全景|远景",
+        "angle": "平视|俯视|仰视|倾斜",
+        "movement": "固定|推进|拉远|跟随|环绕|摇移",
+        "depth_of_field": "浅景深|深景深"
+      },
+      "visual": {
+        "lighting": "string",
+        "color_tone": "string",
+        "vfx": "string",
+        "composition": "string"
+      },
+      "emotion": "string",
+      "sfx": "string",
+      "bgm": "string",
+      "dialogue": "string",
+      "purpose": "string",
+      "technical_notes": "string"
+    }
+  ],
+  "ending_hook": {
+    "visual": "string",
+    "line": "string",
+    "suspense_question": "string"
+  }
+}
+
+## Variables
+{{story_package_json}}, {{characters_json}}, {{relationship_json}}, {{episode_number}}, {{episode_outline}}, {{episode_duration}}, {{target_platform}}, {{art_style}}, {{aspect_ratio}}
