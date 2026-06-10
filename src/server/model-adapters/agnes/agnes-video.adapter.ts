@@ -85,7 +85,7 @@ export class AgnesVideoAdapter extends BaseVideoAdapter {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.apiKey}` },
       body: JSON.stringify(createBody),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(60000),
     })
 
     if (!res.ok) {

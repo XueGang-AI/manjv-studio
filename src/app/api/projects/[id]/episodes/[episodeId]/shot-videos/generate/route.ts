@@ -56,7 +56,30 @@ export async function POST(
       for (const shot of shots) {
         const vidPrompt = shot.videoPrompts[0]
         const confirmedImage = shot.shotImages[0]
-        const prompt = vidPrompt?.prompt || ''
+        let prompt = vidPrompt?.prompt || ''
+
+        // 后备 prompt：当 storyboard 未生成 video_prompt 时，从镜头数据构建
+        if (!prompt.trim()) {
+          const parts: string[] = []
+          if (shot.action) parts.push(String(shot.action))
+          if (shot.visual && typeof shot.visual === 'object') {
+            const v = shot.visual as Record<string, unknown>
+            if (v.description) parts.push(String(v.description))
+            if (v.style) parts.push(String(v.style))
+          }
+          if (shot.camera && typeof shot.camera === 'object') {
+            const c = shot.camera as Record<string, unknown>
+            if (c.movement) parts.push(`Camera: ${c.movement}`)
+            if (c.angle) parts.push(`Angle: ${c.angle}`)
+          }
+          if (shot.emotion) parts.push(`Mood: ${shot.emotion}`)
+          if (shot.location) parts.push(`Location: ${shot.location}`)
+          if (parts.length === 0) {
+            parts.push('Cinematic slow push-in, gentle motion, Korean manhwa style, high quality, no text, no watermark')
+          }
+          prompt = parts.join('. ') + ', Korean manhwa style, cinematic lighting, smooth motion, no text, no watermark'
+        }
+
         const duration = (shot.endTime || 10) - (shot.startTime || 0)
 
         const genReq: VideoGenerationRequest = {
