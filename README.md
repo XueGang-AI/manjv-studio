@@ -29,6 +29,16 @@ AI 驱动的漫剧创作平台，支持故事分析、角色设计、分镜生�
 - **异步模式**: ✅ Adapter 已重构，支持 create/poll/wait/download
 - **任务恢复**: ✅ 支持根据 task_id 继续轮询
 
+### 剩余风险
+
+见 [docs/REAL_AGNES_API_PROBE_REPORT.md#剩余风险](docs/REAL_AGNES_API_PROBE_REPORT.md)：
+
+1. 视频队列延迟不确定，高峰期可能等很久
+2. 视频分辨率可能不是 1080×1920，需 FFmpeg 后处理
+3. 批量生成可能存在并发/QPS 限制
+4. 视频内容质量仍需人工确认
+5. API 返回字段可能变化，已通过多字段回退兼容
+
 ## 快速开始
 
 ### 环境要求

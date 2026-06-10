@@ -204,6 +204,16 @@ video_url:               https://storage.googleapis.com/agnes-aigc/aigc/videos/2
 | Mock 全流程 | ✅ 一键通过 (`npm run test:e2e`) |
 | 最小真实闭环 | ✅ 文本+图片+视频全部验证通过 |
 
+## 剩余风险
+
+| # | 风险 | 影响 | 缓解措施 |
+|---|------|------|----------|
+| 1 | Agnes 视频队列延迟不确定，高峰期可能等待数小时 | 真实视频生成无法实时完成 | 异步模式 + task_id 持久化 + "继续检查"按钮 + poll 脚本 |
+| 2 | 视频返回分辨率可能不是 1080×1920（当前 1280×768） | 需要 FFmpeg 后处理统一竖屏 | FFmpeg scale+pad 已在 final-preview 流程中使用 |
+| 3 | 批量视频生成可能存在并发和 QPS 限制 | 大规模生成时部分任务失败或限流 | 单镜头串行创建 + 错误重试 + generation_tasks 日志 |
+| 4 | 视频内容质量仍需人工确认（动态自然度、面部变形） | 输出可能不符合预期 | QC 服务 6 维评分，人工确认节点保留 |
+| 5 | 图片/视频 API 返回字段可能变化（如 `remixed_from_video_id`） | 适配器字段提取失败 | Adapter 兼容层：多字段回退提取（`video_url \|\| url \|\| output_url \|\| remixed_from_video_id`） |
+
 ## 待继续验证
 
 1. 视频模型在高峰期的实际排队时间
@@ -211,3 +221,4 @@ video_url:               https://storage.googleapis.com/agnes-aigc/aigc/videos/2
 3. `image` 参数对 i2v 的输出质量影响
 4. 视频输出质量（分辨率、时长、动态效果）
 5. 图片 `reference_images` 字段用于角色一致性
+6. 批量并发下的 QPS 限制和重试策略
