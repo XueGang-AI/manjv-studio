@@ -123,18 +123,20 @@ model Character {
 // 角色图片候选
 // ============================================
 model CharacterImage {
-  id            String   @id @default(uuid())
-  characterId   String   @map("character_id")
-  projectId     String   @map("project_id")
-  imageUrl      String?  @map("image_url")
-  prompt        String?
-  negativePrompt String? @map("negative_prompt")
-  seed          String?
-  modelName     String?  @map("model_name")
-  params        Json?    @default("{}")
-  isSelected    Boolean  @default(false) @map("is_selected")
-  isConfirmed   Boolean  @default(false) @map("is_confirmed")
-  createdAt     DateTime @default(now()) @map("created_at")
+  id             String   @id @default(uuid())
+  characterId    String   @map("character_id")
+  projectId      String   @map("project_id")
+  imageUrl       String?  @map("image_url")
+  prompt         String?
+  negativePrompt String?  @map("negative_prompt")
+  seed           String?
+  modelName      String?  @map("model_name")
+  params         Json?    @default("{}")
+  referenceType  String?  @map("reference_type")
+  isPrimary      Boolean  @default(false) @map("is_primary")
+  isSelected     Boolean  @default(false) @map("is_selected")
+  isConfirmed    Boolean  @default(false) @map("is_confirmed")
+  createdAt      DateTime @default(now()) @map("created_at")
 
   character Character @relation(fields: [characterId], references: [id])
   project   Project   @relation(fields: [projectId], references: [id])

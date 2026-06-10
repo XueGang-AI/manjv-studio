@@ -3,7 +3,7 @@ import prisma from '@/lib/prisma'
 
 /**
  * POST /api/projects/:id/character-images/:imageId/confirm
- * 确认该角色的标准图（需先选中）
+ * 确认该图片为标准参考图（支持多张不同 reference_type 同时确认）
  */
 export async function POST(
   request: NextRequest,
@@ -31,13 +31,35 @@ export async function POST(
       data: { isConfirmed: true },
     })
 
-    // 同一角色的其他候选图取消确认
-    await prisma.characterImage.updateMany({
-      where: { characterId: image.characterId, projectId, id: { not: imageId } },
-      data: { isConfirmed: false },
-    })
+    // ⭐ 多参考图模式：不再取消同一角色其他 reference_type 的已确认图
+    // 旧逻辑只保留 1 张 confirmed，新逻辑允许多张（每种 reference_type 一张）
+    // 仅取消同一 reference_type 的其他 confirmed 图
+    if (image.referenceType) {
+      await prisma.characterImage.updateMany({
+        where: {
+          characterId: image.characterId, projectId,
+          referenceType: image.referenceType,
+          id: { not: imageId },
+        },
+        data: { isConfirmed: false },
+      })
+    } else {
+      // 旧数据兼容：没有 reference_type 时，保持旧行为（只保留 1 张 confirmed）
+      await prisma.characterImage.updateMany({
+        where: { characterId: image.characterId, projectId, id: { not: imageId } },
+        data: { isConfirmed: false },
+      })
+    }
 
-    // 检查是否所有角色都有确认的标准图
+    // 更新 isPrimary：每角色只有一张 primary
+    if (image.isSelected) {
+      await prisma.characterImage.updateMany({
+        where: { characterId: image.characterId, projectId, id: { not: imageId } },
+        data: { isPrimary: false },
+      })
+    }
+
+    // 检查是否所有角色都有确认图
     const characters = await prisma.character.findMany({
       where: { projectId, confirmed: true },
     })
@@ -66,17 +88,12 @@ export async function POST(
         imageId,
         characterId: image.characterId,
         isConfirmed: true,
+        referenceType: image.referenceType,
         allCharactersConfirmed: allConfirmed,
-        projectStatus: allConfirmed ? 'CHARACTER_IMAGE_CONFIRMED' : projectStatus(projectId),
       },
     })
   } catch (error) {
     console.error('Failed to confirm image:', error)
     return NextResponse.json({ success: false, error: '确认图片失败' }, { status: 500 })
   }
-}
-
-async function projectStatus(projectId: string): Promise<string> {
-  const p = await prisma.project.findUnique({ where: { id: projectId }, select: { status: true } })
-  return p?.status || ''
 }

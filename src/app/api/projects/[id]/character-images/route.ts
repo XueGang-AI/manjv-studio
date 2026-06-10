@@ -30,6 +30,8 @@ export async function GET(
           where: { characterId: char.id, projectId },
           orderBy: { createdAt: 'desc' },
         })
+        // 统计各 reference_type 确认情况
+        const confirmedTypes = [...new Set(images.filter(i => i.isConfirmed).map(i => i.referenceType || 'front_full_body'))]
         return {
           character: {
             id: char.id,
@@ -41,6 +43,8 @@ export async function GET(
           images,
           selectedImage: images.find(img => img.isSelected) || null,
           confirmed: images.some(img => img.isConfirmed),
+          confirmedTypes,
+          confirmedTypeCount: confirmedTypes.length,
         }
       })
     )

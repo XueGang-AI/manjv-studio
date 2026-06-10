@@ -21,7 +21,7 @@ interface ShotGroup {
   images: Array<{
     id: string; imageUrl: string; prompt: string; seed: string
     style: string; aspectRatio: string
-    referenceImages: Array<{character_name: string; image_url: string}>
+    referenceImages: Array<{character_name: string; image_url: string; reference_type?: string}>
     isSelected: boolean; isConfirmed: boolean
   }>
   selectedImage: { id: string; imageUrl: string } | null
@@ -221,7 +221,9 @@ export default function ShotImagesPage() {
                       <div className="text-xs text-gray-400 truncate">seed: {(img.seed || '-').substring(0, 12)}</div>
                       {img.referenceImages && (img.referenceImages as unknown[]).length > 0 && (
                         <div className="text-xs text-gray-500 mt-0.5">
-                          🎯 参考角色: {(img.referenceImages as Array<{character_name: string}>).map(r => r.character_name).join(', ')}
+                          🎯 参考角色: {(img.referenceImages as Array<{character_name: string; reference_type?: string}>).map(r =>
+                            r.reference_type ? `${r.character_name}(${r.reference_type})` : r.character_name
+                          ).join(', ')}
                         </div>
                       )}
                       {!isConfirmed && (

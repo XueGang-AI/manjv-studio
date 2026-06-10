@@ -22,21 +22,25 @@ export async function POST(
       return NextResponse.json({ success: false, error: '请先确认分镜脚本' }, { status: 400 })
     }
 
-    // 获取所有已确认 + 已选择的标准角色图（用于 reference）
+    // 获取所有已确认 + 已选择的标准角色图（含 reference_type）
     const charImages = await prisma.characterImage.findMany({
       where: { projectId, isConfirmed: true, isSelected: true },
       include: { character: { select: { id: true, name: true } } },
     })
 
-    // 构建角色名称匹配索引：characterName → { characterId, imageUrl }
-    const refByName = new Map<string, { characterId: string; characterName: string; imageUrl: string }>()
+    // 构建索引：characterName → { type → { characterId, imageUrl, referenceType } }
+    // 支持同一角色多张不同角度的参考图
+    type RefEntry = { characterId: string; characterName: string; imageUrl: string; referenceType: string }
+    const refByName = new Map<string, RefEntry[]>()
     for (const ci of charImages) {
       const name = ci.character.name?.trim()
       if (name && ci.imageUrl) {
-        refByName.set(name, {
+        if (!refByName.has(name)) refByName.set(name, [])
+        refByName.get(name)!.push({
           characterId: ci.characterId,
           characterName: name,
           imageUrl: ci.imageUrl,
+          referenceType: ci.referenceType || 'front_full_body',
         })
       }
     }
@@ -76,44 +80,87 @@ export async function POST(
       const baseNegative = 'ugly, deformed, bad anatomy, bad proportions, low quality, blurry, pixelated, distorted face, extra fingers, missing fingers, asymmetric eyes, watermark, text, logo'
 
       /**
-       * 根据 shot.characters 匹配标准角色图作为 reference_images。
-       * 使用双向子串匹配——处理 AI 可能输出 "顾辰（背影）" 而非 "顾辰" 的情况。
+       * 根据 shot.characters + shot 内容自动选择最匹配的角色参考图。
+       *
+       * 选择策略：
+       * 1. 先通过双向子串匹配找到出场角色
+       * 2. 根据镜头内容（camera/action/emotion）决定优先 reference_type
+       * 3. 每角色最多选 2-3 张，总共不超过 6 张
        */
-      function matchReferences(shotCharsRaw: unknown): Array<{ character_id: string; character_name: string; image_url: string }> {
+      function matchReferences(
+        shotCharsRaw: unknown,
+        shotContent: { action?: string; camera?: Record<string,unknown>; emotion?: string }
+      ): Array<{ character_id: string; character_name: string; image_url: string; reference_type: string }> {
         const shotChars: string[] = []
         if (Array.isArray(shotCharsRaw)) {
           for (const item of shotCharsRaw) {
             if (typeof item === 'string') shotChars.push(item.trim())
             else if (item && typeof item === 'object') {
-              // AI 可能输出 { name: "林晓" } 格式
               const name = (item as Record<string, unknown>).name
               if (typeof name === 'string') shotChars.push(name.trim())
             }
           }
         }
-
         if (shotChars.length === 0) return []
 
-        const matched: Array<{ character_id: string; character_name: string; image_url: string }> = []
+        // 解析镜头内容，确定优先 reference_type
+        const contentText = [
+          shotContent.action || '',
+          JSON.stringify(shotContent.camera || {}),
+          shotContent.emotion || '',
+        ].join(' ').toLowerCase()
+
+        // 判断镜头类型 → 优先 reference_type 顺序
+        const isBackView   = /背影|转身|离开|离去|走远|背面|背对/.test(contentText)
+        const isSideView   = /侧脸|侧身|侧面|回首|回眸|转头|扭头/.test(contentText)
+        const isFullBody   = /全身|站立|走路|行走|奔跑|跑过|步入/.test(contentText)
+        const isCloseUp    = /特写|近景|脸部|眼神|表情|凝视|注视/.test(contentText)
+        const isPropWeapon = /道具|武器|枪支|刀|剑|武器|物件|物品|手持|握着/.test(contentText)
+
+        // 优先级排序：匹配的类型排前面
+        const priorityTypes: string[] = []
+        if (isBackView)   priorityTypes.push('back_view', 'front_full_body')
+        else if (isSideView) priorityTypes.push('left_side', 'right_side', 'front_half_body')
+        else if (isFullBody) priorityTypes.push('front_full_body', 'outfit', 'pose')
+        else if (isCloseUp)  priorityTypes.push('front_half_body', 'front_full_body', 'expression')
+        else if (isPropWeapon) priorityTypes.push('prop', 'weapon', 'front_full_body')
+        else priorityTypes.push('front_half_body', 'front_full_body') // 默认：对话/一般镜头
+
+        const matched: Array<{ character_id: string; character_name: string; image_url: string; reference_type: string }> = []
         const usedNames = new Set<string>()
 
         for (const sc of shotChars) {
-          // 精确匹配
-          if (refByName.has(sc) && !usedNames.has(sc)) {
-            const r = refByName.get(sc)!
-            matched.push(r)
-            usedNames.add(sc)
-            continue
-          }
-          // 子串双向匹配： "顾辰（背影）" ↔ "顾辰"
-          for (const [charName, r] of refByName) {
-            if (usedNames.has(charName)) continue
-            if (sc.includes(charName) || charName.includes(sc)) {
-              matched.push(r)
-              usedNames.add(charName)
-              break
+          // 找到匹配的角色
+          let entries: RefEntry[] | undefined
+          if (refByName.has(sc)) {
+            entries = refByName.get(sc)
+          } else {
+            for (const [name, refs] of refByName) {
+              if (sc.includes(name) || name.includes(sc)) {
+                entries = refs; break
+              }
             }
           }
+          if (!entries || usedNames.has(entries[0].characterName)) continue
+
+          // 按优先级排序该角色的参考图
+          const sorted = [...entries].sort((a, b) => {
+            const ai = priorityTypes.indexOf(a.referenceType)
+            const bi = priorityTypes.indexOf(b.referenceType)
+            if (ai >= 0 && bi >= 0) return ai - bi
+            if (ai >= 0) return -1
+            if (bi >= 0) return 1
+            return 0
+          })
+
+          // 每角色最多选 2 张最相关的
+          for (let i = 0; i < Math.min(sorted.length, 2); i++) {
+            matched.push({ ...sorted[i], reference_type: sorted[i].referenceType })
+          }
+          usedNames.add(sorted[0].characterName)
+
+          // 总上限 6 张
+          if (matched.length >= 6) break
         }
 
         return matched
@@ -126,8 +173,12 @@ export async function POST(
         const prompt = imgPrompt?.enPrompt || imgPrompt?.zhPrompt || shot.action || ''
         const negative = (imgPrompt?.negativePrompt || baseNegative)
 
-        // 匹配角色标准图
-        const references = matchReferences(shot.characters)
+        // 根据镜头内容自动选择最匹配的角色参考图
+        const references = matchReferences(shot.characters, {
+          action: shot.action || undefined,
+          camera: (shot.camera as Record<string,unknown>) || undefined,
+          emotion: shot.emotion || undefined,
+        })
 
         // 如果镜头有角色但未匹配到任何标准图，记录警告并继续（不阻止生成）
         if (shot.characters && Array.isArray(shot.characters) && (shot.characters as unknown[]).length > 0 && references.length === 0) {
