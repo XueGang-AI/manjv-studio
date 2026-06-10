@@ -78,7 +78,7 @@ export async function POST(
         project_name: project.projectName,
         story_type: project.storyType || '',
         background: project.background || '',
-        core_conflict: project.coreConflict || '',
+        core_conflict: project.coreConflict || '用户暂未明确核心冲突，请根据故事背景和梗概自动提炼潜在矛盾、人物关系张力或情绪驱动力。',
         story_summary: project.storySummary || '',
         art_style: project.artStyle || '',
         target_platform: project.targetPlatform || '',

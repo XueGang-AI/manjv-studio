@@ -12,8 +12,8 @@ export interface ValidationResult {
   errors: ValidationError[]
 }
 
-const STORY_TYPES = ['霸总', '古风', '现代', '悬疑', '玄幻', '甜宠', '都市', '职场', '自定义']
-const ART_STYLES = ['韩漫', '日漫', '国风', '写实', '赛博朋克', '电影感', '自定义']
+const STORY_TYPES = ['霸总', '古风', '现代', '悬疑', '玄幻', '甜宠', '都市', '职场', '虐恋', '复仇', '重生', '权谋', '校园', '家庭']
+const ART_STYLES = ['韩漫', '日漫', '国风', '写实', '电影感', '赛博朋克', '水彩', '厚涂', '3D', '黑白漫画', '高对比光影', '都市雨夜']
 const PLATFORMS = ['抖音', '快手', '视频号', '小红书', 'B站', '自定义']
 const ASPECT_RATIOS = ['9:16', '16:9', '1:1']
 
@@ -30,12 +30,10 @@ export function validateProjectForm(data: Record<string, unknown>): ValidationRe
     errors.push({ field: 'project_name', message: '项目名称不能超过 50 个字符' })
   }
 
-  // story_type: 必填
+  // story_type: 必填，支持多选逗号分隔或自定义
   const storyType = (data.story_type as string) || ''
   if (!storyType.trim()) {
     errors.push({ field: 'story_type', message: '请选择故事类型' })
-  } else if (!STORY_TYPES.includes(storyType) && storyType !== '自定义') {
-    errors.push({ field: 'story_type', message: '无效的故事类型' })
   }
 
   // background: 必填
@@ -56,13 +54,9 @@ export function validateProjectForm(data: Record<string, unknown>): ValidationRe
     errors.push({ field: 'main_characters', message: '至少需要 1 个主要角色' })
   }
 
-  // core_conflict: 10-300 字，必填
+  // core_conflict: 选填（不超过 300 字）
   const conflict = (data.core_conflict as string) || ''
-  if (!conflict.trim()) {
-    errors.push({ field: 'core_conflict', message: '核心冲突不能为空' })
-  } else if (conflict.trim().length < 10) {
-    errors.push({ field: 'core_conflict', message: '核心冲突至少 10 个字符' })
-  } else if (conflict.trim().length > 300) {
+  if (conflict.trim().length > 300) {
     errors.push({ field: 'core_conflict', message: '核心冲突不能超过 300 个字符' })
   }
 
@@ -76,7 +70,7 @@ export function validateProjectForm(data: Record<string, unknown>): ValidationRe
     errors.push({ field: 'story_summary', message: '故事梗概不能超过 2000 个字符' })
   }
 
-  // art_style: 必填
+  // art_style: 必填，支持多选逗号分隔或自定义
   const artStyle = (data.art_style as string) || ''
   if (!artStyle.trim()) {
     errors.push({ field: 'art_style', message: '请选择期望画风' })
@@ -94,10 +88,12 @@ export function validateProjectForm(data: Record<string, unknown>): ValidationRe
     errors.push({ field: 'episode_count', message: '集数需要在 1-100 之间' })
   }
 
-  // episode_duration: 30-300 秒，必填
+  // episode_duration: 15-300 秒，必填
   const epDuration = Number(data.episode_duration)
-  if (isNaN(epDuration) || epDuration < 30 || epDuration > 300) {
-    errors.push({ field: 'episode_duration', message: '单集时长需要在 30-300 秒之间' })
+  if (isNaN(epDuration) || epDuration < 15 || epDuration > 300) {
+    errors.push({ field: 'episode_duration', message: '单集时长需要在 15-300 秒之间' })
+  } else if (!Number.isInteger(epDuration)) {
+    errors.push({ field: 'episode_duration', message: '单集时长必须为整数' })
   }
 
   // aspect_ratio: 必填

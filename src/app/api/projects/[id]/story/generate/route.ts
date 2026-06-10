@@ -59,7 +59,7 @@ export async function POST(
         story_type: project.storyType || '',
         background: project.background || '',
         main_characters: JSON.stringify(project.mainCharacters || []),
-        core_conflict: project.coreConflict || '',
+        core_conflict: project.coreConflict || '用户暂未明确核心冲突，请根据故事背景和梗概自动提炼潜在矛盾、人物关系张力或情绪驱动力。',
         story_summary: project.storySummary || '',
         full_story: project.fullStory || '',
         art_style: project.artStyle || '',

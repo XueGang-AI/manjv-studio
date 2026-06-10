@@ -1,17 +1,19 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { X, Plus } from 'lucide-react'
 import { ValidationError } from '@/lib/validators'
 
-const STORY_TYPES = ['霸总', '古风', '现代', '悬疑', '玄幻', '甜宠', '都市', '职场', '自定义']
-const ART_STYLES = ['韩漫', '日漫', '国风', '写实', '赛博朋克', '电影感', '自定义']
+const STORY_TYPES = ['霸总', '古风', '现代', '悬疑', '玄幻', '甜宠', '都市', '职场', '虐恋', '复仇', '重生', '权谋', '校园', '家庭']
+const ART_STYLES = ['韩漫', '日漫', '国风', '写实', '电影感', '赛博朋克', '水彩', '厚涂', '3D', '黑白漫画', '高对比光影', '都市雨夜']
 const PLATFORMS = ['抖音', '快手', '视频号', '小红书', 'B站', '自定义']
-const DURATIONS = [60, 90, 120, 180]
+const DURATION_QUICK = [15, 30, 60, 90, 120, 180]
 const ASPECT_RATIOS = ['9:16', '16:9', '1:1']
+
+const CUSTOM_TAG = '自定义'
 
 export interface ProjectFormData {
   project_name: string
@@ -35,6 +37,141 @@ interface Props {
   submitLabel?: string
   loading?: boolean
   errors?: ValidationError[]
+}
+
+/** Parse comma-separated string back to tags, filtering out empty strings */
+function parseTags(str: string): string[] {
+  if (!str || !str.trim()) return []
+  return str.split(',').map(s => s.trim()).filter(Boolean)
+}
+
+/** Multi-select tag group with optional custom input */
+function MultiTagGroup({
+  label,
+  subtitle,
+  options,
+  value,
+  onChange,
+  allowCustom = true,
+}: {
+  label: string
+  subtitle?: string
+  options: string[]
+  value: string
+  onChange: (v: string) => void
+  allowCustom?: boolean
+}) {
+  const selected = useMemo(() => parseTags(value), [value])
+  const [customInput, setCustomInput] = useState('')
+  const [showCustom, setShowCustom] = useState(false)
+
+  const toggleTag = (tag: string) => {
+    if (tag === CUSTOM_TAG) {
+      setShowCustom(!showCustom)
+      return
+    }
+    const next = selected.includes(tag)
+      ? selected.filter(t => t !== tag)
+      : [...selected, tag]
+    onChange(next.join(', '))
+  }
+
+  const addCustom = () => {
+    const trimmed = customInput.trim()
+    if (!trimmed) return
+    if (selected.includes(trimmed)) {
+      setCustomInput('')
+      return
+    }
+    const next = [...selected, trimmed]
+    onChange(next.join(', '))
+    setCustomInput('')
+  }
+
+  const removeTag = (tag: string) => {
+    if (tag === CUSTOM_TAG) return
+    onChange(selected.filter(t => t !== tag).join(', '))
+  }
+
+  const handleCustomKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      addCustom()
+    }
+  }
+
+  return (
+    <div>
+      <label className="block text-sm font-medium mb-1">{label}</label>
+      {subtitle && <p className="text-xs text-gray-400 mb-1.5">{subtitle}</p>}
+      <div className="flex flex-wrap gap-2 mb-2">
+        {options.map(opt => {
+          const isSelected = selected.includes(opt)
+          return (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => toggleTag(opt)}
+              className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                isSelected
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                  : 'border-gray-200 text-gray-600 hover:border-indigo-300 hover:text-indigo-600'
+              }`}
+            >
+              {opt}
+            </button>
+          )
+        })}
+        {allowCustom && (
+          <button
+            key={CUSTOM_TAG}
+            type="button"
+            onClick={() => toggleTag(CUSTOM_TAG)}
+            className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+              showCustom
+                ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                : 'border-dashed border-gray-300 text-gray-500 hover:border-purple-300 hover:text-purple-600'
+            }`}
+          >
+            {CUSTOM_TAG}
+          </button>
+        )}
+      </div>
+
+      {/* Custom input */}
+      {showCustom && (
+        <div className="flex gap-2 mb-2">
+          <Input
+            value={customInput}
+            onChange={e => setCustomInput(e.target.value)}
+            onKeyDown={handleCustomKeyDown}
+            placeholder="请输入自定义类型，回车添加"
+            className="text-sm"
+          />
+          <Button type="button" variant="outline" size="sm" onClick={addCustom}>
+            添加
+          </Button>
+        </div>
+      )}
+
+      {/* Selected tags summary */}
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {selected.map(tag => (
+            <span
+              key={tag}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-indigo-50 text-indigo-700 border border-indigo-200"
+            >
+              {tag}
+              <button type="button" onClick={() => removeTag(tag)} className="text-indigo-400 hover:text-indigo-600">
+                <X size={12} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 const defaultForm: ProjectFormData = {
@@ -120,37 +257,7 @@ export function ProjectForm({
     }
   }
 
-  const OptionGroup = ({
-    label,
-    options,
-    value,
-    field,
-  }: {
-    label: string
-    options: string[]
-    value: string
-    field: keyof ProjectFormData
-  }) => (
-    <div>
-      <label className="block text-sm font-medium mb-1.5">{label}</label>
-      <div className="flex flex-wrap gap-2">
-        {options.map(opt => (
-          <button
-            key={opt}
-            type="button"
-            onClick={() => updateField(field, opt)}
-            className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-              value === opt
-                ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                : 'border-gray-200 text-gray-600 hover:border-indigo-300 hover:text-indigo-600'
-            }`}
-          >
-            {opt}
-          </button>
-        ))}
-      </div>
-    </div>
-  )
+  const isValidDuration = (v: number) => v >= 15 && v <= 300 && Number.isInteger(v)
 
   return (
     <form onSubmit={handleSubmit} className="max-w-2xl mx-auto space-y-6">
@@ -188,7 +295,13 @@ export function ProjectForm({
             <p className="text-xs text-gray-400 mt-0.5">{form.project_name.length}/50</p>
           </div>
 
-          <OptionGroup label="故事类型 *" options={STORY_TYPES} value={form.story_type} field="story_type" />
+          <MultiTagGroup
+            label="故事类型（可多选） *"
+            subtitle="可选择多个类型，也可以添加自定义类型"
+            options={STORY_TYPES}
+            value={form.story_type}
+            onChange={v => updateField('story_type', v)}
+          />
 
           <div>
             <label className="block text-sm font-medium mb-1">
@@ -238,13 +351,12 @@ export function ProjectForm({
 
           <div>
             <label className="block text-sm font-medium mb-1">
-              核心冲突 <span className="text-red-500">*</span>
+              核心冲突 / 情绪张力 <span className="text-xs text-gray-400 ml-1">选填</span>
             </label>
             <Input
-              required
               value={form.core_conflict}
               onChange={e => updateField('core_conflict', e.target.value)}
-              placeholder="例如：爱情与复仇的对立"
+              placeholder="如果暂时不确定，可以留空，系统会根据故事梗概自动提炼。"
               maxLength={300}
             />
             <p className="text-xs text-gray-400 mt-0.5">{form.core_conflict.length}/300</p>
@@ -288,8 +400,34 @@ export function ProjectForm({
           <CardTitle>风格与平台</CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
-          <OptionGroup label="期望画风 *" options={ART_STYLES} value={form.art_style} field="art_style" />
-          <OptionGroup label="目标平台 *" options={PLATFORMS} value={form.target_platform} field="target_platform" />
+          <MultiTagGroup
+            label="期望画风（可多选） *"
+            subtitle="可组合多个视觉风格，例如：韩漫 + 电影感 + 都市雨夜"
+            options={ART_STYLES}
+            value={form.art_style}
+            onChange={v => updateField('art_style', v)}
+          />
+
+          {/* 目标平台：保持单选（通常只看一个平台） */}
+          <div>
+            <label className="block text-sm font-medium mb-1.5">目标平台 *</label>
+            <div className="flex flex-wrap gap-2">
+              {PLATFORMS.map(p => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => updateField('target_platform', p)}
+                  className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                    form.target_platform === p
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                      : 'border-gray-200 text-gray-600 hover:border-indigo-300 hover:text-indigo-600'
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div>
             <label className="block text-sm font-medium mb-1.5">画面比例 *</label>
@@ -323,9 +461,12 @@ export function ProjectForm({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">单集时长（秒）*</label>
-              <div className="flex gap-2">
-                {DURATIONS.map(d => (
+              <label className="block text-sm font-medium mb-1">
+                单集时长（秒） *
+                <span className="text-xs text-gray-400 ml-1">15-300</span>
+              </label>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {DURATION_QUICK.map(d => (
                   <button
                     key={d}
                     type="button"
@@ -340,6 +481,22 @@ export function ProjectForm({
                   </button>
                 ))}
               </div>
+              <Input
+                type="number"
+                min={15}
+                max={300}
+                step={1}
+                value={form.episode_duration}
+                onChange={e => {
+                  const v = parseInt(e.target.value)
+                  if (!isNaN(v)) updateField('episode_duration', v)
+                  else if (e.target.value === '') updateField('episode_duration', 30)
+                }}
+                placeholder="自定义时长（15-300）"
+              />
+              {!isValidDuration(form.episode_duration) && (
+                <p className="text-xs text-red-500 mt-0.5">时长需在 15-300 秒之间，且为整数</p>
+              )}
             </div>
           </div>
         </CardContent>

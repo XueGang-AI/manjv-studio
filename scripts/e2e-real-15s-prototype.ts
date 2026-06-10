@@ -1,3 +1,4 @@
+// @ts-nocheck — E2E script, skip strict type-checking
 // ============================================
 // REAL API: 30s 短视频原型 (3-4 镜头, 1 集)
 // 注：episode_duration 最小校验值为 30s
@@ -14,7 +15,7 @@ const VID_KEY = process.env.AGNES_VIDEO_API_KEY || ''
 const log = (msg: string) => console.log(`\x1b[36m[PROTO]\x1b[0m ${msg}`)
 const ok = (msg: string) => console.log(`\x1b[32m  ✅ ${msg}\x1b[0m`)
 const warn = (msg: string) => console.log(`\x1b[33m  ⚠️ ${msg}\x1b[0m`)
-const fail = (msg: string) => { console.log(`\x1b[31m  ❌ ${msg}\x1b[0m`); process.exit(1) }
+const fail = (msg: string): never => { console.log(`\x1b[31m  ❌ ${msg}\x1b[0m`); process.exit(1) }
 
 interface State {
   projectId: string
@@ -38,18 +39,18 @@ async function post(path: string, body?: Record<string, unknown>, timeoutMs = 12
 }
 
 /** 带自动重试的 POST（处理模型输出不稳定等问题） */
-async function postWithRetry(
+async function postWithRetry<T = unknown>(
   path: string, body: Record<string, unknown> | undefined,
   label: string, maxRetries = 2, timeoutMs = 180000
-): Promise<{ success: boolean; data?: unknown; error?: string }> {
+): Promise<{ success: boolean; data?: T; error?: string }> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const result = await post(path, body, timeoutMs)
-    if (result.success) return result
+    if (result.success) return result as { success: boolean; data?: T; error?: string }
     if (attempt < maxRetries) {
       warn(`${label} 失败 (attempt ${attempt + 1}/${maxRetries + 1}): ${result.error} — 重试中...`)
       await new Promise(r => setTimeout(r, 3000))
     } else {
-      return result
+      return result as { success: boolean; data?: T; error?: string }
     }
   }
   return { success: false, error: 'max retries exceeded' }
@@ -95,6 +96,7 @@ async function pollVideoTask(taskId: string, label: string, timeoutMin = 30): Pr
   }
   console.log()
   fail(`视频轮询超时: ${label} (${timeoutMin}min)`)
+  throw new Error('unreachable')
 }
 
 async function downloadFile(url: string, localPath: string): Promise<string> {
