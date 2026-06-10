@@ -109,9 +109,19 @@ video_params:    1280×768, h264+aac, 5.04s, 24fps, 1.3MB
 |------|------|---------|------|------|----------|-----------|----------|------|
 | A | t2v | task_gM9mkgkSnpo3vxpLkmJ93SPKOhWsJIGL | ✅ | ✅ | ~11min | ✅ GCS URL | 1280×768, h264+aac, 5.04s, 1.8MB | 纯文生视频 |
 | B | i2v-url | task_fEEbLKIiCGOQApIAmjglfuQ0WvsBMsBh | ✅ | ✅ | ~11min | ✅ GCS URL | 1280×768, h264+aac, 5.04s, 983KB | 传图片URL |
-| C | i2v-b64 | task_6KNBiUpMeG9LAxXEL8EpMtYD1FSuiP9G | ✅ | ⏳ 排队中 | TBD | TBD | TBD | 图片URL→base64→data: URI |
+| C | i2v-b64 | task_6KNBiUpMeG9LAxXEL8EpMtYD1FSuiP9G | ✅ | ❌ 编码错误 | ~15min | ❌ base64 padding 错误 | N/A | data: URI 格式被接受，base64 padding 需修正 |
 
-**结论**: 三种输入格式（纯文本、图片 URL、图片 data: URI）的视频任务全部创建成功。A 和 B 约 11 分钟完成。C（base64 data URI）仍在排队，预计类似耗时。视频 URL 均位于响应的 `remixed_from_video_id` 字段。
+**结论**: 三种输入格式（纯文本、图片 URL、图片 data: URI）的视频任务全部创建成功（HTTP 200）。A 和 B 约 11 分钟完成。C 的 data: URI 格式被 API 接受，但 base64 编码 padding 不匹配导致处理失败（非 API 拒绝，是客户端编码问题，可修复）。视频 URL 均位于响应的 `remixed_from_video_id` 字段。
+
+### Case C base64 错误详情
+
+```
+error: "Invalid base64-encoded string: number of data characters (1880601)
+        cannot be 1 more than a multiple of 4"
+原因:  从 CDN 下载图片后转 base64 时，padding 缺少 1 个字符
+结论:  API 接受 data: URI 格式，需要确保 base64 长度是 4 的倍数
+修复:  下载后检查 buffer 完整性，base64 编码后补齐 `=` padding
+```
 
 ### 请求格式（创建）
 
