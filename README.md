@@ -154,10 +154,7 @@ manjv-studio/
 
 ## Agent 规则文件
 
-| 文件 | 用途 |
-|------|------|
-| [CLAUDE.md](CLAUDE.md) | Claude Code 项目上下文（技术栈、架构原则、快速命令、当前状态、开发注意事项） |
-| [AGENTS.md](AGENTS.md) | 通用 Agent 开发规则（Next.js 16 breaking changes 提示） |
+[CLAUDE.md](CLAUDE.md) — Claude Code 项目上下文（技术栈、架构原则、快速命令、当前状态、开发注意事项）
 
 ## npm 缓存注意
 
