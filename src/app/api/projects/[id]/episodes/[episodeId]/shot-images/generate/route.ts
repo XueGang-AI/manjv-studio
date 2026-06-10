@@ -22,12 +22,24 @@ export async function POST(
       return NextResponse.json({ success: false, error: '请先确认分镜脚本' }, { status: 400 })
     }
 
-    // 获取所有已确认角色的标准图（用于 reference）
+    // 获取所有已确认 + 已选择的标准角色图（用于 reference）
     const charImages = await prisma.characterImage.findMany({
-      where: { projectId, isConfirmed: true },
+      where: { projectId, isConfirmed: true, isSelected: true },
       include: { character: { select: { id: true, name: true } } },
     })
-    const refMap = new Map(charImages.map(ci => [ci.characterId, ci]))
+
+    // 构建角色名称匹配索引：characterName → { characterId, imageUrl }
+    const refByName = new Map<string, { characterId: string; characterName: string; imageUrl: string }>()
+    for (const ci of charImages) {
+      const name = ci.character.name?.trim()
+      if (name && ci.imageUrl) {
+        refByName.set(name, {
+          characterId: ci.characterId,
+          characterName: name,
+          imageUrl: ci.imageUrl,
+        })
+      }
+    }
 
     // 获取所有镜头及其 image_prompt
     const shots = await prisma.shot.findMany({
@@ -40,12 +52,20 @@ export async function POST(
       return NextResponse.json({ success: false, error: '没有镜头数据' }, { status: 400 })
     }
 
+    // 校验：至少有一个角色的标准图
+    if (refByName.size === 0) {
+      return NextResponse.json({
+        success: false,
+        error: '请先为角色生成标准图（选择并确认至少一张角色图）',
+      }, { status: 400 })
+    }
+
     // 更新状态
     await prisma.project.update({ where: { id: projectId }, data: { status: 'SHOT_IMAGE_GENERATING' } })
     const task = await prisma.generationTask.create({
       data: { projectId, episodeId, taskType: 'GENERATE_SHOT_IMAGES',
         modelName: process.env.AGNES_IMAGE_MODEL || 'Agnes-Image-2.0-Flash',
-        status: 'running', input: { shot_count: shots.length } },
+        status: 'running', input: { shot_count: shots.length, reference_characters: [...refByName.keys()] } },
     })
 
     try {
@@ -55,6 +75,50 @@ export async function POST(
       const numOutputs = 4
       const baseNegative = 'ugly, deformed, bad anatomy, bad proportions, low quality, blurry, pixelated, distorted face, extra fingers, missing fingers, asymmetric eyes, watermark, text, logo'
 
+      /**
+       * 根据 shot.characters 匹配标准角色图作为 reference_images。
+       * 使用双向子串匹配——处理 AI 可能输出 "顾辰（背影）" 而非 "顾辰" 的情况。
+       */
+      function matchReferences(shotCharsRaw: unknown): Array<{ character_id: string; character_name: string; image_url: string }> {
+        const shotChars: string[] = []
+        if (Array.isArray(shotCharsRaw)) {
+          for (const item of shotCharsRaw) {
+            if (typeof item === 'string') shotChars.push(item.trim())
+            else if (item && typeof item === 'object') {
+              // AI 可能输出 { name: "林晓" } 格式
+              const name = (item as Record<string, unknown>).name
+              if (typeof name === 'string') shotChars.push(name.trim())
+            }
+          }
+        }
+
+        if (shotChars.length === 0) return []
+
+        const matched: Array<{ character_id: string; character_name: string; image_url: string }> = []
+        const usedNames = new Set<string>()
+
+        for (const sc of shotChars) {
+          // 精确匹配
+          if (refByName.has(sc) && !usedNames.has(sc)) {
+            const r = refByName.get(sc)!
+            matched.push(r)
+            usedNames.add(sc)
+            continue
+          }
+          // 子串双向匹配： "顾辰（背影）" ↔ "顾辰"
+          for (const [charName, r] of refByName) {
+            if (usedNames.has(charName)) continue
+            if (sc.includes(charName) || charName.includes(sc)) {
+              matched.push(r)
+              usedNames.add(charName)
+              break
+            }
+          }
+        }
+
+        return matched
+      }
+
       const allResults: Array<{ shotId: string; shotNo: number; images: unknown[] }> = []
 
       for (const shot of shots) {
@@ -62,16 +126,12 @@ export async function POST(
         const prompt = imgPrompt?.enPrompt || imgPrompt?.zhPrompt || shot.action || ''
         const negative = (imgPrompt?.negativePrompt || baseNegative)
 
-        // 查找该镜头角色对应的标准图
-        const shotChars = (shot.characters as string[]) || []
-        const references: Array<{ character_id: string; character_name: string; image_url: string }> = []
-        for (const [charId, ci] of refMap) {
-          if (shotChars.includes(ci.character.name || '')) {
-            references.push({
-              character_id: charId, character_name: ci.character.name || '',
-              image_url: ci.imageUrl || '',
-            })
-          }
+        // 匹配角色标准图
+        const references = matchReferences(shot.characters)
+
+        // 如果镜头有角色但未匹配到任何标准图，记录警告并继续（不阻止生成）
+        if (shot.characters && Array.isArray(shot.characters) && (shot.characters as unknown[]).length > 0 && references.length === 0) {
+          console.warn(`[shot-images] Shot #${shot.shotNo}: characters=${JSON.stringify(shot.characters)} matched 0 reference images (available: ${[...refByName.keys()].join(', ')})`)
         }
 
         const genReq: ImageGenerationRequest = {

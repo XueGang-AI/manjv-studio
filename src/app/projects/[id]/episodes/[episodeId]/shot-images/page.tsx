@@ -220,7 +220,9 @@ export default function ShotImagesPage() {
                     <div className="p-2 space-y-1.5">
                       <div className="text-xs text-gray-400 truncate">seed: {(img.seed || '-').substring(0, 12)}</div>
                       {img.referenceImages && (img.referenceImages as unknown[]).length > 0 && (
-                        <div className="text-xs text-gray-300">ref: {(img.referenceImages as Array<{character_name: string}>).map(r => r.character_name).join(', ')}</div>
+                        <div className="text-xs text-gray-500 mt-0.5">
+                          🎯 参考角色: {(img.referenceImages as Array<{character_name: string}>).map(r => r.character_name).join(', ')}
+                        </div>
                       )}
                       {!isConfirmed && (
                         <div className="flex gap-1">
