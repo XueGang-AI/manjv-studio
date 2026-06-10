@@ -62,6 +62,10 @@ export interface VideoGenerationRequest {
   aspectRatio?: '9:16' | '16:9' | '1:1'
   motionStrength?: 'low' | 'medium' | 'high'
   fps?: number
+  /** TTS 语音文本，用于自动生成配音（如角色对白） */
+  voiceText?: string
+  /** 是否自动生成音频 */
+  generateAudio?: boolean
   params?: Record<string, unknown>
 }
 

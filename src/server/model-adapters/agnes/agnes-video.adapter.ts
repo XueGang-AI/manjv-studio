@@ -80,6 +80,12 @@ export class AgnesVideoAdapter extends BaseVideoAdapter {
     if (request.motionStrength) {
       createBody.motion_strength = request.motionStrength
     }
+    if (request.voiceText) {
+      createBody.voice_text = request.voiceText
+    }
+    if (request.generateAudio) {
+      createBody.generate_audio = request.generateAudio
+    }
 
     const res = await fetch(`${this.baseUrl}/videos`, {
       method: 'POST',

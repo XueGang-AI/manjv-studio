@@ -90,6 +90,8 @@ export async function POST(
           aspectRatio,
           motionStrength: (vidPrompt?.motionStrength as 'low' | 'medium' | 'high') || 'medium',
           fps: 24,
+          voiceText: (shot.dialogue as string) || undefined,
+          generateAudio: !!(shot.dialogue),
         }
 
         // 真实模式：创建异步任务 + 保存 remote 状态

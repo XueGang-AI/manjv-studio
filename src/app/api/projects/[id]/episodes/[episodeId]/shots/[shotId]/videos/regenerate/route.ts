@@ -27,6 +27,8 @@ export async function POST(
       aspectRatio: (project?.aspectRatio || '9:16') as '9:16',
       motionStrength: (vidPrompt?.motionStrength as 'low'|'medium'|'high') || 'medium',
       fps: 24,
+      voiceText: (shot.dialogue as string) || undefined,
+      generateAudio: !!(shot.dialogue),
     }
 
     const response = await adapterFactory.getVideoAdapter().generate(genReq)
