@@ -32,9 +32,33 @@
 - 25 个 Prompt 模板
 - 23 个素材库 JSON
 - 18 个单元测试
-- 20 步 E2E 测试流程
+- 20 步 E2E Mock 测试流程
+- 10 步真实 API 原型测试流程
 
 ## Mock 模式 vs 真实 API
 
-- Mock 模式：✅ 完整跑通，生成可播放 MP4
-- 真实 API：⏳ 需要 API base URL 配置
+| 模式 | 文本模型 | 图片模型 | 视频模型 | 全流程 |
+|------|----------|----------|----------|--------|
+| **Mock** | ✅ 可跑通 | ✅ 可跑通 | ✅ 可跑通 | ✅ `npm run test:e2e` 20/20 |
+| **真实 API** | ✅ 已接通 | ✅ 已接通 | ✅ 已接通并验证 | ✅ 30s 原型 MP4 已生成 |
+
+### 真实 API 验证详情
+
+- **文本** (Agnes-2.0-Flash): 故事方案、角色设定、分镜脚本均真实生成成功
+- **图片** (Agnes-Image-2.0-Flash): 角色图 (12张) + 分镜图 (24张) 均真实生成成功
+- **视频** (Agnes-Video-V2.0): task 创建→轮询→completed→下载→FFmpeg 合成全部验证通过
+- **最终产物**: 1080×1920, H.264+AAC, 30.26s, 25fps, 5.96MB MP4
+- **已知限制**: 视频队列可能延迟 10-30 分钟；输出分辨率 1280×768 需 FFmpeg 后处理至 1080×1920
+
+## 验收脚本
+
+```bash
+npm test                           # 18 unit tests
+npm run test:e2e                   # Mock 全流程 20 步
+npm run test:e2e:real              # 真实 API 最小闭环
+npx tsx scripts/e2e-real-15s-prototype.ts  # 30s 短视频原型
+npm run probe:agnes:text           # 文本探针
+npm run probe:agnes:image          # 图片探针
+npm run probe:agnes:video          # 视频探针
+npm run probe:agnes:video:poll     # 轮询已有视频 task
+```

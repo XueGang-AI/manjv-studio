@@ -129,6 +129,14 @@ Base URL: `http://localhost:3000/api`
 | POST | `/api/projects/:id/episodes/:eId/qc/run` | 运行剧集 QC |
 | GET | `/api/projects/:id/episodes/:eId/qc/reports` | 剧集报告 |
 
+## 视频任务检查（异步轮询）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/projects/:id/episodes/:eId/shot-videos/:vId/check-task` | 手动检查远端视频任务状态 |
+
+调用后自动轮询 Agnes Video API，更新 `remote_status`/`remote_progress`/`videoUrl` 字段。
+
 ## 返回格式
 
 成功: `{"success":true,"data":{}}`

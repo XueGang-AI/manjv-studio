@@ -11,27 +11,38 @@
 | `NODE_ENV` | 运行环境 | `development` |
 | `NEXT_PUBLIC_APP_URL` | 前端地址 | `http://localhost:3000` |
 
-## Mock 模式（当前默认）
+## Mock 模式
 
-| 变量 | 说明 |
-|------|------|
-| `USE_MOCK_MODEL` | 设为 `true` 使用 Mock 适配器 |
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `USE_MOCK_MODEL` | `true`=Mock 适配器, `false`=真实 Agnes API | `true` |
 
-Mock 模式下不需要任何 Agnes API 配置即可完整跑通流程。
+Mock 模式下不需要任何 Agnes API 配置即可完整跑通流程（`npm run test:e2e`）。
 
-## Agnes 模型配置（待接入）
+## Agnes 模型配置（真实 API 模式）
 
-| 变量 | 说明 |
-|------|------|
-| `AGNES_TEXT_API_BASE_URL` | 文本模型 API 地址 |
-| `AGNES_TEXT_API_KEY` | 文本模型 API Key |
-| `AGNES_TEXT_MODEL` | 模型名称，默认 `Agnes-2.0-Flash` |
-| `AGNES_IMAGE_API_BASE_URL` | 图片模型 API 地址 |
-| `AGNES_IMAGE_API_KEY` | 图片模型 API Key |
-| `AGNES_IMAGE_MODEL` | 模型名称，默认 `Agnes-Image-2.0-Flash` |
-| `AGNES_VIDEO_API_BASE_URL` | 视频模型 API 地址 |
-| `AGNES_VIDEO_API_KEY` | 视频模型 API Key |
-| `AGNES_VIDEO_MODEL` | 模型名称，默认 `Agnes-Video-2.0` |
+当 `USE_MOCK_MODEL=false` 时需配置：
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `AGNES_TEXT_API_BASE_URL` | 文本模型 API 地址 | `https://apihub.agnes-ai.com/v1` |
+| `AGNES_TEXT_API_KEY` | 文本模型 API Key | （必填） |
+| `AGNES_TEXT_MODEL` | 模型名称 | `agnes-2.0-flash` |
+| `AGNES_IMAGE_API_BASE_URL` | 图片模型 API 地址 | `https://apihub.agnes-ai.com/v1` |
+| `AGNES_IMAGE_API_KEY` | 图片模型 API Key | （可与文本共用） |
+| `AGNES_IMAGE_MODEL` | 模型名称 | `agnes-image-2.0-flash` |
+| `AGNES_VIDEO_API_BASE_URL` | 视频模型 API 地址 | `https://apihub.agnes-ai.com/v1` |
+| `AGNES_VIDEO_API_KEY` | 视频模型 API Key | （可与文本共用） |
+| `AGNES_VIDEO_MODEL` | 模型名称 | `agnes-video-v2.0` |
+
+### 已验证的 API 配置
+
+- 文本/图片/视频共用一个 API Key
+- Base URL: `https://apihub.agnes-ai.com/v1`
+- 文本接口: `POST /v1/chat/completions`（OpenAI 兼容格式）
+- 图片接口: `POST /v1/images/generations`
+- 视频接口: `POST /v1/videos` → `GET /v1/videos/{task_id}`（异步轮询）
+- 视频 URL 位于响应的 `remixed_from_video_id` 字段
 
 ## 存储与工具
 
