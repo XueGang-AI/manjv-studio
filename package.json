@@ -24,6 +24,7 @@
     "probe:agnes:video:t2v": "npx tsx scripts/probes/probe-agnes-video-t2v.ts",
     "probe:agnes:video:i2v-url": "npx tsx scripts/probes/probe-agnes-video-i2v-url.ts",
     "probe:agnes:video:i2v-b64": "npx tsx scripts/probes/probe-agnes-video-i2v-b64.ts",
+    "probe:agnes:video:audio": "npx tsx scripts/probes/probe-agnes-video-audio-lipsync.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
