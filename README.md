@@ -160,6 +160,9 @@ manjv-studio/
 | [docs/PHASE_1_13_SUMMARY.md](docs/PHASE_1_13_SUMMARY.md) | 开发阶段总结 |
 | [docs/REAL_AGNES_API_PROBE_REPORT.md](docs/REAL_AGNES_API_PROBE_REPORT.md) | 真实 API 探针报告 |
 | [docs/REAL_AGNES_API_TODO.md](docs/REAL_AGNES_API_TODO.md) | API 接入待办 |
+| [docs/REAL_SAMPLE_ACCEPTANCE_REPORT.md](docs/REAL_SAMPLE_ACCEPTANCE_REPORT.md) | 30s 原型验收报告 |
+| [docs/AGNES_VIDEO_AUDIO_LIPSYNC_PROBE_REPORT.md](docs/AGNES_VIDEO_AUDIO_LIPSYNC_PROBE_REPORT.md) | 视频音频/口型探针 |
+| [docs/AGNES_VIDEO_AUDIO_LIPSYNC_COMPLETED_REPORT.md](docs/AGNES_VIDEO_AUDIO_LIPSYNC_COMPLETED_REPORT.md) | 视频音频 completed 验证 |
 
 ## Agent 规则文件
 
