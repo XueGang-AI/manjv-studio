@@ -152,6 +152,13 @@ manjv-studio/
 | [docs/REAL_AGNES_API_PROBE_REPORT.md](docs/REAL_AGNES_API_PROBE_REPORT.md) | 真实 API 探针报告 |
 | [docs/REAL_AGNES_API_TODO.md](docs/REAL_AGNES_API_TODO.md) | API 接入待办 |
 
+## Agent 规则文件
+
+| 文件 | 用途 |
+|------|------|
+| [CLAUDE.md](CLAUDE.md) | Claude Code 项目上下文（技术栈、架构原则、快速命令、当前状态、开发注意事项） |
+| [AGENTS.md](AGENTS.md) | 通用 Agent 开发规则（Next.js 16 breaking changes 提示） |
+
 ## npm 缓存注意
 
 本地 npm 缓存有权限问题，请使用 `--cache ~/.npm-cache-new` 标志。

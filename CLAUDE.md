@@ -57,3 +57,26 @@ npm run probe:agnes:video:i2v-b64  # Case C: 图生视频(b64)
   - ⚠️ video_url 在 `remixed_from_video_id` 字段（非 `video_url`）
   - ✅ Adapter 已重构为异步模式，支持任务恢复
 - 数据库: shot_videos 新增 remote_task_id/remote_status/remote_progress/remote_response_json/last_polled_at 字段
+
+## 开发注意事项
+
+### Next.js 16
+
+本项目使用 **Next.js 16**，存在与旧版本不同的 breaking changes。API 约定、文件结构和惯例可能与训练数据不同。编写代码前参考 `node_modules/next/dist/docs/` 中的指南，注意废弃声明。
+
+关键差异:
+- App Router 为默认路由模式
+- `params` 在路由处理器中为 `Promise` 类型（需 `await params`）
+- Turbopack 为默认开发构建工具
+- Server Components 为默认组件模式
+
+### Prisma 7
+
+- `datasource.url` 移至 `prisma.config.ts`
+- PrismaClient 构造函数需传入 `adapter` 参数（如 `@prisma/adapter-pg`）
+
+### Agnes Video API
+
+- 视频 URL 位于响应的 `remixed_from_video_id` 字段（非 `video_url` 或 `url`）
+- 推荐异步模式: `createVideoTask()` → 保存 `task_id` → `pollVideoTask()` → `downloadVideo()`
+- 队列延迟: 非高峰期 ~2min，高峰期可能更久
