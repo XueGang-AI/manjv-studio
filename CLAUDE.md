@@ -28,11 +28,19 @@ AI 驱动的漫剧创作平台。核心流程（全部已实现）:
 ## 快速命令
 
 ```bash
-npm run dev          # 启动 (需要 DATABASE_URL)
-npm test             # 18 unit tests
-npm run test:e2e     # Mock 全流程 (20 steps → MP4)
-npm run db:push      # 推送 Prisma schema
-npm run db:seed      # 种子数据
+npm run dev                     # 启动 (需要 DATABASE_URL)
+npm test                        # 18 unit tests
+npm run test:e2e                # Mock 全流程 (20 steps → MP4)
+npm run test:e2e:real           # 真实 API 最小闭环
+npm run db:push                 # 推送 Prisma schema
+npm run db:seed                 # 种子数据
+npm run probe:agnes:text        # 文本探针
+npm run probe:agnes:image       # 图片探针
+npm run probe:agnes:video       # 视频探针
+npm run probe:agnes:video:poll  # 轮询已有视频 task
+npm run probe:agnes:video:t2v   # Case A: 文生视频
+npm run probe:agnes:video:i2v-url  # Case B: 图生视频(URL)
+npm run probe:agnes:video:i2v-b64  # Case C: 图生视频(b64)
 ```
 
 ## npm 缓存
@@ -42,4 +50,10 @@ npm run db:seed      # 种子数据
 ## 当前状态
 
 - Mock 模式: ✅ 全流程可跑通 (`npm run test:e2e`)
-- 真实 API: 文本 ✅ 图片 ✅ 视频 ⚠️ (队列耗时 >10min)
+- 真实文本 API: ✅ 已接通（故事/角色/分镜均通过）
+- 真实图片 API: ✅ 已接通（角色图+分镜图均生成）
+- 真实视频 API: ✅ 已接通并验证完成（task 创建→轮询→completed→下载→ffprobe）
+  - ⚠️ 队列延迟较大，非高峰期 ~2min 处理，高峰期可能数小时排队
+  - ⚠️ video_url 在 `remixed_from_video_id` 字段（非 `video_url`）
+  - ✅ Adapter 已重构为异步模式，支持任务恢复
+- 数据库: shot_videos 新增 remote_task_id/remote_status/remote_progress/remote_response_json/last_polled_at 字段

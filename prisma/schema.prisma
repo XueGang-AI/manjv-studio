@@ -306,7 +306,13 @@ model ShotVideo {
   params          Json?    @default("{}")
   isSelected      Boolean  @default(false) @map("is_selected")
   isConfirmed     Boolean  @default(false) @map("is_confirmed")
-  createdAt       DateTime @default(now()) @map("created_at")
+  // 远端异步任务跟踪（Agnes Video 等）
+  remoteTaskId         String?   @map("remote_task_id")
+  remoteStatus         String?   @map("remote_status")
+  remoteProgress       Int?      @map("remote_progress")
+  remoteResponseJson   Json?     @map("remote_response_json")
+  lastPolledAt         DateTime? @map("last_polled_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
 
   shot        Shot        @relation(fields: [shotId], references: [id])
   project     Project     @relation(fields: [projectId], references: [id])

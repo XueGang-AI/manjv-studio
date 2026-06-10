@@ -40,15 +40,18 @@ export async function POST(
 
     await prisma.project.update({ where: { id: projectId }, data: { status: 'SHOT_VIDEO_GENERATING' } })
     const task = await prisma.generationTask.create({
-      data: { projectId, episodeId, taskType: 'GENERATE_SHOT_VIDEOS',
+      data: {
+        projectId, episodeId, taskType: 'GENERATE_SHOT_VIDEOS',
         modelName: process.env.AGNES_VIDEO_MODEL || 'Agnes-Video-2.0', status: 'running',
-        input: { shot_count: shots.length } },
+        input: { shot_count: shots.length },
+      },
     })
 
     try {
       const videoAdapter = adapterFactory.getVideoAdapter()
       const aspectRatio = (project.aspectRatio || '9:16') as '9:16'
       const allResults: Array<{ shotId: string; shotNo: number; videos: unknown[] }> = []
+      const isMock = process.env.USE_MOCK_MODEL === 'true'
 
       for (const shot of shots) {
         const vidPrompt = shot.videoPrompts[0]
@@ -66,40 +69,101 @@ export async function POST(
           fps: 24,
         }
 
-        const response = await videoAdapter.generate(genReq)
+        // 真实模式：创建异步任务 + 保存 remote 状态
+        if (!isMock) {
+          const createResult = await videoAdapter.createVideoTask(genReq)
 
-        const created = await Promise.all(response.videos.map(v =>
-          prisma.shotVideo.create({
-            data: {
-              shotId: shot.id, projectId,
-              inputImageUrl: confirmedImage?.imageUrl || '',
-              videoUrl: v.url, prompt,
-              seed: String(v.params?.seed || ''),
-              modelName: process.env.AGNES_VIDEO_MODEL || 'Agnes-Video-2.0',
-              referenceImages: confirmedImage ? [{ image_url: confirmedImage.imageUrl }] : [],
-              duration: v.duration || duration,
-              params: { ...v.params, aspect_ratio: aspectRatio },
-              isSelected: false, isConfirmed: false,
-            },
-          })
-        ))
+          const created = await Promise.all([
+            // 第一候选：保存远端任务信息，等待轮询
+            prisma.shotVideo.create({
+              data: {
+                shotId: shot.id, projectId,
+                inputImageUrl: confirmedImage?.imageUrl || '',
+                videoUrl: '', // 尚未完成
+                prompt,
+                seed: '',
+                modelName: process.env.AGNES_VIDEO_MODEL || 'Agnes-Video-2.0',
+                referenceImages: confirmedImage ? [{ image_url: confirmedImage.imageUrl }] : [],
+                duration,
+                params: { aspect_ratio: aspectRatio, generation_method: 'async_task' },
+                remoteTaskId: createResult.taskId,
+                remoteStatus: createResult.status,
+                remoteResponseJson: createResult.createResponse,
+                lastPolledAt: new Date(),
+                isSelected: false, isConfirmed: false,
+              },
+            }),
+            // 第二候选：同一个 task_id（Agnes Video 每次只返回一个 task）
+            prisma.shotVideo.create({
+              data: {
+                shotId: shot.id, projectId,
+                inputImageUrl: confirmedImage?.imageUrl || '',
+                videoUrl: '',
+                prompt,
+                seed: '',
+                modelName: process.env.AGNES_VIDEO_MODEL || 'Agnes-Video-2.0',
+                referenceImages: confirmedImage ? [{ image_url: confirmedImage.imageUrl }] : [],
+                duration,
+                params: { aspect_ratio: aspectRatio, generation_method: 'async_task', is_duplicate: true },
+                remoteTaskId: createResult.taskId,
+                remoteStatus: createResult.status,
+                remoteResponseJson: createResult.createResponse,
+                lastPolledAt: new Date(),
+                isSelected: false, isConfirmed: false,
+              },
+            }),
+          ])
 
-        allResults.push({ shotId: shot.id, shotNo: shot.shotNo, videos: created })
+          allResults.push({ shotId: shot.id, shotNo: shot.shotNo, videos: created })
+        } else {
+          // Mock 模式：同步生成
+          const response = await videoAdapter.generate(genReq)
+
+          const created = await Promise.all(response.videos.map(v =>
+            prisma.shotVideo.create({
+              data: {
+                shotId: shot.id, projectId,
+                inputImageUrl: confirmedImage?.imageUrl || '',
+                videoUrl: v.url, prompt,
+                seed: String(v.params?.seed || ''),
+                modelName: process.env.AGNES_VIDEO_MODEL || 'Agnes-Video-2.0',
+                referenceImages: confirmedImage ? [{ image_url: confirmedImage.imageUrl }] : [],
+                duration: v.duration || duration,
+                params: { ...v.params, aspect_ratio: aspectRatio },
+                isSelected: false, isConfirmed: false,
+              },
+            })
+          ))
+
+          allResults.push({ shotId: shot.id, shotNo: shot.shotNo, videos: created })
+        }
       }
 
-      await prisma.project.update({ where: { id: projectId }, data: { status: 'SHOT_VIDEO_PENDING_CONFIRM' } })
+      // 项目状态更新
+      const newStatus = isMock ? 'SHOT_VIDEO_PENDING_CONFIRM' : 'SHOT_VIDEO_GENERATING'
+      await prisma.project.update({ where: { id: projectId }, data: { status: newStatus } })
+
       const { versionService: vs } = await import('@/server/services/version.service')
       await vs.createVersion({
         projectId, entityType: 'SHOT_VIDEO_SET', entityId: episodeId,
-        snapshot: { total_videos: allResults.reduce((s,r)=>s+r.videos.length,0), project_status: 'SHOT_VIDEO_PENDING_CONFIRM' },
-        changeType: 'GENERATE', description: `生成 ${shots.length} 个镜头视频`, sourceTaskId: task.id,
-      })
-      await prisma.generationTask.update({
-        where: { id: task.id },
-        data: { status: 'success', output: { total_videos: allResults.reduce((s, r) => s + r.videos.length, 0) } },
+        snapshot: { total_videos: allResults.reduce((s, r) => s + r.videos.length, 0), project_status: newStatus, is_async: !isMock },
+        changeType: 'GENERATE', description: `生成 ${shots.length} 个镜头视频${isMock ? '' : '(异步任务)'}`, sourceTaskId: task.id,
       })
 
-      return NextResponse.json({ success: true, data: { shots: allResults, totalVideos: allResults.reduce((s, r) => s + r.videos.length, 0) } })
+      await prisma.generationTask.update({
+        where: { id: task.id },
+        data: { status: 'success', output: { total_videos: allResults.reduce((s, r) => s + r.videos.length, 0), is_async: !isMock } },
+      })
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          shots: allResults,
+          totalVideos: allResults.reduce((s, r) => s + r.videos.length, 0),
+          isAsync: !isMock,
+          message: isMock ? undefined : '视频异步任务已创建，系统将自动轮询状态。您也可以稍后手动检查。',
+        },
+      })
     } catch (genError) {
       const msg = (genError as Error).message
       await prisma.project.update({ where: { id: projectId }, data: { status: 'SHOT_IMAGE_CONFIRMED' } })

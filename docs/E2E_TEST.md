@@ -56,13 +56,13 @@ audio:           aac
 
 ```bash
 # 1. 设置真实模式
-sed -i '' 's/USE_MOCK_MODEL="true"/USE_MOCK_MODEL="false"/' .env
+# 编辑 .env: USE_MOCK_MODEL=false
 
 # 2. 重启服务
 npm run dev
 
 # 3. 运行真实最小闭环
-DATABASE_URL="postgresql://..." npx tsx scripts/e2e-real-minimal.ts
+npm run test:e2e:real
 ```
 
 ### 真实闭环流程
@@ -78,23 +78,40 @@ DATABASE_URL="postgresql://..." npx tsx scripts/e2e-real-minimal.ts
 9. 确认分镜
 10. **真实 Agnes-Image-2.0-Flash** 生成分镜图
 11. 确认分镜图
-12. **真实 Agnes-Video-V2.0** 生成视频 (异步 task)
-13. 轮询直到 completed
+12. **真实 Agnes-Video-V2.0** 创建视频异步任务
+13. 轮询直到 completed（可能需要较长时间）
 14. 下载真实视频到本地
 15. FFmpeg 合成最终 MP4
 16. ffprobe 验证
 
+### 重要说明
+
+- **视频步骤 12-13**: 真实视频生成是异步的，创建任务后可能需要在队列中等待（非高峰期 ~2 分钟，高峰期可能数小时）。任务创建成功后会保存 `remote_task_id`，可稍后继续检查。
+- **继续检查**: 在前端 shot-videos 页面点击"继续检查任务"按钮，或使用探针脚本：`npm run probe:agnes:video:poll -- --task-id <task_id>`
+- **video_url 字段**: Agnes 视频完成响应中，视频 URL 在 `remixed_from_video_id` 字段。
+
 ### 已知限制
 
-- **视频模型**: 创建任务后状态可能长时间 `queued`（10 分钟以上），需更长的等待时间或切换到回调模式
-- **图片模型**: `style` 参数不被支持，已在 Adapter 中移除
+- **视频模型**: 异步任务模式，创建后需轮询。队列可能拥堵。非高峰期处理时间约 2 分钟。
+- **视频分辨率**: 当前输出 1280×768（非严格竖屏 1080×1920），需用 FFmpeg 缩放。
+- **图片模型**: `style`、`size`、`response_format` 参数不被支持，已在 Adapter 中移除或处理。
 
 ## 探针测试
 
 ```bash
-npm run probe:agnes:text     # 文本模型连通性
-npm run probe:agnes:image    # 图片模型连通性
-npm run probe:agnes:video    # 视频模型连通性（创建+轮询）
+npm run probe:agnes:text          # 文本模型连通性
+npm run probe:agnes:image         # 图片模型连通性
+npm run probe:agnes:video         # 视频模型连通性（创建+短轮询）
+npm run probe:agnes:video:poll    # 轮询指定 task（--task-id <id>）
+npm run probe:agnes:video:t2v     # Case A: 纯文生视频
+npm run probe:agnes:video:i2v-url # Case B: 图生视频(URL)
+npm run probe:agnes:video:i2v-b64 # Case C: 图生视频(base64)
+```
+
+poll 脚本参数：
+
+```bash
+npm run probe:agnes:video:poll -- --task-id <id> --timeout-minutes 60 --interval-seconds 10
 ```
 
 ## 前置条件
@@ -113,5 +130,7 @@ npm run probe:agnes:video    # 视频模型连通性（创建+轮询）
 | 文件不存在 | FFmpeg 未安装 | `brew install ffmpeg` |
 | 视频生成失败 | USE_MOCK_MODEL 未设置 | 检查 .env |
 | 图片 API 400 | `style` 参数不支持 | 已修复，Adapter 不再传 style |
-| 视频一直 queued | 队列拥堵 | 等待更长时间或联系 API 提供方 |
+| 图片 API 400 | `response_format` 不支持 | 已修复，从 URL 下载转 base64 |
+| 视频一直 queued | 队列拥堵 | 等待更长时间，或用 poll 脚本后续检查 |
+| 视频 URL 为空 | 字段名不匹配 | 已修复，Adapter 检查 `remixed_from_video_id` |
 | 分镜生成报 400 | 角色图未全部确认 | 需确认每个角色的标准图 |

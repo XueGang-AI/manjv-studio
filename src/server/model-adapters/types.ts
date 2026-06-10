@@ -73,6 +73,39 @@ export interface VideoGenerationResponse {
   }>
 }
 
+// ---- 视频异步任务（新增） ----
+export type RemoteVideoTaskStatus = 'queued' | 'processing' | 'running' | 'completed' | 'succeeded' | 'success' | 'failed' | 'error' | 'timeout' | 'unknown'
+
+export interface VideoTaskCreationResult {
+  taskId: string
+  status: RemoteVideoTaskStatus
+  createResponse: Record<string, unknown>
+}
+
+export interface VideoTaskPollResult {
+  taskId: string
+  status: RemoteVideoTaskStatus
+  progress?: number
+  videoUrl?: string
+  duration?: number
+  error?: string
+  response: Record<string, unknown>
+  polledAt: string // ISO date
+}
+
+export interface VideoTaskWaitResult {
+  taskId: string
+  completed: boolean
+  timedOut: boolean
+  status: RemoteVideoTaskStatus
+  videoUrl?: string
+  duration?: number
+  error?: string
+  lastResponse: Record<string, unknown>
+  pollAttempts: number
+  totalSeconds: number
+}
+
 // ---- 适配器接口 ----
 export interface ITextAdapter {
   generate<T = unknown>(request: TextGenerationRequest): Promise<TextGenerationResponse<T>>
@@ -84,4 +117,19 @@ export interface IImageAdapter {
 
 export interface IVideoAdapter {
   generate(request: VideoGenerationRequest): Promise<VideoGenerationResponse>
+
+  /** 创建视频异步任务（仅创建，不轮询） */
+  createVideoTask(request: VideoGenerationRequest): Promise<VideoTaskCreationResult>
+
+  /** 单次轮询视频任务状态 */
+  pollVideoTask(taskId: string): Promise<VideoTaskPollResult>
+
+  /** 等待视频任务完成（含超时） */
+  waitForVideoCompletion(
+    taskId: string,
+    options?: { timeoutMinutes?: number; intervalSeconds?: number; onPoll?: (result: VideoTaskPollResult) => void }
+  ): Promise<VideoTaskWaitResult>
+
+  /** 下载视频到本地路径 */
+  downloadVideo(videoUrl: string, localPath: string): Promise<string>
 }

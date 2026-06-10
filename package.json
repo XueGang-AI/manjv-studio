@@ -16,6 +16,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "npx tsx scripts/e2e-mock-flow.ts",
+    "test:e2e:real": "npx tsx scripts/e2e-real-minimal.ts",
+    "probe:agnes:text": "npx tsx scripts/probes/probe-agnes-text.ts",
+    "probe:agnes:image": "npx tsx scripts/probes/probe-agnes-image.ts",
+    "probe:agnes:video": "npx tsx scripts/probes/probe-agnes-video.ts",
+    "probe:agnes:video:poll": "npx tsx scripts/probes/poll-agnes-video-task.ts",
+    "probe:agnes:video:t2v": "npx tsx scripts/probes/probe-agnes-video-t2v.ts",
+    "probe:agnes:video:i2v-url": "npx tsx scripts/probes/probe-agnes-video-i2v-url.ts",
+    "probe:agnes:video:i2v-b64": "npx tsx scripts/probes/probe-agnes-video-i2v-b64.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

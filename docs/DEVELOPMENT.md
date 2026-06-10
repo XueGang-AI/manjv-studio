@@ -102,7 +102,22 @@ AgnesVideoAdapter → POST /v1/videos (create) → GET /v1/videos/{task_id} (pol
 ## 测试
 
 ```bash
-npm test             # Unit tests (18/18)
-npm run test:e2e     # Mock E2E (20/20)
-npm run test:e2e:real # Real API minimal (text+image ✅, video ⚠️)
+npm test                        # Unit tests (18/18)
+npm run test:e2e                # Mock E2E (20/20)
+npm run test:e2e:real           # Real API minimal (text+image+video ✅)
+npm run probe:agnes:text        # 文本探针
+npm run probe:agnes:image       # 图片探针
+npm run probe:agnes:video       # 视频探针
+npm run probe:agnes:video:poll  # 轮询已有视频 task
+npm run probe:agnes:video:t2v   # Case A: 文生视频
+npm run probe:agnes:video:i2v-url  # Case B: 图生视频(URL)
+npm run probe:agnes:video:i2v-b64  # Case C: 图生视频(b64)
 ```
+
+## 真实 API 视频关键发现
+
+- **video_url 字段**: Agnes 视频完成响应中，视频 URL 位于 `remixed_from_video_id`（非 `video_url` 或 `url`）
+- **异步模式**: 推荐 `createVideoTask()` → 保存 `task_id` → `pollVideoTask()` 或 `waitForVideoCompletion()` → `downloadVideo()`
+- **队列延迟**: 非高峰期 ~2 分钟处理，高峰期可能数小时排队
+- **任务恢复**: shot_videos 表新增 `remote_task_id`/`remote_status` 字段，支持根据 task_id 继续轮询
+- **前端**: shot-videos 页面新增状态提示和"继续检查任务"/"查看原始响应"按钮

@@ -16,7 +16,18 @@ AI 驱动的漫剧创作平台，支持故事分析、角色设计、分镜生�
 | 模式 | 文本模型 | 图片模型 | 视频模型 | 全流程 |
 |------|----------|----------|----------|--------|
 | Mock | ✅ 可跑通 | ✅ 可跑通 | ✅ 可跑通 | ✅ `npm run test:e2e` |
-| 真实 API | ✅ 已接通 | ✅ 已接通 | ⚠️ 排队拥堵 | ⚠️ 视频需更长等待 |
+| 真实 API | ✅ 已接通 | ✅ 已接通 | ✅ 已接通并验证 | ✅ 文本+图片+视频全部可通 |
+
+### 真实视频当前状态
+
+- **task 创建**: ✅ 成功，返回 `task_id`
+- **轮询**: ✅ `GET /v1/videos/{task_id}` 可用
+- **视频完成**: ✅ 已验证（历史 task 已 completed + 下载 + ffprobe）
+- **video_url 字段**: ⚠️ 位于 `remixed_from_video_id`（非 `video_url`）
+- **队列延迟**: ⚠️ 非高峰期 ~2min 处理，高峰期可能数小时排队
+- **分辨率**: 当前输出 1280×768
+- **异步模式**: ✅ Adapter 已重构，支持 create/poll/wait/download
+- **任务恢复**: ✅ 支持根据 task_id 继续轮询
 
 ## 快速开始
 
@@ -65,12 +76,16 @@ npm test                    # 18 tests
 npm run test:e2e            # 20 steps, auto confirm, → MP4
 
 # 真实 API 探针
-npm run probe:agnes:text    # /chat/completions
-npm run probe:agnes:image   # /images/generations
-npm run probe:agnes:video   # /videos (async poll)
+npm run probe:agnes:text       # /chat/completions
+npm run probe:agnes:image      # /images/generations
+npm run probe:agnes:video      # /videos (async poll)
+npm run probe:agnes:video:poll # 轮询已有 task
+npm run probe:agnes:video:t2v  # Case A: 纯文生视频
+npm run probe:agnes:video:i2v-url  # Case B: 图生视频(URL)
+npm run probe:agnes:video:i2v-b64  # Case C: 图生视频(b64)
 
 # 真实 API 最小闭环
-USE_MOCK_MODEL=false npx tsx scripts/e2e-real-minimal.ts
+npm run test:e2e:real
 ```
 
 ## 项目结构
