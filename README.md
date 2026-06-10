@@ -28,6 +28,12 @@ AI 驱动的漫剧创作平台，支持故事分析、角色设计、分镜生�
 - **分辨率**: 当前输出 1280×768
 - **异步模式**: ✅ Adapter 已重构，支持 create/poll/wait/download
 - **任务恢复**: ✅ 支持根据 task_id 继续轮询
+- **TTS 配音**: ✅ shot 有对白时自动传 `voice_text` + `generate_audio`，产出 AAC 音轨
+
+### 角色参考图系统
+
+支持多角度参考图：front_full_body / front_half_body / left_side / right_side / back_view。
+快速模式（1张）和一致性模式（5张），分镜图根据镜头内容自动匹配参考角度。
 
 ### 项目表单字段
 
@@ -102,6 +108,10 @@ npm run probe:agnes:video:poll # 轮询已有 task
 npm run probe:agnes:video:t2v  # Case A: 纯文生视频
 npm run probe:agnes:video:i2v-url  # Case B: 图生视频(URL)
 npm run probe:agnes:video:i2v-b64  # Case C: 图生视频(b64)
+npm run probe:agnes:video:audio # 音频/口型探针
+
+# 30s 短视频原型（全流程）
+npx tsx scripts/e2e-real-15s-prototype.ts
 
 # 真实 API 最小闭环
 npm run test:e2e:real
