@@ -66,7 +66,7 @@ async function main() {
 
       // —— COMPLETED ——
       if (status === 'completed' || status === 'succeeded' || status === 'success') {
-        const videoUrl = (data.video_url || data.url || data.output_url || '') as string
+        const videoUrl = (data.video_url || data.url || data.output_url || data.remixed_from_video_id || '') as string
         console.log(`\n\n✅ 视频生成完成!`)
         console.log(`video_url:        ${videoUrl}`)
         fs.writeFileSync(

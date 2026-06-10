@@ -103,13 +103,15 @@ video_params:    1280×768, h264+aac, 5.04s, 24fps, 1.3MB
 等待总时长:      下次轮询时立即获取（task 在前一日已排到）
 ```
 
-### 三种视频请求测试结果
+### 三种视频请求测试结果 (2026-06-10)
 
-| Case | 类型 | task_id | 创建状态 | 最终状态 | video_url | 备注 |
-|------|------|---------|----------|----------|-----------|------|
-| A | t2v | task_gM9mkgkSnpo3vxpLkmJ93SPKOhWsJIGL | ✅ | ⏳ 排队中 | - | 纯文生视频 |
-| B | i2v-url | task_fEEbLKIiCGOQApIAmjglfuQ0WvsBMsBh | ✅ | ⏳ 排队中 | - | 传图片URL |
-| C | i2v-b64 | 见 probe 脚本输出 | - | - | - | data: URI 格式 |
+| Case | 类型 | task_id | 创建 | 完成 | 排队耗时 | video_url | 视频参数 | 备注 |
+|------|------|---------|------|------|----------|-----------|----------|------|
+| A | t2v | task_gM9mkgkSnpo3vxpLkmJ93SPKOhWsJIGL | ✅ | ✅ | ~11min | ✅ GCS URL | 1280×768, h264+aac, 5.04s, 1.8MB | 纯文生视频 |
+| B | i2v-url | task_fEEbLKIiCGOQApIAmjglfuQ0WvsBMsBh | ✅ | ✅ | ~11min | ✅ GCS URL | 1280×768, h264+aac, 5.04s, 983KB | 传图片URL |
+| C | i2v-b64 | task_6KNBiUpMeG9LAxXEL8EpMtYD1FSuiP9G | ✅ | ⏳ 排队中 | TBD | TBD | TBD | 图片URL→base64→data: URI |
+
+**结论**: 三种输入格式（纯文本、图片 URL、图片 data: URI）的视频任务全部创建成功。A 和 B 约 11 分钟完成。C（base64 data URI）仍在排队，预计类似耗时。视频 URL 均位于响应的 `remixed_from_video_id` 字段。
 
 ### 请求格式（创建）
 

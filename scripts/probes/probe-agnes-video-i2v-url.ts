@@ -96,7 +96,7 @@ async function main() {
     process.stdout.write(`\r  poll #${i}: status=${status} | progress=${data.progress ?? '?'}%`)
 
     if (status === 'completed' || status === 'succeeded' || status === 'success') {
-      const videoUrl = (data.video_url || data.url || data.output_url || '') as string
+      const videoUrl = (data.video_url || data.url || data.output_url || data.remixed_from_video_id || '') as string
       console.log(`\n\n✅ Case B 完成!`)
       console.log(`task_id:   ${taskId}`)
       console.log(`status:    ${status}`)
