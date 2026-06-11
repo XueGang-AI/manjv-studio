@@ -174,7 +174,7 @@ export async function POST(
       aspectRatio, style, numOutputs: 4,
     }
 
-    const response = await adapterFactory.getImageAdapter().generate(genReq)
+    const response = await adapterFactory.getImageAdapter(project?.modelProvider).generate(genReq)
 
     if (!response.images.length) {
       return NextResponse.json({ success: false, error: '生成失败，旧图已保留' }, { status: 500 })

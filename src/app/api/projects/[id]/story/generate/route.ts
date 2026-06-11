@@ -75,7 +75,7 @@ export async function POST(
       const rendered = await promptTemplateService.render('story_analysis', variables)
 
       // 8. 调用模型适配器
-      const textAdapter = adapterFactory.getTextAdapter()
+      const textAdapter = adapterFactory.getTextAdapter(project.modelProvider)
       const genRequest: TextGenerationRequest = {
         taskType: 'story_analysis',
         systemPrompt: rendered.systemPrompt,

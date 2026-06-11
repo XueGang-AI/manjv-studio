@@ -18,6 +18,7 @@ AI 驱动的漫剧创作平台。核心流程（全部已实现）:
 - FFmpeg 8.1（视频合成）
 - vitest（单元测试）
 - Agnes AI: Agnes-2.0-Flash / Agnes-Image-2.0-Flash / Agnes-Video-V2.0
+- Ark (火山引擎/豆包): doubao-seed-character-251128 / doubao-seedream-5-0-260128 / doubao-seedance-1-5-pro-251215
 
 ## 关键架构原则
 
@@ -44,6 +45,10 @@ npm run probe:agnes:video:t2v        # Case A: 文生视频
 npm run probe:agnes:video:i2v-url    # Case B: 图生视频(URL)
 npm run probe:agnes:video:i2v-b64    # Case C: 图生视频(b64)
 npm run probe:agnes:video:audio      # 音频/口型探针（仅创建 task）
+npm run probe:ark:text               # Ark 文本探针
+npm run probe:ark:image              # Ark 图片探针
+npm run probe:ark:video              # Ark 视频探针
+npm run probe:ark:video:poll         # Ark 视频轮询探针（需 --task-id <id>）
 npx tsx scripts/e2e-real-15s-prototype.ts  # 30s 原型全流程
 ```
 
@@ -99,6 +104,16 @@ npx tsx scripts/e2e-real-15s-prototype.ts  # 30s 原型全流程
 - `reference_images` 参数：传此参数时 API 忽略 `num_outputs`，只返回 1 张图
 - 分镜图一致性策略：prompt 嵌入角色完整外貌描述 + `numOutputs: 4`（不传 reference_images）
 - 角色图一致性策略：锚点图先行 + reference_images 传 1 张
+
+### Ark (火山引擎/豆包) 模型
+
+- **模型适配器位置**: `src/server/model-adapters/ark/` (图片) + `ark-text.adapter.ts` + `ark-video.adapter.ts`
+- **Provider 切换**: `modelProvider` 字段值 `ark` → `adapterFactory` 自动加载 Ark 适配器
+- **文本模型**: `doubao-seed-character-251128`，OpenAI 兼容 `/chat/completions`，JSON 策略为 `prompt_only`
+- **图片模型**: `doubao-seedream-5-0-260128`，通过 Ark 图片 API 生成
+- **视频模型**: `doubao-seedance-1-5-pro-251215`，异步任务模式（创建 → 轮询 → 下载）
+- **环境变量**: 需要 `ARK_API_KEY`、`ARK_API_BASE_URL`（默认 `https://ark.cn-beijing.volces.com/api/v3`）
+- **探针脚本**: `scripts/probes/probe-ark-text.ts`, `probe-ark-image.ts`, `probe-ark-video.ts`, `poll-ark-video-task.ts`
 
 ### 项目表单
 

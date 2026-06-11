@@ -4,16 +4,25 @@
 import { BaseImageAdapter } from '../base.adapter'
 import { ImageGenerationRequest, ImageGenerationResponse } from '../types'
 
+export interface AgnesImageAdapterConfig {
+  model: string
+  apiKey: string
+  baseUrl: string
+}
+
+const DEFAULT_BASE_URL = 'https://apihub.agnes-ai.com/v1'
+const DEFAULT_MODEL = 'agnes-image-2.0-flash'
+
 export class AgnesImageAdapter extends BaseImageAdapter {
   private baseUrl: string
   private apiKey: string
   private model: string
 
-  constructor() {
+  constructor(config: AgnesImageAdapterConfig) {
     super()
-    this.baseUrl = process.env.AGNES_IMAGE_API_BASE_URL || 'https://apihub.agnes-ai.com/v1'
-    this.apiKey = process.env.AGNES_IMAGE_API_KEY || ''
-    this.model = process.env.AGNES_IMAGE_MODEL || 'agnes-image-2.0-flash'
+    this.baseUrl = config.baseUrl || DEFAULT_BASE_URL
+    this.apiKey = config.apiKey
+    this.model = config.model || DEFAULT_MODEL
   }
 
   async generate(request: ImageGenerationRequest): Promise<ImageGenerationResponse> {

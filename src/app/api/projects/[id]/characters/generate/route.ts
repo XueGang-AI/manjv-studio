@@ -72,7 +72,7 @@ export async function POST(
       })
 
       // 6. 调用模型
-      const textAdapter = adapterFactory.getTextAdapter()
+      const textAdapter = adapterFactory.getTextAdapter(project.modelProvider)
       const genRequest: TextGenerationRequest = {
         taskType: 'character_design',
         systemPrompt: rendered.systemPrompt,

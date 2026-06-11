@@ -17,7 +17,21 @@
 |------|------|--------|
 | `USE_MOCK_MODEL` | `true`=Mock 适配器, `false`=真实 Agnes API | `true` |
 
-Mock 模式下不需要任何 Agnes API 配置即可完整跑通流程（`npm run test:e2e`）。
+Mock 模式下不需要任何 API 配置即可完整跑通流程（`npm run test:e2e`）。
+
+## Ark / 火山引擎（付费模式）
+
+当 `MODEL_PROVIDER=ark` 且 `USE_MOCK_MODEL=false` 时需配置：
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `ARK_API_BASE_URL` | Ark API 地址 | `https://ark.cn-beijing.volces.com/api/v3` |
+| `ARK_API_KEY` | Ark API Key | （必填） |
+| `ARK_TEXT_MODEL` | 文本模型名称 | `doubao-seed-character-251128` |
+| `ARK_IMAGE_MODEL` | 图片模型名称 | `doubao-seedream-5-0-260128` |
+| `ARK_VIDEO_MODEL` | 视频模型名称 | `doubao-seedance-1-5-pro-251215` |
+
+Ark 使用 OpenAI 兼容的 `/chat/completions` 接口。图片和视频通过 Ark 专用 API 端点。
 
 ## Agnes 模型配置（真实 API 模式）
 

@@ -101,7 +101,7 @@ export async function POST(
       // 在 System Prompt 末尾追加素材库参考
       const enhancedSystem = rendered.systemPrompt + materialRefs
 
-      const textAdapter = adapterFactory.getTextAdapter()
+      const textAdapter = adapterFactory.getTextAdapter(project.modelProvider)
       const genReq: TextGenerationRequest = {
         taskType: 'storyboard',
         systemPrompt: enhancedSystem,

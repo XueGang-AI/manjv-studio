@@ -64,7 +64,7 @@ export async function POST(
       ? ['front_full_body', 'front_half_body', 'left_side', 'right_side', 'back_view']
       : ['front_full_body']
 
-    const imageAdapter = adapterFactory.getImageAdapter()
+    const imageAdapter = adapterFactory.getImageAdapter(project.modelProvider)
     const corePrompt = character.enFixedPrompt || character.zhFixedPrompt || `${character.name}`
     const style = project.artStyle || '韩漫'
     const negativePrompt = 'ugly, deformed, bad anatomy, bad proportions, low quality, blurry, pixelated, distorted face, extra fingers, missing fingers, asymmetric eyes, watermark, text, logo, extra limbs, multiple heads'

@@ -4,16 +4,25 @@
 import { BaseTextAdapter } from '../base.adapter'
 import { TextGenerationRequest, TextGenerationResponse } from '../types'
 
+export interface AgnesTextAdapterConfig {
+  model: string
+  apiKey: string
+  baseUrl: string
+}
+
+const DEFAULT_BASE_URL = 'https://apihub.agnes-ai.com/v1'
+const DEFAULT_MODEL = 'agnes-2.0-flash'
+
 export class AgnesTextAdapter extends BaseTextAdapter {
   private baseUrl: string
   private apiKey: string
   private model: string
 
-  constructor() {
+  constructor(config: AgnesTextAdapterConfig) {
     super()
-    this.baseUrl = process.env.AGNES_TEXT_API_BASE_URL || 'https://apihub.agnes-ai.com/v1'
-    this.apiKey = process.env.AGNES_TEXT_API_KEY || ''
-    this.model = process.env.AGNES_TEXT_MODEL || 'agnes-2.0-flash'
+    this.baseUrl = config.baseUrl || DEFAULT_BASE_URL
+    this.apiKey = config.apiKey
+    this.model = config.model || DEFAULT_MODEL
   }
 
   async generate<T = unknown>(request: TextGenerationRequest): Promise<TextGenerationResponse<T>> {

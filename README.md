@@ -8,7 +8,7 @@ AI 驱动的漫剧创作平台，支持故事分析、角色设计、分镜生�
 - **数据库**: PostgreSQL + Prisma 7
 - **任务队列**: BullMQ + Redis
 - **视频合成**: FFmpeg 8
-- **AI 模型**: Agnes-2.0-Flash / Agnes-Image-2.0-Flash / Agnes-Video-V2.0
+- **AI 模型**: Agnes-2.0-Flash / Agnes-Image-2.0-Flash / Agnes-Video-V2.0 / 豆包 SeedCharacter / Seedream / Seedance
 - **测试**: vitest
 
 ## 当前状态
@@ -16,7 +16,8 @@ AI 驱动的漫剧创作平台，支持故事分析、角色设计、分镜生�
 | 模式 | 文本模型 | 图片模型 | 视频模型 | 全流程 |
 |------|----------|----------|----------|--------|
 | Mock | ✅ 可跑通 | ✅ 可跑通 | ✅ 可跑通 | ✅ `npm run test:e2e` |
-| 真实 API | ✅ 已接通 | ✅ 已接通 | ✅ 已接通并验证 | ✅ 文本+图片+视频全部可通 |
+| Agnes 真实 API | ✅ 已接通 | ✅ 已接通 | ✅ 已接通并验证 | ✅ 文本+图片+视频全部可通 |
+| Ark (豆包) 付费 | ✅ 适配器已实现 | ✅ 适配器已实现 | ✅ 适配器已实现 | ⏳ 待端到端验证 |
 
 ### 真实视频当前状态
 
@@ -71,6 +72,39 @@ AI 驱动的漫剧创作平台，支持故事分析、角色设计、分镜生�
 4. 视频内容质量仍需人工确认
 5. API 返回字段可能变化，已通过多字段回退兼容
 6. Agnes Image API 传 `reference_images` 时忽略 `num_outputs`
+
+## Ark / 豆包付费模式
+
+Ark 是火山引擎的模型服务平台，提供豆包系列模型。相比 Agnes，Ark 模型在角色一致性和生成质量上更优，但需要付费 API Key。
+
+### 模型对照
+
+| 用途 | Ark 模型 | Agnes 模型 |
+|------|----------|------------|
+| 文本生成 | `doubao-seed-character-251128` | `Agnes-2.0-Flash` |
+| 图片生成 | `doubao-seedream-5-0-260128` | `Agnes-Image-2.0-Flash` |
+| 视频生成 | `doubao-seedance-1-5-pro-251215` | `Agnes-Video-V2.0` |
+
+### 启用方式
+
+1. 获取火山引擎 Ark API Key
+2. 在 `.env` 中配置:
+   ```
+   ARK_API_KEY=your_key_here
+   ARK_API_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+   MODEL_PROVIDER=ark
+   USE_MOCK_MODEL=false
+   ```
+3. 创建项目时选择 Ark provider，或在已有项目中通过 `modelProvider` 字段切换
+
+### 探针验证
+
+```bash
+npm run probe:ark:text       # 文本生成探针
+npm run probe:ark:image      # 图片生成探针
+npm run probe:ark:video      # 视频生成探针（创建任务）
+npm run probe:ark:video:poll # 视频任务轮询（需 --task-id）
+```
 
 ## 快速开始
 
@@ -127,6 +161,10 @@ npm run probe:agnes:video:t2v  # Case A: 纯文生视频
 npm run probe:agnes:video:i2v-url  # Case B: 图生视频(URL)
 npm run probe:agnes:video:i2v-b64  # Case C: 图生视频(b64)
 npm run probe:agnes:video:audio # 音频/口型探针
+npm run probe:ark:text       # Ark 文本探针
+npm run probe:ark:image      # Ark 图片探针
+npm run probe:ark:video      # Ark 视频探针
+npm run probe:ark:video:poll # Ark 视频轮询
 
 # 30s 短视频原型（全流程）
 npx tsx scripts/e2e-real-15s-prototype.ts

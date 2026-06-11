@@ -47,6 +47,7 @@ model Project {
   audience        String?
   endingType      String?  @map("ending_type")
   status          String   @default("DRAFT") @map("status")
+  modelProvider   String   @default("agnes") @map("model_provider")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 

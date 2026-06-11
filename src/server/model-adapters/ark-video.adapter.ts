@@ -1,7 +1,12 @@
 // ============================================
-// Agnes-Video-V2.0 视频适配器（真实 API + 异步轮询）
+// ArkVideoAdapter — 豆包 Seedance 视频适配器
+// Model: doubao-seedance-1-5-pro-251215
+// Create: POST {baseUrl}/contents/generations/tasks
+// Poll: GET {baseUrl}/contents/generations/tasks/{task_id}
+// Format: content_array
+// Audio: generate_audio supported
 // ============================================
-import { BaseVideoAdapter } from '../base.adapter'
+import { BaseVideoAdapter } from './base.adapter'
 import {
   VideoGenerationRequest,
   VideoGenerationResponse,
@@ -9,29 +14,29 @@ import {
   VideoTaskPollResult,
   VideoTaskWaitResult,
   RemoteVideoTaskStatus,
-} from '../types'
+} from './types'
 import fs from 'fs'
 import path from 'path'
 
-export interface AgnesVideoAdapterConfig {
+export interface ArkVideoAdapterOptions {
   model: string
   apiKey: string
   baseUrl: string
 }
 
-const DEFAULT_BASE_URL = 'https://apihub.agnes-ai.com/v1'
-const DEFAULT_MODEL = 'agnes-video-v2.0'
+const DEFAULT_MODEL = 'doubao-seedance-1-5-pro-251215'
+const DEFAULT_RESOLUTION = '480p'
 
-export class AgnesVideoAdapter extends BaseVideoAdapter {
+export class ArkVideoAdapter extends BaseVideoAdapter {
   private baseUrl: string
   private apiKey: string
   private model: string
 
-  constructor(config: AgnesVideoAdapterConfig) {
+  constructor(options: ArkVideoAdapterOptions) {
     super()
-    this.baseUrl = config.baseUrl || DEFAULT_BASE_URL
-    this.apiKey = config.apiKey
-    this.model = config.model || DEFAULT_MODEL
+    this.model = options.model || DEFAULT_MODEL
+    this.apiKey = options.apiKey
+    this.baseUrl = options.baseUrl
   }
 
   // ============================================================
@@ -39,7 +44,7 @@ export class AgnesVideoAdapter extends BaseVideoAdapter {
   // ============================================================
   async generate(request: VideoGenerationRequest): Promise<VideoGenerationResponse> {
     if (!this.apiKey) {
-      throw new Error('AGNES_VIDEO_API_KEY not configured')
+      throw new Error('ArkVideoAdapter: apiKey is required')
     }
 
     const create = await this.createVideoTask(request)
@@ -57,62 +62,96 @@ export class AgnesVideoAdapter extends BaseVideoAdapter {
 
     if (wait.timedOut) {
       throw new Error(
-        `视频任务 ${wait.taskId} 轮询超时 (${wait.pollAttempts} 次, ${wait.totalSeconds}s)。` +
+        `Ark 视频任务 ${wait.taskId} 轮询超时 (${wait.pollAttempts} 次, ${wait.totalSeconds}s)。` +
         `任务仍在远端，task_id 已保存，可稍后继续检查。`
       )
     }
 
-    throw new Error(`视频生成失败: ${wait.error || JSON.stringify(wait.lastResponse).substring(0, 200)}`)
+    throw new Error(`Ark 视频生成失败: ${wait.error || JSON.stringify(wait.lastResponse).substring(0, 200)}`)
   }
 
   // ============================================================
   // 创建视频异步任务（仅创建，不轮询，立即返回 task_id）
+  // Ark API 使用 content_array 格式
   // ============================================================
   async createVideoTask(request: VideoGenerationRequest): Promise<VideoTaskCreationResult> {
     if (!this.apiKey) {
-      throw new Error('AGNES_VIDEO_API_KEY not configured')
+      throw new Error('ArkVideoAdapter: apiKey is required')
+    }
+    if (!this.baseUrl) {
+      throw new Error('ArkVideoAdapter: baseUrl is required')
+    }
+
+    // Build content array (confirmed working format from probe)
+    const content: Array<Record<string, unknown>> = [
+      { type: 'text', text: request.prompt },
+    ]
+
+    // Append motionStrength to prompt text if provided (not directly supported by Ark)
+    if (request.motionStrength) {
+      content[0].text = `${content[0].text}, motion strength: ${request.motionStrength}`
+    }
+
+    // Append voiceText to prompt if provided (not directly supported by Ark)
+    if (request.voiceText) {
+      content[0].text = `${content[0].text}, voice text: "${request.voiceText}"`
+    }
+
+    // Add input image
+    if (request.inputImage) {
+      content.push({
+        type: 'image_url',
+        image_url: { url: request.inputImage },
+      })
     }
 
     const createBody: Record<string, unknown> = {
       model: this.model,
-      prompt: request.prompt,
+      content,
       duration: request.duration || 5,
-      aspect_ratio: request.aspectRatio || '9:16',
+      ratio: request.aspectRatio || '9:16',
+      resolution: DEFAULT_RESOLUTION,
+      watermark: false,
     }
 
-    if (request.inputImage) {
-      createBody.image = request.inputImage
+    // Optional params
+    if (request.fps) {
+      createBody.fps = request.fps
     }
-    if (request.negativePrompt) {
-      createBody.negative_prompt = request.negativePrompt
-    }
-    if (request.motionStrength) {
-      createBody.motion_strength = request.motionStrength
-    }
-    if (request.voiceText) {
-      createBody.voice_text = request.voiceText
-    }
-    if (request.generateAudio) {
+    if (request.generateAudio !== undefined) {
       createBody.generate_audio = request.generateAudio
     }
+    if (request.params?.seed !== undefined) {
+      createBody.seed = request.params.seed
+    }
 
-    const res = await fetch(`${this.baseUrl}/videos`, {
+    const res = await fetch(`${this.baseUrl}/contents/generations/tasks`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.apiKey}` },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.apiKey}`,
+      },
       body: JSON.stringify(createBody),
       signal: AbortSignal.timeout(60000),
     })
 
     if (!res.ok) {
       const errText = await res.text()
-      throw new Error(`Agnes Video create error (${res.status}): ${errText.substring(0, 300)}`)
+      throw new Error(`Ark Video create error (${res.status}): ${errText.substring(0, 300)}`)
     }
 
     const data = (await res.json()) as Record<string, unknown>
-    const taskId = (data.task_id || data.id || data.video_id || '') as string
+
+    // Extract task ID from confirmed field paths:
+    // Probe checks: data.task_id → data.id → data.data.task_id → data.data.id
+    const taskId = (data.task_id
+      || data.id
+      || (data.data as Record<string, unknown>)?.task_id
+      || (data.data as Record<string, unknown>)?.id
+      || '') as string
 
     if (!taskId) {
-      throw new Error(`No task_id in video response: ${JSON.stringify(data).substring(0, 200)}`)
+      throw new Error(`No task_id in Ark video response: ${JSON.stringify(data).substring(0, 200)}`)
     }
 
     return {
@@ -124,13 +163,14 @@ export class AgnesVideoAdapter extends BaseVideoAdapter {
 
   // ============================================================
   // 单次轮询视频任务状态
+  // Ark poll: GET {baseUrl}/contents/generations/tasks/{task_id}
   // ============================================================
   async pollVideoTask(taskId: string): Promise<VideoTaskPollResult> {
     if (!this.apiKey) {
-      throw new Error('AGNES_VIDEO_API_KEY not configured')
+      throw new Error('ArkVideoAdapter: apiKey is required')
     }
 
-    const res = await fetch(`${this.baseUrl}/videos/${taskId}`, {
+    const res = await fetch(`${this.baseUrl}/contents/generations/tasks/${taskId}`, {
       headers: { 'Authorization': `Bearer ${this.apiKey}` },
       signal: AbortSignal.timeout(15000),
     })
@@ -159,7 +199,13 @@ export class AgnesVideoAdapter extends BaseVideoAdapter {
     }
 
     if (status === 'completed' || status === 'succeeded' || status === 'success') {
-      result.videoUrl = (data.video_url || data.url || data.output_url || data.remixed_from_video_id || '') as string
+      // Extract video_url from confirmed field paths
+      result.videoUrl = (data.video_url
+        || data.url
+        || data.output_url
+        || (data.data as Record<string, unknown>)?.video_url
+        || (data.data as Record<string, unknown>)?.url
+        || '') as string
       result.duration = (data.duration || data.seconds) as number | undefined
     }
 
@@ -182,7 +228,7 @@ export class AgnesVideoAdapter extends BaseVideoAdapter {
     }
   ): Promise<VideoTaskWaitResult> {
     const timeoutMinutes = options?.timeoutMinutes ?? 10
-    const intervalSeconds = options?.intervalSeconds ?? 5
+    const intervalSeconds = options?.intervalSeconds ?? 10
     const maxAttempts = Math.floor((timeoutMinutes * 60) / intervalSeconds)
 
     let lastResponse: Record<string, unknown> = {}
@@ -197,6 +243,10 @@ export class AgnesVideoAdapter extends BaseVideoAdapter {
         status: 'unknown' as RemoteVideoTaskStatus,
         response: {} as Record<string, unknown>,
         polledAt: new Date().toISOString(),
+        videoUrl: undefined as string | undefined,
+        duration: undefined as number | undefined,
+        error: undefined as string | undefined,
+        progress: undefined as number | undefined,
       }))
 
       lastResponse = pollResult.response
@@ -257,7 +307,7 @@ export class AgnesVideoAdapter extends BaseVideoAdapter {
     })
 
     if (!res.ok) {
-      throw new Error(`Download failed (${res.status}): ${videoUrl.substring(0, 80)}`)
+      throw new Error(`Ark download failed (${res.status}): ${videoUrl.substring(0, 80)}`)
     }
 
     const buffer = Buffer.from(await res.arrayBuffer())

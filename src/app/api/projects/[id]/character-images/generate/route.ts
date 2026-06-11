@@ -103,7 +103,7 @@ export async function POST(
     })
 
     try {
-      const imageAdapter = adapterFactory.getImageAdapter()
+      const imageAdapter = adapterFactory.getImageAdapter(project.modelProvider)
       const aspectRatio = (project.aspectRatio || '9:16') as '9:16' | '16:9' | '1:1'
       const style = project.artStyle || '韩漫'
       const negativePrompt = 'ugly, deformed, bad anatomy, bad proportions, low quality, blurry, pixelated, distorted face, extra fingers, missing fingers, asymmetric eyes, watermark, text, logo, extra limbs, multiple heads'

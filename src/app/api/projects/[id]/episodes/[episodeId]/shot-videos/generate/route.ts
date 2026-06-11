@@ -48,7 +48,7 @@ export async function POST(
     })
 
     try {
-      const videoAdapter = adapterFactory.getVideoAdapter()
+      const videoAdapter = adapterFactory.getVideoAdapter(project.modelProvider)
       const aspectRatio = (project.aspectRatio || '9:16') as '9:16'
       const allResults: Array<{ shotId: string; shotNo: number; videos: unknown[] }> = []
       const isMock = process.env.USE_MOCK_MODEL === 'true'

@@ -31,7 +31,7 @@ export async function POST(
       generateAudio: true,
     }
 
-    const response = await adapterFactory.getVideoAdapter().generate(genReq)
+    const response = await adapterFactory.getVideoAdapter(project?.modelProvider).generate(genReq)
     const created = await Promise.all(response.videos.map(v =>
       prisma.shotVideo.create({
         data: {

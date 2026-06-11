@@ -135,7 +135,7 @@ export async function POST(
     })
 
     try {
-      const imageAdapter = adapterFactory.getImageAdapter()
+      const imageAdapter = adapterFactory.getImageAdapter(project.modelProvider)
       const aspectRatio = (project.aspectRatio || '9:16') as '9:16'
       const style = project.artStyle || '韩漫'
       const numOutputs = 4
