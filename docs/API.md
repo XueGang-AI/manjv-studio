@@ -26,7 +26,8 @@ Base URL: `http://localhost:3000/api`
   "target_platform": "抖音",
   "episode_count": 10,
   "episode_duration": 90,
-  "aspect_ratio": "9:16"
+  "aspect_ratio": "9:16",
+  "model_provider": "agnes"
 }
 ```
 
@@ -57,6 +58,7 @@ Base URL: `http://localhost:3000/api`
 | POST | `/api/projects/:id/character-images/:iId/select` | 选择标准图 |
 | POST | `/api/projects/:id/character-images/:iId/confirm` | 确认标准图 |
 | POST | `/api/projects/:id/characters/:cId/images/regenerate` | 重新生成 |
+| POST | `/api/projects/:id/character-images/batch-confirm` | 批量确认角色图 |
 
 ## 分镜 API
 
@@ -79,6 +81,7 @@ Base URL: `http://localhost:3000/api`
 | POST | `/api/projects/:id/episodes/:eId/shot-images/:iId/select` | 选择 |
 | POST | `/api/projects/:id/episodes/:eId/shot-images/:iId/confirm` | 确认 |
 | POST | `/api/projects/:id/episodes/:eId/shots/:sId/images/regenerate` | 重新生成 |
+| POST | `/api/projects/:id/episodes/:eId/shot-images/batch-confirm` | 批量确认分镜图 |
 
 ## 视频 API
 

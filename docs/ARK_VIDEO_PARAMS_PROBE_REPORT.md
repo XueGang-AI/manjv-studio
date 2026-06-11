@@ -24,7 +24,7 @@ Time: 2026-06-11T07:04:24.387Z
 POST https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks
 Headers: {
   "Content-Type": "application/json",
-  "Authorization": "Bearer ark-e65b0558-11b7-4a55-90bd-0d492a383ce9-e995c"
+  "Authorization": "Bearer ARK_API_KEY"
 }
 Body: {
   "model": "doubao-seedance-1-5-pro-251215",
@@ -56,7 +56,7 @@ task_id: cgt-20260611150425-ggtng
 POST https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks
 Headers: {
   "Content-Type": "application/json",
-  "Authorization": "Bearer ark-e65b0558-11b7-4a55-90bd-0d492a383ce9-e995c"
+  "Authorization": "Bearer ARK_API_KEY"
 }
 Body: {
   "model": "doubao-seedance-1-5-pro-251215",
@@ -86,7 +86,7 @@ Response: {
 POST https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks
 Headers: {
   "Content-Type": "application/json",
-  "Authorization": "Bearer ark-e65b0558-11b7-4a55-90bd-0d492a383ce9-e995c"
+  "Authorization": "Bearer ARK_API_KEY"
 }
 Body: {
   "model": "doubao-seedance-1-5-pro-251215",
@@ -114,7 +114,7 @@ Response: {
 POST https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks
 Headers: {
   "Content-Type": "application/json",
-  "Authorization": "Bearer ark-e65b0558-11b7-4a55-90bd-0d492a383ce9-e995c"
+  "Authorization": "Bearer ARK_API_KEY"
 }
 Body: {
   "model": "doubao-seedance-1-5-pro-251215",
@@ -142,7 +142,7 @@ Response: {
 POST https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks
 Headers: {
   "Content-Type": "application/json",
-  "Authorization": "Bearer ark-e65b0558-11b7-4a55-90bd-0d492a383ce9-e995c"
+  "Authorization": "Bearer ARK_API_KEY"
 }
 Body: {
   "model": "doubao-seedance-1-5-pro-251215",
@@ -170,7 +170,7 @@ Response: {
 POST https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks
 Headers: {
   "Content-Type": "application/json",
-  "Authorization": "Bearer ark-e65b0558-11b7-4a55-90bd-0d492a383ce9-e995c"
+  "Authorization": "Bearer ARK_API_KEY"
 }
 Body: {
   "model": "doubao-seedance-1-5-pro-251215",
@@ -198,7 +198,7 @@ Response: {
 POST https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks
 Headers: {
   "Content-Type": "application/json",
-  "Authorization": "Bearer ark-e65b0558-11b7-4a55-90bd-0d492a383ce9-e995c"
+  "Authorization": "Bearer ARK_API_KEY"
 }
 Body: {
   "model": "doubao-seedance-1-5-pro-251215",
@@ -226,7 +226,7 @@ Response: {
 POST https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks
 Headers: {
   "Content-Type": "application/json",
-  "Authorization": "Bearer ark-e65b0558-11b7-4a55-90bd-0d492a383ce9-e995c"
+  "Authorization": "Bearer ARK_API_KEY"
 }
 Body: {
   "model": "doubao-seedance-1-5-pro-251215",
@@ -254,7 +254,7 @@ Response: {
 POST https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks
 Headers: {
   "Content-Type": "application/json",
-  "Authorization": "Bearer ark-e65b0558-11b7-4a55-90bd-0d492a383ce9-e995c"
+  "Authorization": "Bearer ARK_API_KEY"
 }
 Body: {
   "model": "doubao-seedance-1-5-pro-251215",
@@ -282,7 +282,7 @@ Response: {
 POST https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks
 Headers: {
   "Content-Type": "application/json",
-  "Authorization": "Bearer ark-e65b0558-11b7-4a55-90bd-0d492a383ce9-e995c"
+  "Authorization": "Bearer ARK_API_KEY"
 }
 Body: {
   "model": "doubao-seedance-1-5-pro-251215",
@@ -317,7 +317,7 @@ Response: {
 POST https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks
 Headers: {
   "Content-Type": "application/json",
-  "Authorization": "Bearer ark-e65b0558-11b7-4a55-90bd-0d492a383ce9-e995c"
+  "Authorization": "Bearer ARK_API_KEY"
 }
 Body: {
   "model": "doubao-seedance-1-5-pro-251215",
@@ -349,7 +349,7 @@ Response: {
 POST https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks
 Headers: {
   "Content-Type": "application/json",
-  "Authorization": "Bearer ark-e65b0558-11b7-4a55-90bd-0d492a383ce9-e995c"
+  "Authorization": "Bearer ARK_API_KEY"
 }
 Body: {
   "model": "doubao-seedance-1-5-pro-251215"
@@ -377,7 +377,7 @@ Response: {
 POST https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks
 Headers: {
   "Content-Type": "application/json",
-  "Authorization": "Bearer ark-e65b0558-11b7-4a55-90bd-0d492a383ce9-e995c"
+  "Authorization": "Bearer ARK_API_KEY"
 }
 Body: {
   "model": "doubao-seedance-1-5-pro-251215",

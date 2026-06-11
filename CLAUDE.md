@@ -22,7 +22,8 @@ AI 驱动的漫剧创作平台。核心流程（全部已实现）:
 
 ## 关键架构原则
 
-1. **模型适配层**: 所有 AI 调用必须通过 `adapterFactory.getTextAdapter()` 等统一接口。`USE_MOCK_MODEL` 控制 Mock/Real 切换。禁止绕过 AdapterFactory 直接调用 API。
+1. **模型适配层**: 所有 AI 调用必须通过 `adapterFactory.getTextAdapter(provider)` 等统一接口。优先级：`USE_MOCK_MODEL=true` → Mock；`provider="ark"` → Ark；默认 → Agnes。禁止绕过 AdapterFactory 直接调用 API。
+2. **双 Provider 架构**: 免费模式 Agnes（agnesian-2.0-flash 系列），付费模式 Ark（火山引擎豆包系列）。项目级 `model_provider` 字段控制，创建项目时选择。
 2. **Prompt 模板化**: 所有 Prompt 从 `prompt_templates` 表读取，通过 `PromptTemplateService.render()` 填充 `{{variables}}`。禁止硬编码 Prompt。
 3. **任务记录**: 所有生成操作写入 `generation_tasks` + `task_logs`。
 4. **版本管理**: 关键确认节点调用 `versionService.createVersion()` 自动保存快照。

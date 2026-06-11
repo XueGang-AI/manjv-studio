@@ -74,11 +74,16 @@ docs/                       # Complete documentation
 ```
 AdapterFactory (单例)
 ├── USE_MOCK_MODEL=true  → MockTextAdapter / MockImageAdapter / MockVideoAdapter
-└── USE_MOCK_MODEL=false → AgnesTextAdapter / AgnesImageAdapter / AgnesVideoAdapter
+├── provider=agnes       → AgnesTextAdapter / AgnesImageAdapter / AgnesVideoAdapter
+└── provider=ark         → ArkTextAdapter / ArkImageAdapter / ArkVideoAdapter
 
 AgnesTextAdapter  → POST /v1/chat/completions
 AgnesImageAdapter → POST /v1/images/generations
-AgnesVideoAdapter → POST /v1/videos (create) → GET /v1/videos/{task_id} (poll)
+AgnesVideoAdapter → POST /v1/videos → GET /v1/videos/{task_id}
+
+ArkTextAdapter   → POST /chat/completions (OpenAI 兼容)
+ArkImageAdapter  → POST /images/generations
+ArkVideoAdapter  → POST /contents/generations/tasks → GET /contents/generations/tasks/{task_id}
 ```
 
 ## Phase 1-13 总览
@@ -112,6 +117,10 @@ npm run probe:agnes:video:poll  # 轮询已有视频 task
 npm run probe:agnes:video:t2v   # Case A: 文生视频
 npm run probe:agnes:video:i2v-url  # Case B: 图生视频(URL)
 npm run probe:agnes:video:i2v-b64  # Case C: 图生视频(b64)
+npm run probe:ark:text            # Ark 文本探针
+npm run probe:ark:image           # Ark 图片探针
+npm run probe:ark:video           # Ark 视频探针
+npm run probe:ark:video:poll      # Ark 视频轮询
 ```
 
 ## 真实 API 视频关键发现
