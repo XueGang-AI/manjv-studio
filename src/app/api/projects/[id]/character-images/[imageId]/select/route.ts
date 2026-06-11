@@ -3,7 +3,7 @@ import prisma from '@/lib/prisma'
 
 /**
  * POST /api/projects/:id/character-images/:imageId/select
- * 选择该图片作为标准角色图（同一角色其他图取消选中）
+ * 选择该图片作为标准角色图（同一 referenceType 内互斥，不同角度可同时选中）
  */
 export async function POST(
   request: NextRequest,
@@ -19,11 +19,23 @@ export async function POST(
       return NextResponse.json({ success: false, error: '图片不存在' }, { status: 404 })
     }
 
-    // 同一角色其他图取消选中
-    await prisma.characterImage.updateMany({
-      where: { characterId: image.characterId, projectId },
-      data: { isSelected: false },
-    })
+    // 同一角色、同一 referenceType 的其他图取消选中（不同角度可同时选中）
+    if (image.referenceType) {
+      await prisma.characterImage.updateMany({
+        where: {
+          characterId: image.characterId, projectId,
+          referenceType: image.referenceType,
+          id: { not: imageId },
+        },
+        data: { isSelected: false },
+      })
+    } else {
+      // 旧数据兼容：没有 reference_type 时保持旧行为（只保留 1 张 selected）
+      await prisma.characterImage.updateMany({
+        where: { characterId: image.characterId, projectId, id: { not: imageId } },
+        data: { isSelected: false },
+      })
+    }
 
     // 选中当前图片
     await prisma.characterImage.update({
@@ -33,7 +45,7 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      data: { imageId, characterId: image.characterId, isSelected: true },
+      data: { imageId, characterId: image.characterId, isSelected: true, referenceType: image.referenceType },
     })
   } catch (error) {
     console.error('Failed to select image:', error)

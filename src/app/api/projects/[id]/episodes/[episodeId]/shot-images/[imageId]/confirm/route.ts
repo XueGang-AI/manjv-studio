@@ -13,11 +13,16 @@ export async function POST(
 
     const image = await prisma.shotImage.findFirst({ where: { id: imageId, projectId } })
     if (!image) return NextResponse.json({ success: false, error: '图片不存在' }, { status: 404 })
-    if (!image.isSelected) return NextResponse.json({ success: false, error: '请先选择该图片为最终图' }, { status: 400 })
 
-    // 确认该图，同一镜头其他图取消确认
-    await prisma.shotImage.updateMany({ where: { shotId: image.shotId, projectId, id: { not: imageId } }, data: { isConfirmed: false } })
-    await prisma.shotImage.update({ where: { id: imageId }, data: { isConfirmed: true } })
+    // 直接确认（无需先选择），同一镜头其他图取消确认和选中
+    await prisma.shotImage.updateMany({
+      where: { shotId: image.shotId, projectId, id: { not: imageId } },
+      data: { isConfirmed: false, isSelected: false },
+    })
+    await prisma.shotImage.update({
+      where: { id: imageId },
+      data: { isConfirmed: true, isSelected: true },
+    })
 
     // 检查所有镜头是否都有确认图
     const shots = await prisma.shot.findMany({ where: { episodeId, projectId } })

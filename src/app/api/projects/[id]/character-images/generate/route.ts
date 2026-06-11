@@ -33,11 +33,32 @@ const ANGLE_PROMPTS: Record<string, string> = {
   pose:            'action pose reference, dynamic posture, motion lines',
 }
 
+/** 带指数退避的重试包装器 */
+async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, label = ''): Promise<T> {
+  let lastError: Error | null = null
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn()
+    } catch (error) {
+      lastError = error as Error
+      if (attempt < maxRetries) {
+        const delay = attempt * 2000
+        console.warn(`[Retry] ${label} attempt ${attempt}/${maxRetries} failed, retrying in ${delay}ms: ${lastError.message}`)
+        await new Promise(r => setTimeout(r, delay))
+      }
+    }
+  }
+  throw lastError!
+}
+
 /**
  * POST /api/projects/:id/character-images/generate?mode=quick|consistency
  *
  * mode=quick (默认): 每角色 1 张 front_full_body
  * mode=consistency:  每角色 5 张 (front_full_body, front_half_body, left_side, right_side, back_view)
+ *
+ * 去重：已有对应角度图片的角色自动跳过
+ * 重试：单张图片失败自动重试最多 3 次
  */
 export async function POST(
   request: NextRequest,
@@ -89,15 +110,38 @@ export async function POST(
       const allResults: Array<{ characterId: string; characterName: string; images: unknown[] }> = []
 
       for (const char of characters) {
+        // 去重：查询该角色已有图片，只生成缺失的角度
+        const existingImages = await prisma.characterImage.findMany({
+          where: { characterId: char.id, projectId },
+          select: { imageUrl: true, referenceType: true },
+        })
+        const existingTypes = new Set(existingImages.map(i => i.referenceType).filter(Boolean))
+        const missingTypes = types.filter(t => !existingTypes.has(t))
+
+        // 全部角度已有，跳过
+        if (missingTypes.length === 0) {
+          console.log(`[Dedup] 角色 ${char.name || char.id} 所有角度已存在，跳过`)
+          // 把已有图片加入结果，前端可以正常展示
+          allResults.push({ characterId: char.id, characterName: char.name || '', images: [] })
+          continue
+        }
+
+        console.log(`[Dedup] 角色 ${char.name || char.id}: 已有 ${existingTypes.size} 个角度，需生成 ${missingTypes.length} 个: ${missingTypes.join(', ')}`)
+
         // 角色核心描述（所有角度共享）
         const corePrompt = char.enFixedPrompt || char.zhFixedPrompt || `${char.name}, character design, ${style} style`
         const charImages: unknown[] = []
 
-        for (let i = 0; i < types.length; i++) {
-          const refType = types[i]
+        // 锚点图 URL —— 如果已有 front_full_body，用它做参考；否则等第一张生成后获取
+        const existingAnchor = existingImages.find(i => i.referenceType === 'front_full_body')
+        let anchorImageUrl: string | null = existingAnchor?.imageUrl || null
+
+        for (let i = 0; i < missingTypes.length; i++) {
+          const refType = missingTypes[i]
           const angleSuffix = ANGLE_PROMPTS[refType] || ''
           const prompt = `${corePrompt}, ${angleSuffix}`
-          const isFirst = i === 0
+          // 只有当 anchor 不存在且当前是第一个类型，才是主图
+          const isFirst = i === 0 && !existingAnchor
 
           const genReq: ImageGenerationRequest = {
             taskType: 'character_image',
@@ -109,7 +153,29 @@ export async function POST(
             seed: undefined,
           }
 
-          const response = await imageAdapter.generate(genReq)
+          // 一致性模式：有锚点图时传入 reference_images，确保同一个人物
+          if (anchorImageUrl) {
+            genReq.referenceImages = [anchorImageUrl]
+          }
+
+          // 单张生成带重试（最多 3 次），单张失败不影响其他角度
+          let response: Awaited<ReturnType<typeof imageAdapter.generate>>
+          try {
+            response = await withRetry(
+              () => imageAdapter.generate(genReq),
+              3,
+              `${char.name || char.id}/${refType}`
+            )
+          } catch (singleError) {
+            console.error(`[Generate] ${char.name || char.id}/${refType} 生成失败（已重试）: ${(singleError as Error).message}`)
+            // 跳过这个角度，继续生成下一个
+            continue
+          }
+
+          // 保存锚点图 URL（第一张 front_full_body 图）
+          if (refType === 'front_full_body' && response.images[0]?.url && !anchorImageUrl) {
+            anchorImageUrl = response.images[0].url
+          }
 
           const created = await Promise.all(response.images.map(img =>
             prisma.characterImage.create({
@@ -120,9 +186,13 @@ export async function POST(
                 seed: String(img.seed || ''),
                 modelName: process.env.AGNES_IMAGE_MODEL || 'Agnes-Image-2.0-Flash',
                 referenceType: refType,
-                isPrimary: isFirst,
-                params: { aspect_ratio: aspectRatio, style, num_outputs: 1, reference_type: refType, ...img.params },
-                isSelected: isFirst,    // 第一张自动选中
+                isPrimary: refType === 'front_full_body',
+                params: {
+                  aspect_ratio: aspectRatio, style, num_outputs: 1, reference_type: refType,
+                  ...(anchorImageUrl ? { reference_image: anchorImageUrl } : {}),
+                  ...img.params,
+                },
+                isSelected: refType === 'front_full_body',    // 正面全身自动选中
                 isConfirmed: false,
               },
             })

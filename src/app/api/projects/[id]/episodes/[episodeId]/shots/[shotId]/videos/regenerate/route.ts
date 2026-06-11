@@ -28,7 +28,7 @@ export async function POST(
       motionStrength: (vidPrompt?.motionStrength as 'low'|'medium'|'high') || 'medium',
       fps: 24,
       voiceText: (shot.dialogue as string) || undefined,
-      generateAudio: !!(shot.dialogue),
+      generateAudio: true,
     }
 
     const response = await adapterFactory.getVideoAdapter().generate(genReq)

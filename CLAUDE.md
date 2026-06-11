@@ -54,13 +54,24 @@ npx tsx scripts/e2e-real-15s-prototype.ts  # 30s 原型全流程
 - Mock 模式: ✅ `npm run test:e2e` 20/20
 - 真实文本 API: ✅ 故事/角色/分镜均通过
 - 真实图片 API: ✅ 角色图+分镜图均生成
+  - ⚠️ Agnes Image API 传 `reference_images` 时忽略 `num_outputs`，只返回 1 张
+  - ✅ 分镜图 prompt 嵌入角色完整外貌描述（hair/eyes/skin/face/clothing/signatureFeatures），不依赖 reference_images
 - 真实视频 API: ✅ 创建→轮询→completed→下载→ffprobe 全部验证
   - ⚠️ 队列延迟 ~2min（非高峰）到数小时（高峰）
   - ⚠️ video_url 在 `remixed_from_video_id` 字段
   - ✅ Adapter 异步模式: `createVideoTask()` → `pollVideoTask()` → `downloadVideo()`
-  - ✅ TTS 配音: shot 有 dialogue 时自动传 `voice_text` + `generate_audio`
+  - ✅ TTS 配音: `generateAudio: true` 始终开启
+  - ⚠️ 仅支持 1 张 inputImage，不支持多张 reference_images
 - 角色参考图: 多角度系统（front_full_body/front_half_body/left_side/right_side/back_view）
-- 分镜图 reference: 根据 shot 内容自动选择角色参考图
+  - ✅ 锚点图先行，后续角度以锚点图为参考确保一致性
+  - ✅ 去重：已有角度自动跳过
+  - ✅ 单张失败重试（指数退避 ×3），不影响其他角度
+  - ✅ 先成后删：regenerate 全部成功再替换旧图
+- 分镜图: ✅ 自动匹配角色参考角度（根据 shot_size/动作关键词）
+  - ✅ prompt 嵌入角色外貌描述保证一致性
+  - ✅ 批量确认：一键确认所有镜头
+- 视频生成: ✅ 每个镜头 1 段视频，8 镜头 = 8 段
+- 阶段流转: ✅ 所有阶段必须全部确认才能进入下一步
 
 ## 开发注意事项
 
@@ -79,8 +90,15 @@ npx tsx scripts/e2e-real-15s-prototype.ts  # 30s 原型全流程
 
 - 视频 URL 字段：`remixed_from_video_id`（非 `video_url`、`url`）
 - 异步模式：`createVideoTask()` → 保存 `remote_task_id` → `pollVideoTask()` 或 `waitForVideoCompletion()` → `downloadVideo()`
-- TTS 配音：`voice_text` + `generate_audio` → 产出 AAC 2ch 48kHz 音轨
+- TTS 配音：`voice_text` + `generate_audio: true`（始终开启）→ 产出 AAC 2ch 48kHz 音轨
+- 输入限制：仅支持 1 张 `image`（URL 或 data URI），不支持多张 reference_images
 - 探针验证的额外可接受字段：`dialogue`、`audio_url`、`voice_id`、`lip_sync`
+
+### Agnes Image API
+
+- `reference_images` 参数：传此参数时 API 忽略 `num_outputs`，只返回 1 张图
+- 分镜图一致性策略：prompt 嵌入角色完整外貌描述 + `numOutputs: 4`（不传 reference_images）
+- 角色图一致性策略：锚点图先行 + reference_images 传 1 张
 
 ### 项目表单
 
