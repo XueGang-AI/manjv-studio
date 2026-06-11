@@ -28,12 +28,29 @@ AI 驱动的漫剧创作平台，支持故事分析、角色设计、分镜生�
 - **分辨率**: 当前输出 1280×768
 - **异步模式**: ✅ Adapter 已重构，支持 create/poll/wait/download
 - **任务恢复**: ✅ 支持根据 task_id 继续轮询
-- **TTS 配音**: ✅ shot 有对白时自动传 `voice_text` + `generate_audio`，产出 AAC 音轨
+- **TTS 配音**: ✅ `generate_audio: true` 始终开启
+- **输入限制**: ⚠️ 仅支持 1 张 inputImage，不支持多张 reference_images
 
 ### 角色参考图系统
 
-支持多角度参考图：front_full_body / front_half_body / left_side / right_side / back_view。
-快速模式（1张）和一致性模式（5张），分镜图根据镜头内容自动匹配参考角度。
+多角度：front_full_body / front_half_body / left_side / right_side / back_view。
+快速模式（1张）和一致性模式（5张），锚点图先行，后续角度以锚点图为参考。
+- 去重：已有角度自动跳过
+- 重试：单张失败指数退避 ×3
+- 先成后删：regenerate 全部成功再替换旧图
+- 批量确认：一键确认所有角度
+
+### 分镜图系统
+
+- prompt 嵌入角色完整外貌描述（hair/eyes/skin/face/clothing/signatureFeatures）
+- 根据镜头 shot_size 自动匹配最合适的角色参考角度
+- 批量确认：一键确认所有镜头
+- ⚠️ Agnes Image API 传 `reference_images` 时忽略 `num_outputs`，因此不传 refs 以获取 4 张候选图
+
+### 视频生成
+
+- 每个镜头生成 1 段视频（非 2 段）
+- `generate_audio: true` 始终开启
 
 ### 项目表单字段
 
@@ -53,6 +70,7 @@ AI 驱动的漫剧创作平台，支持故事分析、角色设计、分镜生�
 3. 批量生成可能存在并发/QPS 限制
 4. 视频内容质量仍需人工确认
 5. API 返回字段可能变化，已通过多字段回退兼容
+6. Agnes Image API 传 `reference_images` 时忽略 `num_outputs`
 
 ## 快速开始
 
