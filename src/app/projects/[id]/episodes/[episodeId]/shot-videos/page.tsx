@@ -255,7 +255,7 @@ export default function ShotVideosPage() {
         <Card><CardContent className="flex flex-col items-center py-16">
           <Loader2 size={48} className="animate-spin text-indigo-500 mb-4" />
           <h3 className="text-lg font-medium text-gray-700 mb-1">AI 正在生成视频片段...</h3>
-          <p className="text-gray-400 text-sm">{shots.length} 个镜头 × 2 段视频</p>
+          <p className="text-gray-400 text-sm">{shots.length} 个镜头</p>
         </CardContent></Card>
       )}
 

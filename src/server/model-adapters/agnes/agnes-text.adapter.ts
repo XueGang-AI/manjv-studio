@@ -35,6 +35,11 @@ export class AgnesTextAdapter extends BaseTextAdapter {
 
     if (request.outputSchema) {
       body.response_format = { type: 'json_object' }
+      // 如果 schema 内容尚未在 system prompt 中，追加注入
+      const schemaRaw = (request.outputSchema as Record<string, unknown>)._raw as string | undefined
+      if (schemaRaw && !messages[0].content.includes(schemaRaw.substring(0, 200))) {
+        messages[0].content = messages[0].content + '\n\n## Required JSON Structure\n' + schemaRaw
+      }
     }
 
     const response = await fetch(`${this.baseUrl}/chat/completions`, {

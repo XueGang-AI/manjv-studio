@@ -98,6 +98,17 @@ export default function ShotImagesPage() {
     finally { setActionLoading(null) }
   }
 
+  const handleBatchConfirm = async () => {
+    setActionLoading('batch-confirm')
+    try {
+      const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/shot-images/batch-confirm`, { method: 'POST' })
+      const data = await res.json()
+      if (data.success) await fetchData()
+      else setError(data.error || '批量确认失败')
+    } catch { setError('请求失败') }
+    finally { setActionLoading(null) }
+  }
+
   const shots = state?.shots || []
   const isGenerating = state?.projectStatus === 'SHOT_IMAGE_GENERATING' || generating
   const hasImages = shots.some(s => s.images.length > 0)
@@ -119,9 +130,15 @@ export default function ShotImagesPage() {
         </div>
         <div className="flex items-center gap-2">
           {hasImages && !allConfirmed && (
-            <Button variant="outline" onClick={handleGenerate} disabled={isGenerating}>
-              <RefreshCw size={16} className={`mr-1 ${isGenerating ? 'animate-spin' : ''}`} /> 重新生成全部
-            </Button>
+            <>
+              <Button variant="outline" onClick={handleGenerate} disabled={isGenerating}>
+                <RefreshCw size={16} className={`mr-1 ${isGenerating ? 'animate-spin' : ''}`} /> 重新生成全部
+              </Button>
+              <Button onClick={handleBatchConfirm} disabled={actionLoading === 'batch-confirm'}>
+                {actionLoading === 'batch-confirm' ? <Loader2 size={16} className="animate-spin mr-1" /> : <CheckCircle2 size={16} className="mr-1" />}
+                全部确认
+              </Button>
+            </>
           )}
           {!hasImages && !isGenerating && (
             <Button size="lg" onClick={handleGenerate} disabled={isGenerating}>
@@ -228,14 +245,12 @@ export default function ShotImagesPage() {
                       )}
                       {!isConfirmed && (
                         <div className="flex gap-1">
+                          <Button size="sm" className="flex-1 text-xs h-7" onClick={() => handleConfirm(img.id)} disabled={!!actionLoading}>
+                            {isLoading ? <Loader2 size={12} className="animate-spin" /> : '确认'}
+                          </Button>
                           {!isSelected && (
-                            <Button size="sm" variant="outline" className="flex-1 text-xs h-7" onClick={() => handleSelect(img.id)} disabled={!!actionLoading}>
-                              {isLoading ? <Loader2 size={12} className="animate-spin" /> : '选择'}
-                            </Button>
-                          )}
-                          {isSelected && (
-                            <Button size="sm" className="flex-1 text-xs h-7" onClick={() => handleConfirm(img.id)} disabled={!!actionLoading}>
-                              {isLoading ? <Loader2 size={12} className="animate-spin" /> : '确认'}
+                            <Button size="sm" variant="outline" className="text-xs h-7 px-1" onClick={() => handleSelect(img.id)} disabled={!!actionLoading} title="选择（同镜头有多个候选时使用）">
+                              {isLoading ? <Loader2 size={12} className="animate-spin" /> : '选'}
                             </Button>
                           )}
                         </div>

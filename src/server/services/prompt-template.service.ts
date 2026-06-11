@@ -48,19 +48,20 @@ export class PromptTemplateService {
     systemPrompt = this.fillVariables(systemPrompt, variables)
     userPrompt = this.fillVariables(userPrompt, variables)
 
-    // 输出约束
-    const outputConstraint = '\n\nIMPORTANT: You must output ONLY valid JSON. Do not include markdown code blocks, explanations, or any text outside the JSON object. The JSON must conform to the schema described above.'
-
-    systemPrompt = systemPrompt + outputConstraint
-
-    // 提取 output schema (简化版)
+    // 提取 output schema 并注入到 system prompt
     let outputSchema: Record<string, unknown> | null = null
     if (schemaMatch) {
+      const schemaText = schemaMatch[1].trim()
       outputSchema = {
         _defined: true,
-        _raw: schemaMatch[1].trim().substring(0, 500),
+        _raw: schemaText,
       }
+      // 注入 schema 到 system prompt，让 AI 知道完整输出结构
+      systemPrompt = systemPrompt + '\n\n## Required Output JSON Structure\nYou MUST output a JSON object that exactly matches the following structure. Every field is required — do not leave any field empty or null:\n\n' + schemaText
     }
+
+    // 输出格式约束
+    systemPrompt = systemPrompt + '\n\nCRITICAL: Output ONLY the JSON object. No markdown, no explanations, no code blocks. Every field in the schema above MUST be populated with realistic, detailed content. Empty objects {} or empty arrays [] are NOT acceptable.'
 
     return { systemPrompt, userPrompt, outputSchema }
   }
