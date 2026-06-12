@@ -52,8 +52,8 @@ export default function ProjectsPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">我的项目</h1>
-          <p className="text-gray-500 mt-1">管理你的 AI 漫剧创作项目</p>
+          <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">我的项目</h1>
+          <p className="text-[var(--color-text-muted)] mt-1">管理你的 AI 漫剧创作项目</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={fetchProjects} disabled={loading}>
@@ -70,14 +70,14 @@ export default function ProjectsPage() {
 
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <RefreshCw size={24} className="animate-spin text-gray-300" />
+          <RefreshCw size={24} className="animate-spin text-[var(--color-text-muted)]" />
         </div>
       ) : projects.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center py-16">
-            <FolderOpen size={56} className="text-gray-300 mb-4" />
-            <h3 className="text-lg font-medium text-gray-500 mb-2">还没有项目</h3>
-            <p className="text-gray-400 mb-6">创建你的第一个 AI 漫剧项目，开始创作之旅</p>
+            <FolderOpen size={56} className="text-[var(--color-text-muted)] mb-4" />
+            <h3 className="text-lg font-medium text-[var(--color-text-secondary)] mb-2">还没有项目</h3>
+            <p className="text-[var(--color-text-muted)] mb-6">创建你的第一个 AI 漫剧项目，开始创作之旅</p>
             <Link href="/projects/new">
               <Button size="lg">
                 <Plus size={20} className="mr-1" />

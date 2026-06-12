@@ -42,13 +42,13 @@ export default function NewProjectPage() {
   return (
     <div className="p-6">
       <div className="max-w-2xl mx-auto mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">创建新项目</h1>
-        <p className="text-gray-500 mt-1">填写故事信息，开始 AI 漫剧创作</p>
+        <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">创建新项目</h1>
+        <p className="text-[var(--color-text-muted)] mt-1">填写故事信息，开始 AI 漫剧创作</p>
       </div>
 
       {error && (
-        <div className="max-w-2xl mx-auto mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
-          <p className="text-sm text-red-600">{error}</p>
+        <div className="max-w-2xl mx-auto mb-4 bg-[var(--color-danger-muted)] border border-[var(--color-border-dim)] rounded-[var(--radius-md)] p-3">
+          <p className="text-sm text-[var(--color-danger)]">{error}</p>
         </div>
       )}
 
