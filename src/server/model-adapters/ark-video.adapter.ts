@@ -108,7 +108,7 @@ export class ArkVideoAdapter extends BaseVideoAdapter {
     const createBody: Record<string, unknown> = {
       model: this.model,
       content,
-      duration: request.duration || 5,
+      duration: snapArkSeedanceDuration(request.duration, request.taskType),
       ratio: request.aspectRatio || '9:16',
       resolution: DEFAULT_RESOLUTION,
       watermark: false,
@@ -326,4 +326,38 @@ export class ArkVideoAdapter extends BaseVideoAdapter {
     if (s === 'queued' || s === 'pending' || s === 'waiting') return 'queued'
     return 'unknown'
   }
+}
+
+/**
+ * 把请求里的 duration 收口到 doubao-seedance-1-5-pro-251215 支持的合法值集合。
+ * 已知约束（官方文档 + API 实际验证）：
+ *   - i2v: 支持 4 ~ 12 秒（整数）
+ *   - t2v: 支持 5 / 10
+ * 超出范围的值会被远端 400 InvalidParameter 拒掉，所以这里 clamp 到合法区间。
+ */
+function snapArkSeedanceDuration(
+  requested: number | undefined,
+  taskType: 'text_to_video' | 'image_to_video'
+): number {
+  if (typeof requested !== 'number' || !Number.isFinite(requested) || requested <= 0) {
+    return taskType === 'image_to_video' ? 5 : 5
+  }
+
+  if (taskType === 'image_to_video') {
+    // i2v: 4 ~ 12，clamp 到合法范围
+    return Math.max(4, Math.min(12, Math.round(requested)))
+  }
+
+  // t2v: 仅允许 5 / 10，四舍五入到最近的合法值
+  const ALLOWED = [5, 10]
+  let best = ALLOWED[0]
+  let bestDiff = Math.abs(requested - best)
+  for (const v of ALLOWED) {
+    const d = Math.abs(requested - v)
+    if (d < bestDiff) {
+      best = v
+      bestDiff = d
+    }
+  }
+  return best
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { promptTemplateService } from '@/server/services/prompt-template.service'
 import { adapterFactory } from '@/server/model-adapters/adapter.factory'
+import { getMaxShotDuration } from '@/lib/utils'
 import type { TextGenerationRequest } from '@/server/model-adapters/types'
 
 /**
@@ -57,7 +58,7 @@ export async function POST(
     const task = await prisma.generationTask.create({
       data: {
         projectId, taskType: 'GENERATE_STORYBOARD',
-        modelName: process.env.AGNES_TEXT_MODEL || 'Agnes-2.0-Flash',
+        modelName: project.modelProvider === 'ark' ? (process.env.ARK_TEXT_MODEL || 'doubao-seed-character-251128') : (process.env.AGNES_TEXT_MODEL || 'agnes-2.0-flash'),
         status: 'running', input: { project_id: projectId },
       },
     })
@@ -73,6 +74,9 @@ export async function POST(
       // 读取素材库做轻量注入
       const materialRefs = loadMaterialRefs(project)
 
+      // 计算视频模型单镜头时长上限，传给 prompt 约束 AI 生成合理时长的镜头
+      const maxShotDuration = getMaxShotDuration(project.modelProvider)
+
       // 渲染 Prompt
       const rendered = await promptTemplateService.render('storyboard', {
         project_name: project.projectName,
@@ -83,6 +87,7 @@ export async function POST(
         art_style: project.artStyle || '',
         target_platform: project.targetPlatform || '',
         episode_duration: String(project.episodeDuration),
+        max_shot_duration: String(maxShotDuration),
         episode_number: '1',
         aspect_ratio: project.aspectRatio || '9:16',
         story_package_json: JSON.stringify(storyPackage.content),
@@ -117,7 +122,10 @@ export async function POST(
       }
 
       const episodeData = (content.episode || {}) as Record<string, unknown>
-      const shots = content.shots as Array<Record<string, unknown>>
+      let shots = content.shots as Array<Record<string, unknown>>
+
+      // 后处理：拆分超长镜头（AI 可能忽略 prompt 中的时长约束）
+      shots = splitOversizedShots(shots, maxShotDuration)
 
       // 保存 Episode
       const episode = await prisma.episode.create({
@@ -270,4 +278,47 @@ function loadMaterialRefs(project: { artStyle?: string | null; targetPlatform?: 
 
   ref += '\n\n请结合以上素材库知识，在分镜中灵活运用镜头语言。\n'
   return ref
+}
+
+/**
+ * 拆分超过 maxDuration 的镜头为多个子镜头
+ * 保留原始镜头的所有内容属性，仅调整时间轴和 shot_no
+ */
+function splitOversizedShots(
+  shots: Array<Record<string, unknown>>,
+  maxDuration: number
+): Array<Record<string, unknown>> {
+  const result: Array<Record<string, unknown>> = []
+  let shotNo = 1
+
+  for (const shot of shots) {
+    const startTime = (shot.start_time as number) || 0
+    const endTime = (shot.end_time as number) || 10
+    const duration = endTime - startTime
+
+    if (duration <= maxDuration) {
+      // 在合理范围内，直接使用，重编 shot_no
+      result.push({ ...shot, shot_no: shotNo++ })
+    } else {
+      // 超长镜头：拆分为多个等长的子镜头
+      const partCount = Math.ceil(duration / maxDuration)
+      const partDuration = duration / partCount
+
+      for (let i = 0; i < partCount; i++) {
+        const partStart = startTime + Math.round(i * partDuration)
+        const partEnd = startTime + Math.round((i + 1) * partDuration)
+        const suffix = partCount > 1 ? ` (${i + 1}/${partCount})` : ''
+
+        result.push({
+          ...shot,
+          shot_no: shotNo++,
+          shot_name: `${shot.shot_name || ''}${suffix}`,
+          start_time: partStart,
+          end_time: partEnd,
+        })
+      }
+    }
+  }
+
+  return result
 }

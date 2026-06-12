@@ -79,3 +79,35 @@ export const TASK_TYPE_MAP: Record<string, string> = {
   RENDER_FINAL_VIDEO: '合成最终成片',
   QUALITY_CHECK: '质量检查',
 }
+
+/**
+ * 按 provider 约束 snap 镜头 duration，确保存入 DB 的值与实际视频时长一致。
+ *
+ * - Agnes: num_frames ≤ 441 / 24fps，snap 到 8n+1 帧数对应的精确秒数
+ * - Ark i2v: 4~12 秒整数
+ * - Ark t2v: 5 或 10 秒
+ */
+export function snapShotDuration(requested: number, modelProvider: string): number {
+  if (modelProvider === 'ark') {
+    return Math.max(4, Math.min(12, Math.round(requested)))
+  }
+  // Agnes: snap 到 8n+1 帧数 / 24fps 对应的秒数
+  const fps = 24
+  const targetFrames = Math.round(requested * fps)
+  let n = Math.round((targetFrames - 1) / 8)
+  n = Math.max(0, Math.min(n, 55)) // 8*55+1=441
+  const numFrames = 8 * n + 1
+  return numFrames / fps
+}
+
+/**
+ * 根据项目的 modelProvider 返回视频生成模型单镜头最大时长（秒）
+ * - Agnes Video: num_frames ≤ 441 / 24fps ≈ 18.4s，取 18
+ * - Ark Seedance i2v: 最大 12 秒
+ * - 保守默认: 12 秒
+ */
+export function getMaxShotDuration(modelProvider: string | null): number {
+  if (modelProvider === 'ark') return 12
+  if (modelProvider === 'agnes') return 18
+  return 12
+}

@@ -130,7 +130,7 @@ export async function POST(
     await prisma.project.update({ where: { id: projectId }, data: { status: 'SHOT_IMAGE_GENERATING' } })
     const task = await prisma.generationTask.create({
       data: { projectId, episodeId, taskType: 'GENERATE_SHOT_IMAGES',
-        modelName: process.env.AGNES_IMAGE_MODEL || 'Agnes-Image-2.0-Flash',
+        modelName: project.modelProvider === 'ark' ? (process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5-0-260128') : (process.env.AGNES_IMAGE_MODEL || 'agnes-image-2.0-flash'),
         status: 'running', input: { shot_count: shots.length, reference_characters: [...refByName.keys()] } },
     })
 
@@ -330,7 +330,7 @@ export async function POST(
               shotId: shot.id, projectId,
               imageUrl: img.url, prompt, negativePrompt: negative,
               seed: String(img.seed || ''), style, aspectRatio,
-              modelName: process.env.AGNES_IMAGE_MODEL || 'Agnes-Image-2.0-Flash',
+              modelName: project.modelProvider === 'ark' ? (process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5-0-260128') : (process.env.AGNES_IMAGE_MODEL || 'agnes-image-2.0-flash'),
               referenceImages: references,
               params: { ...img.params, num_outputs: numOutputs },
               isSelected: false, isConfirmed: false,

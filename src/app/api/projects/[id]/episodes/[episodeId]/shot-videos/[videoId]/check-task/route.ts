@@ -21,14 +21,24 @@ export async function POST(
       return NextResponse.json({ success: false, error: '该视频没有远端任务 ID' }, { status: 400 })
     }
 
-    // 获取真实视频适配器（忽略 Mock 开关，这里始终用真实 API 轮询）
-    const videoAdapter = adapterFactory.getVideoAdapter()
+    // 必须用项目当前的 modelProvider 选择对应适配器。
+    // 之前这里直接调 getVideoAdapter() 走默认 agnes，导致 ark 项目的 task_id 被丢到 agnes API 报错。
+    // （忽略 Mock 开关：远端真任务不存在于 mock 模式中，这里始终用真实 API 轮询）
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { modelProvider: true },
+    })
+    if (!project) {
+      return NextResponse.json({ success: false, error: '项目不存在' }, { status: 404 })
+    }
+
+    const videoAdapter = adapterFactory.getVideoAdapter(project.modelProvider)
     const pollResult = await videoAdapter.pollVideoTask(video.remoteTaskId)
 
     // 更新数据库记录
     const updateData: Record<string, unknown> = {
       remoteStatus: pollResult.status,
-      remoteProgress: pollResult.progress ?? null,
+      remoteProgress: typeof pollResult.progress === 'number' ? Math.round(pollResult.progress) : null,
       remoteResponseJson: pollResult.response,
       lastPolledAt: new Date(),
     }
@@ -59,6 +69,7 @@ export async function POST(
     })
   } catch (error) {
     console.error('Failed to check video task:', error)
-    return NextResponse.json({ success: false, error: '检查任务失败' }, { status: 500 })
+    const msg = (error as Error)?.message || '检查任务失败'
+    return NextResponse.json({ success: false, error: `检查任务失败: ${msg}` }, { status: 500 })
   }
 }

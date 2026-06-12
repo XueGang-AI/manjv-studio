@@ -46,8 +46,9 @@ export class ArkImageAdapter extends BaseImageAdapter {
       body.aspect_ratio = request.aspectRatio
     }
 
-    // Multi-image: Ark Seedream 5.0 ignores n/num_outputs/sequential_image_generation
-    // (all return data[] length: 1). We still pass num_outputs for forward compatibility.
+    // Multi-image: 与 Agnes 分支保持一致，直接透传 num_outputs。
+    // Agnes 模式下已知：传 reference_images 时 API 会忽略 num_outputs 只返 1 张；
+    // 调用方（shot-images / character-images）已规避该问题。
     if (request.numOutputs && request.numOutputs > 1) {
       body.num_outputs = request.numOutputs
     }

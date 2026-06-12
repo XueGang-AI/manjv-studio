@@ -156,7 +156,7 @@ export async function POST(
             prompt: img.prompt,
             negativePrompt,
             seed: img.seed,
-            modelName: process.env.AGNES_IMAGE_MODEL || 'Agnes-Image-2.0-Flash',
+            modelName: project.modelProvider === 'ark' ? (process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5-0-260128') : (process.env.AGNES_IMAGE_MODEL || 'agnes-image-2.0-flash'),
             referenceType: img.referenceType,
             isPrimary: img.isPrimary,
             isSelected: img.isSelected,

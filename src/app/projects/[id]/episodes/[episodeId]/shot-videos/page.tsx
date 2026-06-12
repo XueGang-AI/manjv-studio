@@ -67,7 +67,8 @@ export default function ShotVideosPage() {
   const [generating, setGenerating] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [pollingTaskIds, setPollingTaskIds] = useState<Set<string>>(new Set())
+
+  const [autoPollTimer, setAutoPollTimer] = useState<ReturnType<typeof setInterval> | null>(null)
 
   const fetchData = useCallback(async () => {
     try {
@@ -79,11 +80,58 @@ export default function ShotVideosPage() {
   }, [projectId, episodeId])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  /** 批量轮询远端任务：调用 /batch-check-tasks 真正查询远程 API，再刷新本地数据 */
+  const batchCheckTasks = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `/api/projects/${projectId}/episodes/${episodeId}/shot-videos/batch-check-tasks`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }
+      )
+      const data = await res.json()
+      if (data.success) {
+        // 批量轮询后刷新本地数据
+        await fetchData()
+        // 如果所有任务都已终态，停止轮询
+        if (data.data?.pending === 0 && data.data?.checked > 0) {
+          stopAutoPoll()
+        }
+      }
+    } catch {
+      // 轮询失败不影响页面，静默跳过
+    }
+  }, [projectId, episodeId, fetchData])
+
+  const stopAutoPoll = useCallback(() => {
+    setAutoPollTimer(prev => {
+      if (prev) clearInterval(prev)
+      return null
+    })
+  }, [])
+
+  /** 启动自动轮询（真正查询远程 API，而非只读数据库） */
+  const startAutoPoll = useCallback(() => {
+    stopAutoPoll()
+    const timer = setInterval(batchCheckTasks, 10000) // 10 秒轮询一次远程状态
+    setAutoPollTimer(timer)
+  }, [batchCheckTasks, stopAutoPoll])
+
+  // 项目状态为 GENERATING 时，自动启动轮询
   useEffect(() => {
     if (state?.projectStatus === 'SHOT_VIDEO_GENERATING') {
-      const interval = setInterval(fetchData, 2000); return () => clearInterval(interval)
+      // 只有尚未启动轮询时才启动
+      if (!autoPollTimer) {
+        startAutoPoll()
+      }
+    } else {
+      stopAutoPoll()
     }
-  }, [state?.projectStatus, fetchData])
+  }, [state?.projectStatus, autoPollTimer, startAutoPoll, stopAutoPoll])
+
+  // 组件卸载时清理轮询
+  useEffect(() => {
+    return () => stopAutoPoll()
+  }, [stopAutoPoll])
 
   const handleGenerate = async () => {
     setGenerating(true); setError(null)
@@ -92,69 +140,22 @@ export default function ShotVideosPage() {
       const data = await res.json()
       if (data.success) {
         await fetchData()
-        // 如果有 remote task ids，自动开始轮询
-        if (data.data?.shots) {
-          const taskIds: string[] = []
-          for (const sg of data.data.shots) {
-            for (const v of (sg.videos || [])) {
-              if (v.remoteTaskId && v.remoteStatus !== 'completed') taskIds.push(v.remoteTaskId)
-            }
-          }
-          if (taskIds.length > 0) {
-            setPollingTaskIds(new Set(taskIds))
-            startAutoPoll()
-          }
+        // 异步任务模式下，立即启动自动轮询
+        if (data.data?.isAsync) {
+          startAutoPoll()
         }
       } else setError(data.error || '生成失败')
     } catch { setError('请求失败') } finally { setGenerating(false) }
   }
 
-  // 自动轮询远端任务
-  const startAutoPoll = useCallback(() => {
-    const timer = setInterval(async () => {
-      setPollingTaskIds(prev => {
-        if (prev.size === 0) { clearInterval(timer); return prev }
-        return prev
-      })
-
-      // 批量检查所有未完成的远端任务
-      let hasActive = false
-      const ids = Array.from(pollingTaskIds)
-      for (const shot of (state?.shots || [])) {
-        for (const v of shot.videos) {
-          if (v.remoteTaskId && v.remoteStatus && v.remoteStatus !== 'completed' && v.remoteStatus !== 'failed') {
-            hasActive = true
-          }
-        }
-      }
-
-      if (!hasActive) {
-        clearInterval(timer)
-        setPollingTaskIds(new Set())
-        return
-      }
-
-      await fetchData()
-    }, 5000)
-
-    return () => clearInterval(timer)
-  }, [pollingTaskIds, state, fetchData])
-
   /** 检查单个远端视频任务 */
-  const handleCheckTask = async (videoId: string, remoteTaskId: string) => {
+  const handleCheckTask = async (videoId: string) => {
     setActionLoading(videoId)
     try {
       const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/shot-videos/${videoId}/check-task`, { method: 'POST' })
       const data = await res.json()
       if (data.success) {
         await fetchData()
-        if (data.data?.remoteStatus === 'completed') {
-          setPollingTaskIds(prev => {
-            const next = new Set(prev)
-            next.delete(remoteTaskId)
-            return next
-          })
-        }
       } else setError(data.error || '检查失败')
     } catch { setError('请求失败') } finally { setActionLoading(null) }
   }
@@ -310,7 +311,6 @@ export default function ShotVideosPage() {
                 const remoteIsFailed = v.remoteStatus === 'failed' || v.remoteStatus === 'error'
                 const remoteIsTimedOut = v.remoteStatus === 'timeout'
                 const remoteIsPending = hasRemoteTask && !remoteIsCompleted && !remoteIsFailed && !remoteIsTimedOut
-                const isPolling = v.remoteTaskId ? pollingTaskIds.has(v.remoteTaskId) : false
 
                 return (
                   <div key={v.id} className={`relative border rounded-lg overflow-hidden ${isConfirmed ? 'ring-2 ring-green-500' : isSelected ? 'ring-2 ring-indigo-500' : 'border-gray-200'}`}>
@@ -365,7 +365,7 @@ export default function ShotVideosPage() {
                         {hasRemoteTask && remoteIsPending && (
                           <Button
                             size="sm" variant="outline" className="text-xs h-7 w-full"
-                            onClick={() => v.remoteTaskId && handleCheckTask(v.id, v.remoteTaskId)}
+                            onClick={() => handleCheckTask(v.id)}
                             disabled={actionLoading === v.id}
                           >
                             {actionLoading === v.id ? <Loader2 size={12} className="animate-spin mr-1" /> : <Search size={12} className="mr-1" />}
@@ -378,7 +378,7 @@ export default function ShotVideosPage() {
                           <div className="space-y-1">
                             <Button
                               size="sm" variant="outline" className="text-xs h-7 w-full border-orange-300 text-orange-600"
-                              onClick={() => v.remoteTaskId && handleCheckTask(v.id, v.remoteTaskId)}
+                              onClick={() => handleCheckTask(v.id)}
                               disabled={actionLoading === v.id}
                             >
                               {actionLoading === v.id ? <Loader2 size={12} className="animate-spin mr-1" /> : <Search size={12} className="mr-1" />}

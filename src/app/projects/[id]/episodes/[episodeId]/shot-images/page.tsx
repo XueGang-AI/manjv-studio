@@ -165,7 +165,7 @@ export default function ShotImagesPage() {
         <Card><CardContent className="flex flex-col items-center py-16">
           <Loader2 size={48} className="animate-spin text-indigo-500 mb-4" />
           <h3 className="text-lg font-medium text-gray-700 mb-1">AI 正在生成分镜图...</h3>
-          <p className="text-gray-400 text-sm">{shots.length} 个镜头 × 4 张候选图</p>
+          <p className="text-gray-400 text-sm">共 {shots.length} 个镜头</p>
         </CardContent></Card>
       )}
 
@@ -174,7 +174,7 @@ export default function ShotImagesPage() {
           <ImageIcon size={56} className="text-gray-300 mb-4" />
           <h3 className="text-lg font-medium text-gray-500 mb-2">尚未生成分镜图</h3>
           <p className="text-gray-400 mb-6 text-center max-w-md">
-            系统将为每个镜头生成 4 张候选图，并使用已确认的标准角色图作为参考
+            点击下方按钮为每个镜头生成分镜图，并使用已确认的标准角色图作为参考
           </p>
           <Button size="lg" onClick={handleGenerate} disabled={isGenerating}>
             <Wand2 size={20} className="mr-2" /> 生成全部分镜图
@@ -213,13 +213,23 @@ export default function ShotImagesPage() {
             </p>
           )}
 
-          {/* 图片网格 */}
+          {/* 图片网格 — 列数随实际图片数自适应：1 张用 1 列, 2-3 张用 2-3 列, 4 张用 4 列 */}
           {shotGroup.images.length > 0 ? (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className={`grid gap-3 ${
+              shotGroup.images.length === 1
+                ? 'grid-cols-1 max-w-xs'
+                : shotGroup.images.length === 2
+                  ? 'grid-cols-2 max-w-md'
+                  : shotGroup.images.length === 3
+                    ? 'grid-cols-3 max-w-2xl'
+                    : 'grid-cols-2 md:grid-cols-4'
+            }`}>
               {shotGroup.images.map((img) => {
                 const isSelected = img.isSelected
                 const isConfirmed = img.isConfirmed
                 const isLoading = actionLoading === img.id
+                // 单图时"选"和"确认"等价，按钮合并为"确认"
+                const showSelect = !isSelected && shotGroup.images.length > 1
                 return (
                   <div key={img.id} className={`relative border rounded-lg overflow-hidden ${
                     isConfirmed ? 'ring-2 ring-green-500' : isSelected ? 'ring-2 ring-indigo-500' : 'border-gray-200'
@@ -245,10 +255,10 @@ export default function ShotImagesPage() {
                       )}
                       {!isConfirmed && (
                         <div className="flex gap-1">
-                          <Button size="sm" className="flex-1 text-xs h-7" onClick={() => handleConfirm(img.id)} disabled={!!actionLoading}>
+                          <Button size="sm" className={`text-xs h-7 ${showSelect ? 'flex-1' : 'w-full'}`} onClick={() => handleConfirm(img.id)} disabled={!!actionLoading}>
                             {isLoading ? <Loader2 size={12} className="animate-spin" /> : '确认'}
                           </Button>
-                          {!isSelected && (
+                          {showSelect && (
                             <Button size="sm" variant="outline" className="text-xs h-7 px-1" onClick={() => handleSelect(img.id)} disabled={!!actionLoading} title="选择（同镜头有多个候选时使用）">
                               {isLoading ? <Loader2 size={12} className="animate-spin" /> : '选'}
                             </Button>

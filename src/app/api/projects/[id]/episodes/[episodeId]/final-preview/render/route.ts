@@ -46,10 +46,8 @@ export async function POST(
 
       let result: { success: boolean; outputPath?: string; duration?: number; error?: string }
 
-      const hasRemoteUrls = confirmedVideos.some(v => v.videoUrl?.startsWith('http'))
-
-      if (ffAvailable && confirmedVideos.length > 1 && !hasRemoteUrls) {
-        // 真实 FFmpeg 拼接本地文件
+      if (ffAvailable && confirmedVideos.length > 1) {
+        // FFmpeg 拼接（支持本地文件和远程 URL）
         result = await ffmpegService.concatVideos({
           shotVideos: confirmedVideos.map(v => ({
             videoUrl: v.videoUrl || '',
@@ -61,7 +59,7 @@ export async function POST(
           addFadeTransition: true,
         })
       } else if (ffAvailable) {
-        // 单视频或 Mock：生成占位视频
+        // 单视频：生成占位视频
         result = await ffmpegService.generatePlaceholder(
           outputPath,
           episode.duration || confirmedVideos[0]?.duration || 90,

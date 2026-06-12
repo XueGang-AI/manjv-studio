@@ -37,7 +37,7 @@ export async function POST(
       data: {
         projectId,
         taskType: 'GENERATE_STORY_PACKAGE',
-        modelName: process.env.AGNES_TEXT_MODEL || 'Agnes-2.0-Flash',
+        modelName: project.modelProvider === 'ark' ? (process.env.ARK_TEXT_MODEL || 'doubao-seed-character-251128') : (process.env.AGNES_TEXT_MODEL || 'agnes-2.0-flash'),
         status: 'running',
         input: { project_id: projectId },
       },

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { adapterFactory } from '@/server/model-adapters/adapter.factory'
+import { snapShotDuration } from '@/lib/utils'
 import type { VideoGenerationRequest } from '@/server/model-adapters/types'
 
 export async function POST(
@@ -42,7 +43,7 @@ export async function POST(
     const task = await prisma.generationTask.create({
       data: {
         projectId, episodeId, taskType: 'GENERATE_SHOT_VIDEOS',
-        modelName: process.env.AGNES_VIDEO_MODEL || 'Agnes-Video-2.0', status: 'running',
+        modelName: project.modelProvider === 'ark' ? (process.env.ARK_VIDEO_MODEL || 'doubao-seedance-1-5-pro-251215') : (process.env.AGNES_VIDEO_MODEL || 'agnes-video-v2.0'), status: 'running',
         input: { shot_count: shots.length },
       },
     })
@@ -80,13 +81,15 @@ export async function POST(
           prompt = parts.join('. ') + ', Korean manhwa style, cinematic lighting, smooth motion, no text, no watermark'
         }
 
-        const duration = (shot.endTime || 10) - (shot.startTime || 0)
+        const rawDuration = (shot.endTime || 10) - (shot.startTime || 0)
+        // 按 provider 约束 snap duration，确保 DB 存储值与实际视频时长一致
+        const duration = snapShotDuration(rawDuration, project.modelProvider)
 
         const genReq: VideoGenerationRequest = {
           taskType: 'image_to_video',
           prompt,
           inputImage: confirmedImage?.imageUrl || undefined,
-          duration: Math.min(duration, 15),
+          duration,
           aspectRatio,
           motionStrength: (vidPrompt?.motionStrength as 'low' | 'medium' | 'high') || 'medium',
           fps: 24,
@@ -105,7 +108,7 @@ export async function POST(
               videoUrl: '', // 尚未完成，等待轮询
               prompt,
               seed: '',
-              modelName: process.env.AGNES_VIDEO_MODEL || 'Agnes-Video-2.0',
+              modelName: project.modelProvider === 'ark' ? (process.env.ARK_VIDEO_MODEL || 'doubao-seedance-1-5-pro-251215') : (process.env.AGNES_VIDEO_MODEL || 'agnes-video-v2.0'),
               referenceImages: confirmedImage ? [{ image_url: confirmedImage.imageUrl }] : [],
               duration,
               params: { aspect_ratio: aspectRatio, generation_method: 'async_task' },
@@ -129,7 +132,7 @@ export async function POST(
                 inputImageUrl: confirmedImage?.imageUrl || '',
                 videoUrl: v.url, prompt,
                 seed: String(v.params?.seed || ''),
-                modelName: process.env.AGNES_VIDEO_MODEL || 'Agnes-Video-2.0',
+                modelName: project.modelProvider === 'ark' ? (process.env.ARK_VIDEO_MODEL || 'doubao-seedance-1-5-pro-251215') : (process.env.AGNES_VIDEO_MODEL || 'agnes-video-v2.0'),
                 referenceImages: confirmedImage ? [{ image_url: confirmedImage.imageUrl }] : [],
                 duration: v.duration || duration,
                 params: { ...v.params, aspect_ratio: aspectRatio },

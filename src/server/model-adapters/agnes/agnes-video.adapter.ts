@@ -1,5 +1,8 @@
 // ============================================
 // Agnes-Video-V2.0 视频适配器（真实 API + 异步轮询）
+// 官方文档: num_frames (≤441, 8n+1) + frame_rate (1-60) 控制时长
+// 轮询推荐: /agnesapi?video_id=<VIDEO_ID>
+// 兼容旧版: /v1/videos/<task_id>
 // ============================================
 import { BaseVideoAdapter } from '../base.adapter'
 import {
@@ -21,6 +24,7 @@ export interface AgnesVideoAdapterConfig {
 
 const DEFAULT_BASE_URL = 'https://apihub.agnes-ai.com/v1'
 const DEFAULT_MODEL = 'agnes-video-v2.0'
+const DEFAULT_FRAME_RATE = 24
 
 export class AgnesVideoAdapter extends BaseVideoAdapter {
   private baseUrl: string
@@ -66,29 +70,46 @@ export class AgnesVideoAdapter extends BaseVideoAdapter {
   }
 
   // ============================================================
-  // 创建视频异步任务（仅创建，不轮询，立即返回 task_id）
+  // 创建视频异步任务（仅创建，不轮询，立即返回 task_id / video_id）
   // ============================================================
   async createVideoTask(request: VideoGenerationRequest): Promise<VideoTaskCreationResult> {
     if (!this.apiKey) {
       throw new Error('AGNES_VIDEO_API_KEY not configured')
     }
 
+    const frameRate = request.fps || DEFAULT_FRAME_RATE
+    const numFrames = calcAgnesNumFrames(request.duration, frameRate)
+
     const createBody: Record<string, unknown> = {
       model: this.model,
       prompt: request.prompt,
-      duration: request.duration || 5,
-      aspect_ratio: request.aspectRatio || '9:16',
+      num_frames: numFrames,
+      frame_rate: frameRate,
     }
 
+    // 图生视频：传入 image 参数
     if (request.inputImage) {
       createBody.image = request.inputImage
     }
+
     if (request.negativePrompt) {
       createBody.negative_prompt = request.negativePrompt
     }
-    if (request.motionStrength) {
-      createBody.motion_strength = request.motionStrength
+    if (request.params?.seed !== undefined) {
+      createBody.seed = request.params.seed
     }
+
+    // 尺寸：根据 aspectRatio 推导
+    if (request.aspectRatio === '16:9') {
+      createBody.width = 1152
+      createBody.height = 768
+    } else {
+      // 9:16 默认
+      createBody.width = 768
+      createBody.height = 1152
+    }
+
+    // 音频（TTS 配音）
     if (request.voiceText) {
       createBody.voice_text = request.voiceText
     }
@@ -109,14 +130,18 @@ export class AgnesVideoAdapter extends BaseVideoAdapter {
     }
 
     const data = (await res.json()) as Record<string, unknown>
-    const taskId = (data.task_id || data.id || data.video_id || '') as string
 
-    if (!taskId) {
-      throw new Error(`No task_id in video response: ${JSON.stringify(data).substring(0, 200)}`)
+    // 优先使用 video_id（推荐轮询方式），回退到 task_id
+    const videoId = (data.video_id || '') as string
+    const taskId = (data.task_id || data.id || '') as string
+    const pollId = videoId || taskId
+
+    if (!pollId) {
+      throw new Error(`No task_id/video_id in video response: ${JSON.stringify(data).substring(0, 200)}`)
     }
 
     return {
-      taskId,
+      taskId: pollId,
       status: (data.status as RemoteVideoTaskStatus) || 'queued',
       createResponse: data,
     }
@@ -124,13 +149,21 @@ export class AgnesVideoAdapter extends BaseVideoAdapter {
 
   // ============================================================
   // 单次轮询视频任务状态
+  // 推荐方式: /agnesapi?video_id=<VIDEO_ID>
+  // 兼容方式: /v1/videos/<task_id>（旧版 task_ 前缀 ID）
   // ============================================================
   async pollVideoTask(taskId: string): Promise<VideoTaskPollResult> {
     if (!this.apiKey) {
       throw new Error('AGNES_VIDEO_API_KEY not configured')
     }
 
-    const res = await fetch(`${this.baseUrl}/videos/${taskId}`, {
+    // 根据 ID 前缀选择轮询端点
+    const isVideoId = taskId.startsWith('video_')
+    const pollUrl = isVideoId
+      ? `https://apihub.agnes-ai.com/agnesapi?video_id=${taskId}`
+      : `${this.baseUrl}/videos/${taskId}`
+
+    const res = await fetch(pollUrl, {
       headers: { 'Authorization': `Bearer ${this.apiKey}` },
       signal: AbortSignal.timeout(15000),
     })
@@ -160,7 +193,13 @@ export class AgnesVideoAdapter extends BaseVideoAdapter {
 
     if (status === 'completed' || status === 'succeeded' || status === 'success') {
       result.videoUrl = (data.video_url || data.url || data.output_url || data.remixed_from_video_id || '') as string
-      result.duration = (data.duration || data.seconds) as number | undefined
+      // seconds 字段是 string 类型（如 "5.0"），需要解析
+      const seconds = data.seconds
+      if (typeof seconds === 'string') {
+        result.duration = parseFloat(seconds) || undefined
+      } else if (typeof seconds === 'number') {
+        result.duration = seconds
+      }
     }
 
     if (status === 'failed' || status === 'error') {
@@ -192,7 +231,7 @@ export class AgnesVideoAdapter extends BaseVideoAdapter {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       await new Promise(r => setTimeout(r, intervalSeconds * 1000))
 
-      const pollResult = await this.pollVideoTask(taskId).catch(() => ({
+      const pollResult = await this.pollVideoTask(taskId).catch((): VideoTaskPollResult => ({
         taskId,
         status: 'unknown' as RemoteVideoTaskStatus,
         response: {} as Record<string, unknown>,
@@ -276,4 +315,31 @@ export class AgnesVideoAdapter extends BaseVideoAdapter {
     if (s === 'queued' || s === 'pending' || s === 'waiting') return 'queued'
     return 'unknown'
   }
+}
+
+/**
+ * 根据请求的 duration 和 frame_rate 计算 Agnes Video API 合法的 num_frames。
+ * 约束：
+ *   - num_frames ≤ 441
+ *   - num_frames 满足 8n + 1（即 1, 9, 17, 25, ..., 441）
+ *   - seconds = num_frames / frame_rate
+ *
+ * 常用值（24fps）: 81≈3.4s, 121≈5s, 161≈6.7s, 241≈10s, 321≈13.4s, 401≈16.7s, 441≈18.4s
+ */
+function calcAgnesNumFrames(requestedDuration: number | undefined, frameRate: number): number {
+  const fps = frameRate || DEFAULT_FRAME_RATE
+
+  if (typeof requestedDuration !== 'number' || !Number.isFinite(requestedDuration) || requestedDuration <= 0) {
+    return 121 // 默认 5 秒
+  }
+
+  const targetFrames = Math.round(requestedDuration * fps)
+
+  // Snap 到 8n+1 格式，且 ≤ 441
+  // 8n+1 的值 = 1, 9, 17, 25, ..., 441
+  // n = (targetFrames - 1) / 8
+  let n = Math.round((targetFrames - 1) / 8)
+  n = Math.max(0, Math.min(n, 55)) // 55 → 8*55+1 = 441
+
+  return 8 * n + 1
 }
