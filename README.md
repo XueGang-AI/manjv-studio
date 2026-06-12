@@ -1,110 +1,36 @@
-# 🎬 AI 漫剧可视化生产工作台 (manjv-studio)
+# 🎬 Manjv Studio — AI 漫剧可视化生产工作台
 
-AI 驱动的漫剧创作平台，支持故事分析、角色设计、分镜生成、视频合成。
+> AI 驱动的短剧漫剧全流程生产平台：从故事分析到成片输出，覆盖角色设计、分镜生成、图像/视频生成、FFmpeg 合片全链路。
+
+## ✨ 核心特性
+
+- **全流程自动化** — 8 步工作流：创建项目 → 故事方案 → 角色设定 → 角色图 → 分镜脚本 → 分镜图 → 视频片段 → 成片 MP4
+- **双 AI Provider** — 免费 Agnes + 付费 Ark/豆包，项目级切换
+- **角色一致性系统** — 多角度参考图（5 视角）+ 锚点先行策略，确保跨镜头角色外貌统一
+- **模板驱动 Prompt** — 25 个 `.prompt` 模板 + 23 个 `.json` 素材库，禁止硬编码
+- **版本管理** — 关键确认节点自动快照，支持回滚与对比
+- **QC 质检** — 6 维度评分（故事 / 角色 / 分镜 / 图像 / 视频 / 成片）
 
 ## 技术栈
 
-- **前端**: Next.js 16 + TypeScript + TailwindCSS
-- **数据库**: PostgreSQL + Prisma 7
-- **任务队列**: BullMQ + Redis
-- **视频合成**: FFmpeg 8
-- **AI 模型**: Agnes-2.0-Flash / Agnes-Image-2.0-Flash / Agnes-Video-V2.0 / 豆包 SeedCharacter / Seedream / Seedance
-- **测试**: vitest
-
-## 当前状态
-
-| 模式 | 文本模型 | 图片模型 | 视频模型 | 全流程 |
-|------|----------|----------|----------|--------|
-| Mock | ✅ 可跑通 | ✅ 可跑通 | ✅ 可跑通 | ✅ `npm run test:e2e` |
-| Agnes 真实 API | ✅ 已接通 | ✅ 已接通 | ✅ 已接通并验证 | ✅ 文本+图片+视频全部可通 |
-| Ark (豆包) 付费 | ✅ 适配器已实现 | ✅ 适配器已实现 | ✅ 适配器已实现 | ⏳ 待端到端验证 |
-
-### 真实视频当前状态
-
-- **task 创建**: ✅ 成功，返回 `task_id`
-- **轮询**: ✅ `GET /v1/videos/{task_id}` 可用
-- **视频完成**: ✅ 已验证（历史 task 已 completed + 下载 + ffprobe）
-- **video_url 字段**: ⚠️ 位于 `remixed_from_video_id`（非 `video_url`）
-- **队列延迟**: ⚠️ 非高峰期 ~2min 处理，高峰期可能数小时排队
-- **分辨率**: 当前输出 1280×768
-- **异步模式**: ✅ Adapter 已重构，支持 create/poll/wait/download
-- **任务恢复**: ✅ 支持根据 task_id 继续轮询
-- **TTS 配音**: ✅ `generate_audio: true` 始终开启
-- **输入限制**: ⚠️ 仅支持 1 张 inputImage，不支持多张 reference_images
-
-### 角色参考图系统
-
-多角度：front_full_body / front_half_body / left_side / right_side / back_view。
-快速模式（1张）和一致性模式（5张），锚点图先行，后续角度以锚点图为参考。
-- 去重：已有角度自动跳过
-- 重试：单张失败指数退避 ×3
-- 先成后删：regenerate 全部成功再替换旧图
-- 批量确认：一键确认所有角度
-
-### 分镜图系统
-
-- prompt 嵌入角色完整外貌描述（hair/eyes/skin/face/clothing/signatureFeatures）
-- 根据镜头 shot_size 自动匹配最合适的角色参考角度
-- 批量确认：一键确认所有镜头
-- ⚠️ Agnes Image API 传 `reference_images` 时忽略 `num_outputs`，因此不传 refs 以获取 4 张候选图
-
-### 视频生成
-
-- 每个镜头生成 1 段视频（非 2 段）
-- `generate_audio: true` 始终开启
-
-### 项目表单字段
-
-| 字段 | 类型 | 说明 |
+| 层级 | 技术 | 版本 |
 |------|------|------|
-| 故事类型 | 多选 + 自定义 | 可选多个标签，支持自定义输入 |
-| 期望画风 | 多选 + 自定义 | 可组合多个风格，如"韩漫, 电影感, 都市雨夜" |
-| 单集时长 | 15-300s | 快捷选项 + 自定义输入，单位为秒 |
-| 核心冲突 | 选填 | 留空时 AI 自动提炼 |
+| 框架 | Next.js (App Router + Turbopack) | 16 |
+| 语言 | TypeScript | 5+ |
+| UI | React + TailwindCSS v4 | 19 |
+| 数据库 | PostgreSQL + Prisma | 16+ / 7 |
+| 状态管理 | Zustand | 5 |
+| 数据请求 | @tanstack/react-query | 5 |
+| 视频合成 | FFmpeg | 8.x |
+| 测试 | Vitest | 4 |
 
-### 剩余风险
+**AI 模型**
 
-见 [docs/REAL_AGNES_API_PROBE_REPORT.md#剩余风险](docs/REAL_AGNES_API_PROBE_REPORT.md)：
-
-1. 视频队列延迟不确定，高峰期可能等很久
-2. 视频分辨率可能不是 1080×1920，需 FFmpeg 后处理
-3. 批量生成可能存在并发/QPS 限制
-4. 视频内容质量仍需人工确认
-5. API 返回字段可能变化，已通过多字段回退兼容
-6. Agnes Image API 传 `reference_images` 时忽略 `num_outputs`
-
-## Ark / 豆包付费模式
-
-Ark 是火山引擎的模型服务平台，提供豆包系列模型。相比 Agnes，Ark 模型在角色一致性和生成质量上更优，但需要付费 API Key。
-
-### 模型对照
-
-| 用途 | Ark 模型 | Agnes 模型 |
-|------|----------|------------|
-| 文本生成 | `doubao-seed-character-251128` | `Agnes-2.0-Flash` |
-| 图片生成 | `doubao-seedream-5-0-260128` | `Agnes-Image-2.0-Flash` |
-| 视频生成 | `doubao-seedance-1-5-pro-251215` | `Agnes-Video-V2.0` |
-
-### 启用方式
-
-1. 获取火山引擎 Ark API Key
-2. 在 `.env` 中配置:
-   ```
-   ARK_API_KEY=your_key_here
-   ARK_API_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
-   MODEL_PROVIDER=ark
-   USE_MOCK_MODEL=false
-   ```
-3. 创建项目时选择 Ark provider，或在已有项目中通过 `modelProvider` 字段切换
-
-### 探针验证
-
-```bash
-npm run probe:ark:text       # 文本生成探针
-npm run probe:ark:image      # 图片生成探针
-npm run probe:ark:video      # 视频生成探针（创建任务）
-npm run probe:ark:video:poll # 视频任务轮询（需 --task-id）
-```
+| 用途 | Agnes（免费） | Ark/豆包（付费） |
+|------|---------------|------------------|
+| 文本 | Agnes-2.0-Flash | doubao-seed-character-251128 |
+| 图片 | Agnes-Image-2.0-Flash | doubao-seedream-5-0-260128 |
+| 视频 | Agnes-Video-V2.0 | doubao-seedance-1-5-pro-251215 |
 
 ## 快速开始
 
@@ -112,8 +38,9 @@ npm run probe:ark:video:poll # 视频任务轮询（需 --task-id）
 
 - Node.js 20+
 - PostgreSQL 16+
-- Redis 7+
-- FFmpeg（推荐 8.x）
+- FFmpeg 8.x（视频合成）
+
+> ⚠️ 本地 npm 缓存有权限问题，安装时请使用 `--cache ~/.npm-cache-new`。
 
 ### 安装
 
@@ -123,54 +50,49 @@ npm install --cache ~/.npm-cache-new
 
 # 2. 配置环境变量
 cp .env.example .env
-# 编辑 .env 填写实际配置
+# 编辑 .env，至少填写 DATABASE_URL
 
 # 3. 创建数据库
 createdb manjv_studio
 
-# 4. 推送数据库 schema
+# 4. 推送 Schema + 种子数据
 npm run db:push
-
-# 5. 填充种子数据
 npm run db:seed
 ```
 
 ### 开发
 
 ```bash
-npm run dev
+npm run dev    # 启动开发服务器 → http://localhost:3000
 ```
-
-访问 http://localhost:3000
 
 ### 测试
 
 ```bash
-# 单元测试
-npm test                    # 18 tests
+npm test                       # 单元测试（18 cases）
+npm run test:e2e               # Mock 全流程 E2E（20 steps → MP4）
+npm run test:e2e:real          # 真实 API 最小闭环
+npx tsx scripts/e2e-real-15s-prototype.ts  # 30s 原型全流程
+```
 
-# Mock 全流程 E2E
-npm run test:e2e            # 20 steps, auto confirm, → MP4
+### API 探针
 
-# 真实 API 探针
-npm run probe:agnes:text       # /chat/completions
-npm run probe:agnes:image      # /images/generations
-npm run probe:agnes:video      # /videos (async poll)
-npm run probe:agnes:video:poll # 轮询已有 task
-npm run probe:agnes:video:t2v  # Case A: 纯文生视频
-npm run probe:agnes:video:i2v-url  # Case B: 图生视频(URL)
-npm run probe:agnes:video:i2v-b64  # Case C: 图生视频(b64)
-npm run probe:agnes:video:audio # 音频/口型探针
-npm run probe:ark:text       # Ark 文本探针
-npm run probe:ark:image      # Ark 图片探针
-npm run probe:ark:video      # Ark 视频探针
-npm run probe:ark:video:poll # Ark 视频轮询
+```bash
+# Agnes
+npm run probe:agnes:text           # 文本生成
+npm run probe:agnes:image          # 图片生成
+npm run probe:agnes:video          # 视频生成（创建 + 短轮询）
+npm run probe:agnes:video:poll     # 轮询已有任务（需 --task-id <id>）
+npm run probe:agnes:video:t2v      # 文生视频
+npm run probe:agnes:video:i2v-url  # 图生视频（URL）
+npm run probe:agnes:video:i2v-b64  # 图生视频（Base64）
+npm run probe:agnes:video:audio    # 音频/口型
 
-# 30s 短视频原型（全流程）
-npx tsx scripts/e2e-real-15s-prototype.ts
-
-# 真实 API 最小闭环
-npm run test:e2e:real
+# Ark/豆包
+npm run probe:ark:text             # 文本生成
+npm run probe:ark:image            # 图片生成
+npm run probe:ark:video            # 视频生成
+npm run probe:ark:video:poll       # 视频任务轮询（需 --task-id <id>）
 ```
 
 ## 项目结构
@@ -178,62 +100,109 @@ npm run test:e2e:real
 ```
 manjv-studio/
 ├── src/
-│   ├── app/                    # Next.js App Router (页面 + API)
-│   ├── components/             # React 组件
-│   │   ├── layout/             # Sidebar, TopBar
-│   │   ├── project/            # ProjectForm, StoryDisplay, etc.
-│   │   └── ui/                 # Button, Card, Input, Badge
-│   ├── lib/                    # utils, prisma client, validators
+│   ├── app/                        # Next.js App Router
+│   │   ├── (pages)/                # 页面路由（项目、设置、Prompt 浏览等）
+│   │   └── api/                    # API 路由（60+ endpoints）
+│   ├── components/                 # React 组件
+│   │   ├── layout/                 # Sidebar, TopBar
+│   │   ├── project/                # 项目相关（Form, Card, StepNavigator…）
+│   │   └── ui/                     # 基础 UI（Button, Card, Input, Badge）
+│   ├── lib/                        # 工具库（utils, prisma, validators, types）
 │   ├── server/
-│   │   ├── model-adapters/     # 统一适配层 (Text/Image/Video + Mock)
-│   │   ├── queues/             # BullMQ 任务队列
-│   │   ├── services/           # Prompt, FFmpeg, Version, QC
-│   │   ├── storage/            # 文件存储
-│   │   └── workflows/          # 工作流
-│   └── __tests__/              # 单元测试
-├── prisma/                     # Schema + Seed
-├── prompts/                    # 25 .prompt + 23 .json 素材库
-├── scripts/                    # E2E + 探针脚本
-├── uploads/                    # 文件上传 + 视频输出
-└── docs/                       # 完整文档
+│   │   ├── model-adapters/         # 🎯 AI 模型统一适配层
+│   │   │   ├── types.ts            # ITextAdapter / IImageAdapter / IVideoAdapter
+│   │   │   ├── adapter.factory.ts  # AdapterFactory 单例
+│   │   │   ├── mock/               # Mock 适配器
+│   │   │   ├── agnes/              # Agnes 适配器
+│   │   │   └── ark/                # Ark 适配器
+│   │   ├── services/               # 业务服务（Prompt, FFmpeg, Version, QC）
+│   │   ├── storage/                # 文件存储（Phase 1: 本地）
+│   │   ├── queues/                 # 任务队列（Prisma TaskService）
+│   │   └── workflows/              # 工作流类型定义（Phase 2 预留）
+│   └── __tests__/                  # 单元测试
+├── prisma/                         # Prisma Schema + Seed
+├── prompts/                        # Prompt 模板库（25 .prompt + 23 .json）
+│   ├── story/                      # 故事分析、创作、改编、优化
+│   ├── character/                  # 角色设计、关系网络
+│   ├── storyboard/                 # 分镜、开头钩子、结尾钩子
+│   ├── image/                      # 图片 Prompt、角色视觉、场景、表情、风格、光照、镜头
+│   ├── video/                      # 视频 Prompt、三幕运动、Seedance 分镜网格
+│   ├── camera/                     # 镜头知识库、运动分类、经典/特效运镜
+│   ├── audio/                      # 配音脚本
+│   ├── platform/                   # 标题文案、平台优化
+│   ├── qc/                         # 文本/图片/视频质检
+│   └── style/                      # 电影风格库
+├── scripts/                        # E2E + 探针脚本
+├── uploads/                        # 文件上传 + 视频输出（gitignored）
+└── docs/                           # 项目文档
 ```
 
 ## 核心流程
 
 ```
 创建项目 → 故事方案 → 角色设定 → 角色图 → 分镜脚本 → 分镜图 → 视频片段 → 成片 MP4
-   ↓           ↓         ↓        ↓         ↓         ↓         ↓          ↓
- Phase 3    Phase 4   Phase 5  Phase 6   Phase 7   Phase 8   Phase 9   Phase 10
-     + Phase 11 (任务队列) + Phase 12 (版本管理) + Phase 13 (QC)
+   ↓          ↓         ↓        ↓         ↓         ↓         ↓         ↓
+ Phase 3   Phase 4   Phase 5  Phase 6   Phase 7   Phase 8   Phase 9  Phase 10
 ```
 
-## 数据库
+每个阶段必须确认后才能推进到下一步，`StepNavigator` 组件强制执行锁定/解锁/完成状态。
 
-21 张表: users, projects, story_packages, characters, character_images, episodes, shots, image_prompts, shot_images, video_prompts, shot_videos, voice_scripts, final_videos, generation_tasks, task_logs, prompt_templates, prompt_template_versions, model_configs, project_versions, qc_reports, asset_files
+### 数据库
 
-## 环境变量
+21 张表，核心实体：`Project` → `StoryPackage` → `Character` → `CharacterImage` → `Episode` → `Shot` → `ShotImage` → `ShotVideo` → `FinalVideo`
 
-见 [docs/ENV.md](docs/ENV.md)
+辅助表：`GenerationTask`（任务追踪）、`TaskLog`（执行日志）、`PromptTemplate`/`PromptTemplateVersion`（模板管理）、`ProjectVersion`（版本快照）、`QCReport`（质检报告）、`AssetFile`（文件资产）
+
+## AI Provider 配置
+
+### Agnes（免费）
+
+`.env` 默认配置即可：
+
+```env
+AGNES_API_KEY=your_key
+AGNES_API_BASE_URL=https://api.agnes.ai/v1
+USE_MOCK_MODEL=false
+```
+
+### Ark/豆包（付费）
+
+```env
+ARK_API_KEY=your_key
+ARK_API_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+MODEL_PROVIDER=ark
+USE_MOCK_MODEL=false
+```
+
+创建项目时选择 Provider，或通过 `modelProvider` 字段在已有项目中切换。
+
+## 已知限制
+
+| 问题 | 说明 |
+|------|------|
+| Agnes 视频队列延迟 | 非高峰 ~2min，高峰期可能数小时 |
+| Agnes 视频分辨率 | 输出 1280×768，需 FFmpeg 后处理 |
+| Agnes Image + reference_images | 传 `reference_images` 时忽略 `num_outputs`，只返回 1 张 |
+| Agnes Video 输入限制 | 仅支持 1 张 `inputImage`，不支持多张 reference_images |
+| 视频内容质量 | 需人工确认，AI 生成不可控 |
+| 批量并发 | 可能存在 QPS 限制 |
 
 ## 文档索引
 
 | 文档 | 内容 |
 |------|------|
+| [CLAUDE.md](CLAUDE.md) | Claude Code 项目上下文 |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 开发指南 |
 | [docs/E2E_TEST.md](docs/E2E_TEST.md) | E2E 测试指南 |
-| [docs/API.md](docs/API.md) | API 文档 (60+ endpoints) |
+| [docs/API.md](docs/API.md) | API 文档（60+ endpoints） |
 | [docs/ENV.md](docs/ENV.md) | 环境变量说明 |
-| [docs/PHASE_1_13_SUMMARY.md](docs/PHASE_1_13_SUMMARY.md) | 开发阶段总结 |
-| [docs/REAL_AGNES_API_PROBE_REPORT.md](docs/REAL_AGNES_API_PROBE_REPORT.md) | 真实 API 探针报告 |
+| [docs/PHASE_1_13_SUMMARY.md](docs/PHASE_1_13_SUMMARY.md) | Phase 1-13 开发总结 |
+| [docs/REAL_AGNES_API_PROBE_REPORT.md](docs/REAL_AGNES_API_PROBE_REPORT.md) | Agnes API 探针报告 |
 | [docs/REAL_AGNES_API_TODO.md](docs/REAL_AGNES_API_TODO.md) | API 接入待办 |
 | [docs/REAL_SAMPLE_ACCEPTANCE_REPORT.md](docs/REAL_SAMPLE_ACCEPTANCE_REPORT.md) | 30s 原型验收报告 |
-| [docs/AGNES_VIDEO_AUDIO_LIPSYNC_PROBE_REPORT.md](docs/AGNES_VIDEO_AUDIO_LIPSYNC_PROBE_REPORT.md) | 视频音频/口型探针 |
-| [docs/AGNES_VIDEO_AUDIO_LIPSYNC_COMPLETED_REPORT.md](docs/AGNES_VIDEO_AUDIO_LIPSYNC_COMPLETED_REPORT.md) | 视频音频 completed 验证 |
+| [docs/AGNES_VIDEO_AUDIO_LIPSYNC_PROBE_REPORT.md](docs/AGNES_VIDEO_AUDIO_LIPSYNC_PROBE_REPORT.md) | 视频/音频/口型探针 |
+| [docs/AGNES_VIDEO_AUDIO_LIPSYNC_COMPLETED_REPORT.md](docs/AGNES_VIDEO_AUDIO_LIPSYNC_COMPLETED_REPORT.md) | 音频 completed 验证 |
 
-## Agent 规则文件
+## License
 
-[CLAUDE.md](CLAUDE.md) — Claude Code 项目上下文（技术栈、架构原则、快速命令、当前状态、开发注意事项）
-
-## npm 缓存注意
-
-本地 npm 缓存有权限问题，请使用 `--cache ~/.npm-cache-new` 标志。
+Private — 内部项目

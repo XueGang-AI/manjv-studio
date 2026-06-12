@@ -113,7 +113,24 @@ export default function CharacterImagesPage() {
   const handleRegenerate = async (charId: string) => {
     setActionLoading(charId)
     try {
-      const res = await fetch(`/api/projects/${projectId}/characters/${charId}/images/regenerate`, { method: 'POST' })
+      // 根据角色现有图片数量推断 mode：5张以上用 consistency，否则用 quick
+      const charGroup = characters.find(c => c.character.id === charId)
+      const refTypes = ['front_full_body', 'front_half_body', 'left_side', 'right_side', 'back_view']
+      const hasConsistency = charGroup ? refTypes.every(t => charGroup.images.some(i => i.referenceType === t)) : false
+      const mode = hasConsistency ? 'consistency' : 'quick'
+
+      const res = await fetch(`/api/projects/${projectId}/characters/${charId}/images/regenerate?mode=${mode}`, { method: 'POST' })
+      const data = await res.json()
+      if (data.success) await fetchData()
+      else setError(data.error || '重新生成失败')
+    } catch { setError('请求失败') }
+    finally { setActionLoading(null) }
+  }
+
+  const handleRegenerateSingle = async (imageId: string, charId: string) => {
+    setActionLoading(`single-${imageId}`)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/character-images/${imageId}/regenerate`, { method: 'POST' })
       const data = await res.json()
       if (data.success) await fetchData()
       else setError(data.error || '重新生成失败')
@@ -258,7 +275,7 @@ export default function CharacterImagesPage() {
                     </div>
                     <div className="p-1.5 space-y-0.5">
                       <div className="text-[10px] font-medium text-gray-600 truncate" title={refLabel}>{refLabel}</div>
-                      {!isConfirmed && (
+                      {!isConfirmed ? (
                         <div className="flex gap-0.5">
                           <Button size="sm" className="flex-1 text-[10px] h-6 px-1"
                             onClick={() => handleConfirm(img.id)} disabled={!!actionLoading}>
@@ -271,6 +288,19 @@ export default function CharacterImagesPage() {
                               {actionLoading === img.id ? <Loader2 size={10} className="animate-spin" /> : '选'}
                             </Button>
                           )}
+                          <Button size="sm" variant="outline" className="text-[10px] h-6 px-1"
+                            onClick={() => handleRegenerateSingle(img.id, charGroup.character.id)} disabled={!!actionLoading}
+                            title="重新生成该角度">
+                            {actionLoading === `single-${img.id}` ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />}
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-0.5">
+                          <Button size="sm" variant="outline" className="flex-1 text-[10px] h-6 px-1"
+                            onClick={() => handleRegenerateSingle(img.id, charGroup.character.id)} disabled={!!actionLoading}
+                            title="重新生成该角度">
+                            {actionLoading === `single-${img.id}` ? <Loader2 size={10} className="animate-spin" /> : <><RefreshCw size={10} className="mr-0.5" />重生成</>}
+                          </Button>
                         </div>
                       )}
                     </div>

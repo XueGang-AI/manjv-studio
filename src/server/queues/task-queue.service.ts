@@ -91,6 +91,43 @@ export class TaskService {
     })
   }
 
+  /**
+   * 硬删除任务及其日志。
+   * 仅允许删除已终态的任务（success / failed / cancelled），活跃任务请先取消。
+   */
+  async deleteTask(taskId: string) {
+    const task = await prisma.generationTask.findUnique({ where: { id: taskId } })
+    if (!task) throw new Error('任务不存在')
+    if (['pending', 'running', 'retrying'].includes(task.status)) {
+      throw new Error('请先取消活跃任务，再删除')
+    }
+    // 先删日志，再删任务（避免外键约束问题）
+    await prisma.taskLog.deleteMany({ where: { taskId } })
+    return prisma.generationTask.delete({ where: { id: taskId } })
+  }
+
+  /**
+   * 批量删除已终态的任务（success / failed / cancelled），保留活跃任务。
+   * 返回删除数量。
+   */
+  async deleteFinishedTasks(projectId: string) {
+    const result = await prisma.generationTask.findMany({
+      where: {
+        projectId,
+        status: { in: ['success', 'failed', 'cancelled'] },
+      },
+      select: { id: true },
+    })
+    const ids = result.map(t => t.id)
+    if (ids.length === 0) return { count: 0 }
+
+    await prisma.taskLog.deleteMany({ where: { taskId: { in: ids } } })
+    const deleted = await prisma.generationTask.deleteMany({
+      where: { id: { in: ids } },
+    })
+    return { count: deleted.count }
+  }
+
   async getTask(taskId: string) {
     return prisma.generationTask.findUnique({
       where: { id: taskId },

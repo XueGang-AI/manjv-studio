@@ -82,33 +82,36 @@ export function StepNavigator({ projectId, currentStatus }: StepNavigatorProps) 
   ]
 
   return (
-    <div className="flex items-center gap-1 overflow-x-auto py-2 px-4 bg-gray-50 border-b border-gray-200">
+    <div className="flex items-center gap-0 overflow-x-auto py-2.5 px-4 bg-[var(--bg-surface)] border-b border-[var(--color-border-dim)]">
       {steps.map((step, index) => (
         <React.Fragment key={step.label}>
           {index > 0 && (
-            <div className={cn('w-8 h-px', step.completed ? 'bg-indigo-400' : 'bg-gray-300')} />
+            <div className={cn(
+              'w-6 h-0.5 mx-1.5 rounded-full transition-colors',
+              step.completed ? 'bg-[var(--color-success)]/40' : 'bg-[var(--color-border-default)]'
+            )} />
           )}
           <Link
             href={step.locked ? '#' : step.href}
             className={cn(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors',
-              step.current && 'bg-indigo-600 text-white',
-              step.completed && !step.current && 'bg-indigo-50 text-indigo-600',
-              !step.current && !step.completed && !step.locked && 'text-gray-600 hover:bg-gray-100',
-              step.locked && 'text-gray-400 cursor-not-allowed'
+              'flex items-center gap-2 px-3 py-1.5 rounded-[var(--radius-md)] text-xs font-medium whitespace-nowrap transition-all',
+              step.current && !step.completed && 'aurora-dot text-white',
+              step.completed && !step.current && 'bg-[var(--color-success-muted)] text-[var(--color-success)] hover:bg-[var(--color-success)]/20',
+              !step.current && !step.completed && !step.locked && 'text-[var(--color-text-secondary)] hover:bg-[var(--bg-panel)] hover:text-[var(--color-text-primary)]',
+              step.locked && 'text-[var(--color-text-muted)] cursor-not-allowed'
             )}
             onClick={(e) => step.locked && e.preventDefault()}
           >
-            {step.completed ? (
-              <Check size={14} />
-            ) : step.locked ? (
-              <Lock size={14} />
-            ) : (
-              <span className="w-3.5 h-3.5 rounded-full border border-current flex items-center justify-center text-[10px]">
-                {index + 1}
-              </span>
-            )}
-            {step.label}
+            <span className={cn(
+              'w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold',
+              step.current && !step.completed && 'text-white',
+              step.completed && 'bg-[var(--color-success)] text-white',
+              !step.current && !step.completed && !step.locked && 'bg-[var(--bg-panel)] text-[var(--color-text-muted)]',
+              step.locked && 'bg-[var(--bg-panel)] text-[var(--color-text-muted)]'
+            )}>
+              {step.completed ? <Check size={12} /> : step.locked ? <Lock size={10} /> : index + 1}
+            </span>
+            <span>{step.label}</span>
           </Link>
         </React.Fragment>
       ))}

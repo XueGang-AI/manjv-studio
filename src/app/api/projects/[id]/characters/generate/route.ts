@@ -79,7 +79,7 @@ export async function POST(
         userPrompt: rendered.userPrompt,
         outputSchema: rendered.outputSchema || undefined,
         temperature: 0.7,
-        maxTokens: 4096,
+        maxTokens: 8192,
       }
 
       // 6.1 解析模型输出 — 多种策略 + 递归查找 characters 数组
@@ -110,7 +110,7 @@ export async function POST(
             'appearance (object), clothing (object), personality (object), ' +
             'signature_features (array), language_style (object), action_habits (array), ' +
             'zh_fixed_prompt (string), en_fixed_prompt (string). ' +
-            'Keep each character concise — the entire response must fit well within 4000 tokens.',
+            'Keep each character concise — the entire response must fit well within 8000 tokens.',
           userPrompt: rendered.userPrompt,
         })
         rawText = retryResponse.rawText

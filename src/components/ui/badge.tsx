@@ -1,27 +1,42 @@
+'use client'
+
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 
-interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
-  variant?: 'default' | 'success' | 'warning' | 'danger' | 'info'
+type BadgeVariant = 'default' | 'primary' | 'success' | 'warning' | 'danger' | 'info' | 'cyan' | 'violet'
+
+export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
+  variant?: BadgeVariant
+  dot?: boolean
 }
 
-const Badge: React.FC<BadgeProps> = ({ className, variant = 'default', ...props }) => {
-  return (
+const VARIANT_STYLES: Record<BadgeVariant, string> = {
+  default: 'bg-[var(--color-surface)] text-[var(--color-text-secondary)]',
+  primary: 'bg-[var(--color-primary-muted)] text-[var(--color-primary-hover)]',
+  success: 'bg-[var(--color-success-muted)] text-[var(--color-success)]',
+  warning: 'bg-[var(--color-warning-muted)] text-[var(--color-warning)]',
+  danger: 'bg-[var(--color-danger-muted)] text-[var(--color-danger)]',
+  info: 'bg-[var(--color-info-muted)] text-[var(--color-info)]',
+  cyan: 'bg-[var(--color-accent-cyan-muted)] text-[var(--color-accent-cyan)]',
+  violet: 'bg-[var(--color-accent-violet-muted)] text-[var(--color-accent-violet)]',
+}
+
+const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(
+  ({ className, variant = 'default', dot, children, ...props }, ref) => (
     <span
+      ref={ref}
       className={cn(
-        'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium',
-        {
-          'bg-gray-100 text-gray-700': variant === 'default',
-          'bg-green-100 text-green-700': variant === 'success',
-          'bg-yellow-100 text-yellow-700': variant === 'warning',
-          'bg-red-100 text-red-700': variant === 'danger',
-          'bg-blue-100 text-blue-700': variant === 'info',
-        },
+        'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[var(--radius-sm)] text-xs font-medium',
+        VARIANT_STYLES[variant],
         className
       )}
       {...props}
-    />
+    >
+      {dot && <span className="w-1.5 h-1.5 rounded-full bg-current" />}
+      {children}
+    </span>
   )
-}
+)
+Badge.displayName = 'Badge'
 
 export { Badge }

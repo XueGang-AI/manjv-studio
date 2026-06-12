@@ -111,3 +111,107 @@ export function getMaxShotDuration(modelProvider: string | null): number {
   if (modelProvider === 'agnes') return 18
   return 12
 }
+
+/**
+ * 校正镜头时长，确保：
+ * 1. 每个镜头不超过 maxDuration（超长则拆分）
+ * 2. 所有镜头总时长等于 targetDuration（按比例缩放 + 微调）
+ * 3. 时间轴连续（start_time 紧接上一个 end_time）
+ */
+export function normalizeShotDurations(
+  shots: Array<Record<string, unknown>>,
+  targetDuration: number,
+  maxDuration: number
+): Array<Record<string, unknown>> {
+  if (!shots.length) return shots
+
+  // Step 1: 先拆分超长镜头
+  const split = splitOversizedShots(shots, maxDuration)
+
+  // Step 2: 计算当前总时长
+  let totalDuration = 0
+  for (const shot of split) {
+    const start = (shot.start_time as number) || 0
+    const end = (shot.end_time as number) || 0
+    totalDuration += (end - start)
+  }
+
+  if (totalDuration === 0) return split
+
+  // Step 3: 如果总时长与目标差距超过 0.5s，按比例缩放每个镜头
+  const tolerance = 0.5
+  let result = split
+
+  if (Math.abs(totalDuration - targetDuration) > tolerance) {
+    const ratio = targetDuration / totalDuration
+    result = split.map(shot => {
+      const start = (shot.start_time as number) || 0
+      const end = (shot.end_time as number) || 0
+      const dur = end - start
+      const newDur = Math.max(1, Math.round(dur * ratio))
+      return { ...shot, duration: newDur }
+    })
+
+    // 微调最后一个镜头，使总时长精确等于 targetDuration
+    let adjustedTotal = 0
+    for (const shot of result) {
+      adjustedTotal += (shot.duration as number) || 0
+    }
+    const lastShot = result[result.length - 1]
+    const lastDur = (lastShot.duration as number) || 0
+    lastShot.duration = Math.max(1, lastDur + (targetDuration - adjustedTotal))
+  }
+
+  // Step 4: 重建连续时间轴
+  let currentTime = 0
+  let shotNo = 1
+  for (const shot of result) {
+    const dur = (shot.duration as number) || (targetDuration / result.length)
+    shot.shot_no = shotNo++
+    shot.start_time = currentTime
+    shot.end_time = currentTime + dur
+    currentTime += dur
+  }
+
+  return result
+}
+
+/**
+ * 拆分超过 maxDuration 的镜头为多个子镜头
+ * 保留原始镜头的所有内容属性，仅调整时间轴和 shot_no
+ */
+function splitOversizedShots(
+  shots: Array<Record<string, unknown>>,
+  maxDuration: number
+): Array<Record<string, unknown>> {
+  const result: Array<Record<string, unknown>> = []
+
+  for (const shot of shots) {
+    const startTime = (shot.start_time as number) || 0
+    const endTime = (shot.end_time as number) || 10
+    const duration = endTime - startTime
+
+    if (duration <= maxDuration) {
+      result.push({ ...shot })
+    } else {
+      // 超长镜头：拆分为多个等长的子镜头
+      const partCount = Math.ceil(duration / maxDuration)
+      const partDuration = duration / partCount
+
+      for (let i = 0; i < partCount; i++) {
+        const partStart = startTime + Math.round(i * partDuration)
+        const partEnd = startTime + Math.round((i + 1) * partDuration)
+        const suffix = partCount > 1 ? ` (${i + 1}/${partCount})` : ''
+
+        result.push({
+          ...shot,
+          shot_name: `${shot.shot_name || ''}${suffix}`,
+          start_time: partStart,
+          end_time: partEnd,
+        })
+      }
+    }
+  }
+
+  return result
+}

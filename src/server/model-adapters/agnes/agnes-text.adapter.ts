@@ -1,5 +1,7 @@
 // ============================================
 // Agnes-2.0-Flash 文本适配器（真实 API）
+// JSON 策略: prompt_only (schema 嵌入 prompt, 不使用 response_format)
+// Agnes API 不保证支持 OpenAI 的 json_object mode，改用 prompt_only 与 Ark 保持一致
 // ============================================
 import { BaseTextAdapter } from '../base.adapter'
 import { TextGenerationRequest, TextGenerationResponse } from '../types'
@@ -30,25 +32,27 @@ export class AgnesTextAdapter extends BaseTextAdapter {
       throw new Error('AGNES_TEXT_API_KEY not configured')
     }
 
-    const messages = [
-      { role: 'system' as const, content: request.systemPrompt },
-      { role: 'user' as const, content: request.userPrompt },
+    const messages: Array<{ role: 'system' | 'user'; content: string }> = [
+      { role: 'system', content: request.systemPrompt },
+      { role: 'user', content: request.userPrompt },
     ]
+
+    // JSON 策略: prompt_only — 将 outputSchema 注入到 system prompt 中
+    // 不使用 response_format: { type: 'json_object' }，因为 Agnes API 不保证支持 OpenAI JSON mode
+    if (request.outputSchema) {
+      const schemaRaw =
+        (request.outputSchema as Record<string, unknown>)._raw as string | undefined
+      if (schemaRaw && !messages[0].content.includes(schemaRaw.substring(0, 200))) {
+        messages[0].content =
+          messages[0].content + '\n\n## Required JSON Structure\n' + schemaRaw
+      }
+    }
 
     const body: Record<string, unknown> = {
       model: this.model,
       messages,
       temperature: request.temperature ?? 0.7,
       max_tokens: request.maxTokens ?? 4096,
-    }
-
-    if (request.outputSchema) {
-      body.response_format = { type: 'json_object' }
-      // 如果 schema 内容尚未在 system prompt 中，追加注入
-      const schemaRaw = (request.outputSchema as Record<string, unknown>)._raw as string | undefined
-      if (schemaRaw && !messages[0].content.includes(schemaRaw.substring(0, 200))) {
-        messages[0].content = messages[0].content + '\n\n## Required JSON Structure\n' + schemaRaw
-      }
     }
 
     const response = await fetch(`${this.baseUrl}/chat/completions`, {
@@ -64,8 +68,9 @@ export class AgnesTextAdapter extends BaseTextAdapter {
     }
 
     const data = await response.json()
-    const rawText = data.choices?.[0]?.message?.content || ''
+    const rawText: string = data.choices?.[0]?.message?.content || ''
 
+    // 解析 JSON: 先尝试直接解析, 失败则从 markdown 代码块提取
     let json: T | undefined
     try {
       json = JSON.parse(rawText) as T
