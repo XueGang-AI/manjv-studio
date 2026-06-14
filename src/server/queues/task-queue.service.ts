@@ -3,6 +3,8 @@
 // ============================================
 import prisma from '@/lib/prisma'
 
+type JsonValue = import('@prisma/client').Prisma.InputJsonValue
+
 /** 任务类型枚举（从 queue.types.ts 合并） */
 export enum TaskType {
   GENERATE_STORY_PACKAGE = 'GENERATE_STORY_PACKAGE',
@@ -33,7 +35,7 @@ export class TaskService {
         taskType: data.taskType,
         modelName: data.modelName || '',
         status: 'pending',
-        input: data.input || {},
+        input: (data.input || {}) as unknown as JsonValue,
         maxRetries: data.maxRetries ?? this.defaultMaxRetries(data.taskType),
         retryCount: 0,
       },
@@ -50,7 +52,7 @@ export class TaskService {
   async completeTask(taskId: string, output?: Record<string, unknown>) {
     return prisma.generationTask.update({
       where: { id: taskId },
-      data: { status: 'success', finishedAt: new Date(), output: output || {} },
+      data: { status: 'success', finishedAt: new Date(), output: (output || {}) as unknown as JsonValue },
     })
   }
 
@@ -153,7 +155,7 @@ export class TaskService {
 
   async appendLog(taskId: string, level: string, message: string, detail?: Record<string, unknown>) {
     return prisma.taskLog.create({
-      data: { taskId, level, message, detail: detail || {}, metadata: {} },
+      data: { taskId, level, message, detail: (detail || {}) as unknown as JsonValue, metadata: {} as unknown as JsonValue },
     })
   }
 

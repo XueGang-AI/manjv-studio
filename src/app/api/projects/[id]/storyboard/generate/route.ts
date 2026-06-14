@@ -5,6 +5,8 @@ import { adapterFactory } from '@/server/model-adapters/adapter.factory'
 import { getMaxShotDuration, normalizeShotDurations } from '@/lib/utils'
 import type { TextGenerationRequest } from '@/server/model-adapters/types'
 
+type JsonValue = import('@prisma/client').Prisma.InputJsonValue
+
 /**
  * POST /api/projects/:id/storyboard/generate
  * 生成第 1 集分镜脚本
@@ -59,7 +61,7 @@ export async function POST(
       data: {
         projectId, taskType: 'GENERATE_STORYBOARD',
         modelName: project.modelProvider === 'ark' ? (process.env.ARK_TEXT_MODEL || 'doubao-seed-character-251128') : (process.env.AGNES_TEXT_MODEL || 'agnes-2.0-flash'),
-        status: 'running', input: { project_id: projectId },
+        status: 'running', input: { project_id: projectId } as unknown as JsonValue,
       },
     })
 
@@ -157,10 +159,10 @@ export async function POST(
             endTime: (shot.end_time as number) || 10,
             sceneTime: (shot.scene_time as string) || '',
             location: (shot.location as string) || '',
-            characters: (shot.characters as unknown[]) || [],
+            characters: ((shot.characters as unknown[]) || []) as unknown as JsonValue,
             action: (shot.action as string) || '',
-            camera: (shot.camera as Record<string,unknown>) || {},
-            visual: (shot.visual as Record<string,unknown>) || {},
+            camera: ((shot.camera as Record<string,unknown>) || {}) as unknown as JsonValue,
+            visual: ((shot.visual as Record<string,unknown>) || {}) as unknown as JsonValue,
             emotion: (shot.emotion as string) || '',
             sfx: (shot.sfx as string) || '',
             bgm: (shot.bgm as string) || '',
@@ -180,7 +182,7 @@ export async function POST(
               negativePrompt: imgP.negative || '',
               aspectRatio: project.aspectRatio,
               style: project.artStyle,
-              params: {},
+              params: {} as unknown as JsonValue,
               confirmed: false,
             },
           })
@@ -196,7 +198,7 @@ export async function POST(
               duration: (shot.duration as number) || (shot.end_time as number || 10) - (shot.start_time as number || 0),
               motionStrength: 'medium',
               cameraMotion: ((shot.camera as Record<string,string>)?.movement) || '',
-              params: { fps: 24 },
+              params: { fps: 24 } as unknown as JsonValue,
               confirmed: false,
             },
           })
@@ -210,7 +212,7 @@ export async function POST(
         await prisma.voiceScript.create({
           data: {
             episodeId: episode.id, projectId,
-            content: { timeline: content.voice_timeline },
+            content: { timeline: content.voice_timeline } as unknown as JsonValue,
             confirmed: false,
           },
         })
@@ -228,7 +230,7 @@ export async function POST(
       })
       await prisma.generationTask.update({
         where: { id: task.id },
-        data: { status: 'success', output: { episode_id: episode.id, shot_count: createdShots.length, version: nextVersion } },
+        data: { status: 'success', output: { episode_id: episode.id, shot_count: createdShots.length, version: nextVersion } as unknown as JsonValue },
       })
 
       return NextResponse.json({
@@ -259,7 +261,7 @@ function loadMaterialRefs(project: { artStyle?: string | null; targetPlatform?: 
     // 运镜术语参考
     const cameraTerms = JSON.parse(fs.readFileSync(path.join(promptsDir, 'camera/camera_terms.json'), 'utf-8'))
     const terms = (cameraTerms.entries || []).slice(0, 10)
-    if (terms.length) ref += '\n可用镜头术语：' + terms.map((t: {term_zh?: string}) => t.term_zh || t.text || '').filter(Boolean).slice(0, 10).join('、')
+    if (terms.length) ref += '\n可用镜头术语：' + terms.map((t: {term_zh?: string}) => t.term_zh || '').filter(Boolean).slice(0, 10).join('、')
   } catch {}
 
   try {

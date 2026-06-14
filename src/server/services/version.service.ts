@@ -3,6 +3,8 @@
 // ============================================
 import prisma from '@/lib/prisma'
 
+type JsonValue = import('@prisma/client').Prisma.InputJsonValue
+
 export type EntityType = 'STORY_PACKAGE' | 'CHARACTER_SET' | 'CHARACTER_IMAGE_SET' |
   'STORYBOARD' | 'SHOT_IMAGE_SET' | 'SHOT_VIDEO_SET' | 'VOICE_SCRIPT' | 'FINAL_VIDEO'
 
@@ -40,7 +42,7 @@ export class VersionService {
         entityType: input.entityType,
         entityId: input.entityId,
         version: nextVersion,
-        snapshot: input.snapshot,
+        snapshot: input.snapshot as unknown as JsonValue,
         changeType: input.changeType || 'GENERATE',
         description: input.description || '',
         sourceTaskId: input.sourceTaskId || null,
@@ -115,7 +117,7 @@ export class VersionService {
         if (story_package?.id) {
           await prisma.storyPackage.update({
             where: { id: story_package.id as string },
-            data: { content: (story_package.content as Record<string,unknown>) || {} },
+            data: { content: ((story_package.content as Record<string,unknown>) || {}) as unknown as JsonValue },
           })
         }
         if (project_status) {

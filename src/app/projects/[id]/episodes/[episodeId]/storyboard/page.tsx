@@ -315,12 +315,12 @@ export default function StoryboardPage() {
           </div>
 
           {/* Voice Timeline */}
-          {episode.voiceScripts?.[0]?.content && (
+          {Boolean(episode.voiceScripts?.[0]?.content) && (
             <Card className="mt-6">
               <CardHeader><CardTitle>配音时间轴</CardTitle></CardHeader>
               <CardContent>
                 <div className="space-y-1">
-                  {(episode.voiceScripts[0].content as Record<string,unknown>)?.timeline && Array.isArray((episode.voiceScripts[0].content as Record<string,unknown>).timeline) &&
+                  {Boolean((episode.voiceScripts[0].content as Record<string,unknown>)?.timeline) && Array.isArray((episode.voiceScripts[0].content as Record<string,unknown>).timeline) &&
                     ((episode.voiceScripts[0].content as Record<string,unknown>).timeline as Array<Record<string,unknown>>).map((item, i) => (
                       <div key={i} className="flex items-center gap-2 text-xs py-1 border-b border-gray-100">
                         <Badge variant="default" className="text-xs shrink-0">

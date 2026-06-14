@@ -18,6 +18,23 @@ export interface PaginatedResponse<T> extends ApiResponse<T[]> {
 // ============================================
 // 项目类型
 // ============================================
+
+/**
+ * 项目列表项 — 对齐 GET /api/projects 返回字段
+ */
+export interface ProjectListItem {
+  id: string
+  projectName: string
+  storyType: string | null
+  targetPlatform: string | null
+  episodeCount: number
+  episodeDuration: number
+  artStyle: string | null
+  status: string
+  modelProvider: string
+  createdAt: string
+  updatedAt: string
+}
 export interface ProjectFormData {
   project_name: string
   story_type: string

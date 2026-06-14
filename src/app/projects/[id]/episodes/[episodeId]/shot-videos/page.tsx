@@ -395,7 +395,7 @@ export default function ShotVideosPage() {
                         )}
 
                         {/* 查看原始响应 */}
-                        {v.remoteResponseJson && (
+                        {Boolean(v.remoteResponseJson) && (
                           <Button
                             size="sm" variant="ghost" className="text-xs h-7 w-full text-gray-400"
                             onClick={() => handleViewRawResponse(v)}

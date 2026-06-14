@@ -2,6 +2,8 @@
 // QC 质量检查服务
 // ============================================
 import prisma from '@/lib/prisma'
+
+type JsonValue = import('@prisma/client').Prisma.InputJsonValue
 import { promptTemplateService } from './prompt-template.service'
 import { adapterFactory } from '@/server/model-adapters/adapter.factory'
 
@@ -259,7 +261,7 @@ export class QCService {
         targetId: episodeId || projectId,
         score: result.score,
         passed: result.passed,
-        issues: result.issues as unknown[],
+        issues: result.issues as unknown[] as unknown as JsonValue,
       },
     })
   }

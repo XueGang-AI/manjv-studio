@@ -4,6 +4,8 @@ import { adapterFactory } from '@/server/model-adapters/adapter.factory'
 import { snapShotDuration } from '@/lib/utils'
 import type { VideoGenerationRequest } from '@/server/model-adapters/types'
 
+type JsonValue = import('@prisma/client').Prisma.InputJsonValue
+
 /**
  * POST — 重新创建单个镜头的视频任务（异步模式）
  * 与 generate 路由保持一致：创建远程异步任务 → 保存 remoteTaskId → 前端轮询
@@ -59,9 +61,9 @@ export async function POST(
             videoUrl: v.url, prompt: vidPrompt?.prompt || '',
             seed: String(v.params?.seed || ''),
             modelName,
-            referenceImages: confirmedImage ? [{ image_url: confirmedImage.imageUrl }] : [],
+            referenceImages: confirmedImage ? [{ image_url: confirmedImage.imageUrl }] : [] as unknown as JsonValue,
             duration: v.duration || duration,
-            params: { aspect_ratio: project.aspectRatio },
+            params: { aspect_ratio: project.aspectRatio } as unknown as JsonValue,
             isSelected: false, isConfirmed: false,
           },
         })
@@ -80,12 +82,12 @@ export async function POST(
         prompt: vidPrompt?.prompt || '',
         seed: '',
         modelName,
-        referenceImages: confirmedImage ? [{ image_url: confirmedImage.imageUrl }] : [],
+        referenceImages: confirmedImage ? [{ image_url: confirmedImage.imageUrl }] : [] as unknown as JsonValue,
         duration,
-        params: { aspect_ratio: project.aspectRatio, generation_method: 'async_task' },
+        params: { aspect_ratio: project.aspectRatio, generation_method: 'async_task' } as unknown as JsonValue,
         remoteTaskId: createResult.taskId,
         remoteStatus: createResult.status,
-        remoteResponseJson: createResult.createResponse as Record<string, unknown>,
+        remoteResponseJson: createResult.createResponse as unknown as JsonValue,
         lastPolledAt: new Date(),
         isSelected: false, isConfirmed: false,
       },

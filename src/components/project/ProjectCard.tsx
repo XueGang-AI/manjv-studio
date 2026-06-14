@@ -6,19 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ProjectStatusBadge } from './ProjectStatusBadge'
 import { Trash2, Edit3, Eye } from 'lucide-react'
-
-interface ProjectListItem {
-  id: string
-  projectName: string
-  storyType: string | null
-  targetPlatform: string | null
-  episodeCount: number
-  episodeDuration: number
-  artStyle: string | null
-  status: string
-  createdAt: string
-  updatedAt: string
-}
+import type { ProjectListItem } from '@/lib/types'
 
 interface Props {
   project: ProjectListItem

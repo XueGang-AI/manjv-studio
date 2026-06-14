@@ -3,14 +3,13 @@
 // ============================================
 import {
   ITextAdapter, IImageAdapter, IVideoAdapter,
+  TextGenerationRequest, TextGenerationResponse,
   VideoGenerationRequest, VideoGenerationResponse,
   VideoTaskCreationResult, VideoTaskPollResult, VideoTaskWaitResult,
 } from './types'
 
 export abstract class BaseTextAdapter implements ITextAdapter {
-  abstract generate<T = unknown>(
-    request: Parameters<ITextAdapter['generate']>[0]
-  ): ReturnType<ITextAdapter['generate']>
+  abstract generate<T = unknown>(request: TextGenerationRequest): Promise<TextGenerationResponse<T>>
 }
 
 export abstract class BaseImageAdapter implements IImageAdapter {

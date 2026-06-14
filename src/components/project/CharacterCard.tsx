@@ -41,7 +41,7 @@ const ROLE_COLORS: Record<string, string> = {
 export function CharacterCard({ character, confirmed, onConfirm }: Props) {
   const appearance = character.appearance as Record<string, unknown> || {}
   const personality = character.personality as Record<string, unknown> || {}
-  const clothing = character.clothing as Record<string, unknown> || {}
+  const clothing: Record<string, unknown> = (character.clothing as Record<string, unknown>) || {}
   const signatureFeatures = (character.signatureFeatures as string[]) || []
   const languageStyle = character.languageStyle as Record<string, unknown> || {}
   const actionHabits = (character.actionHabits as string[]) || []
@@ -119,7 +119,7 @@ export function CharacterCard({ character, confirmed, onConfirm }: Props) {
         )}
 
         {/* 性格特点 */}
-        {(personalityTags.length > 0 || personality.desire || personality.fear) && (
+        {(personalityTags.length > 0 || Boolean(personality.desire) || Boolean(personality.fear)) && (
           <Section icon={<Tag size={14} />} title="性格特点">
             {personalityTags.length > 0 && (
               <div className="flex flex-wrap gap-1 mb-2">
@@ -138,10 +138,10 @@ export function CharacterCard({ character, confirmed, onConfirm }: Props) {
                 ⚠️ 弱点：{(personality.weaknesses as string[]).join('、')}
               </p>
             )}
-            {personality.desire && (
+            {Boolean(personality.desire) && (
               <p className="text-xs text-gray-500">🎯 欲望：{String(personality.desire)}</p>
             )}
-            {personality.fear && (
+            {Boolean(personality.fear) && (
               <p className="text-xs text-gray-500">😰 恐惧：{String(personality.fear)}</p>
             )}
           </Section>

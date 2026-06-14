@@ -21,9 +21,9 @@ const BADGE_STYLES: Record<BadgeVariant, string> = {
   accent: 'bg-[var(--color-accent-muted)] text-[var(--color-accent)]',
 }
 
-export function Badge({ children, variant = 'default' }: { children: React.ReactNode; variant?: BadgeVariant }) {
+export function Badge({ children, variant = 'default', className = '' }: { children: React.ReactNode; variant?: BadgeVariant; className?: string }) {
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-[var(--radius-sm)] text-xs font-medium ${BADGE_STYLES[variant]}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-[var(--radius-sm)] text-xs font-medium ${BADGE_STYLES[variant]} ${className}`}>
       {children}
     </span>
   )

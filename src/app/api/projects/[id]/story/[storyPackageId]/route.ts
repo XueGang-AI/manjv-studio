@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 
+type JsonValue = import('@prisma/client').Prisma.InputJsonValue
+
 /**
  * PATCH /api/projects/:id/story/:storyPackageId
  * 更新故事方案内容
@@ -54,7 +56,7 @@ export async function PATCH(
 
     const updated = await prisma.storyPackage.update({
       where: { id: storyPackageId },
-      data: { content: content as Record<string, unknown> },
+      data: { content: content as unknown as JsonValue },
     })
 
     return NextResponse.json({ success: true, data: updated })

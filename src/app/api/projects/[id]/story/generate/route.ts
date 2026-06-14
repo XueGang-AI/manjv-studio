@@ -4,6 +4,8 @@ import { promptTemplateService } from '@/server/services/prompt-template.service
 import { adapterFactory } from '@/server/model-adapters/adapter.factory'
 import type { TextGenerationRequest } from '@/server/model-adapters/types'
 
+type JsonValue = import('@prisma/client').Prisma.InputJsonValue
+
 /**
  * POST /api/projects/:id/story/generate
  * 生成故事方案
@@ -39,7 +41,7 @@ export async function POST(
         taskType: 'GENERATE_STORY_PACKAGE',
         modelName: project.modelProvider === 'ark' ? (process.env.ARK_TEXT_MODEL || 'doubao-seed-character-251128') : (process.env.AGNES_TEXT_MODEL || 'agnes-2.0-flash'),
         status: 'running',
-        input: { project_id: projectId },
+        input: { project_id: projectId } as unknown as JsonValue,
       },
     })
 
@@ -143,7 +145,7 @@ export async function POST(
         data: {
           projectId,
           version: nextVersion,
-          content: content as Record<string, unknown>,
+          content: content as unknown as JsonValue,
           confirmed: false,
         },
       })
@@ -159,7 +161,7 @@ export async function POST(
         where: { id: task.id },
         data: {
           status: 'success',
-          output: { story_package_id: storyPackage.id, version: nextVersion },
+          output: { story_package_id: storyPackage.id, version: nextVersion } as unknown as JsonValue,
         },
       })
 

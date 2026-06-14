@@ -4,6 +4,8 @@ import { adapterFactory } from '@/server/model-adapters/adapter.factory'
 import { snapShotDuration } from '@/lib/utils'
 import type { VideoGenerationRequest } from '@/server/model-adapters/types'
 
+type JsonValue = import('@prisma/client').Prisma.InputJsonValue
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; episodeId: string }> }
@@ -44,7 +46,7 @@ export async function POST(
       data: {
         projectId, episodeId, taskType: 'GENERATE_SHOT_VIDEOS',
         modelName: project.modelProvider === 'ark' ? (process.env.ARK_VIDEO_MODEL || 'doubao-seedance-1-5-pro-251215') : (process.env.AGNES_VIDEO_MODEL || 'agnes-video-v2.0'), status: 'running',
-        input: { shot_count: shots.length },
+        input: { shot_count: shots.length } as unknown as JsonValue,
       },
     })
 
@@ -109,12 +111,12 @@ export async function POST(
               prompt,
               seed: '',
               modelName: project.modelProvider === 'ark' ? (process.env.ARK_VIDEO_MODEL || 'doubao-seedance-1-5-pro-251215') : (process.env.AGNES_VIDEO_MODEL || 'agnes-video-v2.0'),
-              referenceImages: confirmedImage ? [{ image_url: confirmedImage.imageUrl }] : [],
+              referenceImages: confirmedImage ? [{ image_url: confirmedImage.imageUrl }] : [] as unknown as JsonValue,
               duration,
-              params: { aspect_ratio: aspectRatio, generation_method: 'async_task' },
+              params: { aspect_ratio: aspectRatio, generation_method: 'async_task' } as unknown as JsonValue,
               remoteTaskId: createResult.taskId,
               remoteStatus: createResult.status,
-              remoteResponseJson: createResult.createResponse,
+              remoteResponseJson: createResult.createResponse as unknown as JsonValue,
               lastPolledAt: new Date(),
               isSelected: false, isConfirmed: false,
             },
@@ -133,9 +135,9 @@ export async function POST(
                 videoUrl: v.url, prompt,
                 seed: String(v.params?.seed || ''),
                 modelName: project.modelProvider === 'ark' ? (process.env.ARK_VIDEO_MODEL || 'doubao-seedance-1-5-pro-251215') : (process.env.AGNES_VIDEO_MODEL || 'agnes-video-v2.0'),
-                referenceImages: confirmedImage ? [{ image_url: confirmedImage.imageUrl }] : [],
+                referenceImages: confirmedImage ? [{ image_url: confirmedImage.imageUrl }] : [] as unknown as JsonValue,
                 duration: v.duration || duration,
-                params: { ...v.params, aspect_ratio: aspectRatio },
+                params: { ...v.params, aspect_ratio: aspectRatio } as unknown as JsonValue,
                 isSelected: false, isConfirmed: false,
               },
             })
@@ -158,7 +160,7 @@ export async function POST(
 
       await prisma.generationTask.update({
         where: { id: task.id },
-        data: { status: 'success', output: { total_videos: allResults.reduce((s, r) => s + r.videos.length, 0), is_async: !isMock } },
+        data: { status: 'success', output: { total_videos: allResults.reduce((s, r) => s + r.videos.length, 0), is_async: !isMock } as unknown as JsonValue },
       })
 
       return NextResponse.json({

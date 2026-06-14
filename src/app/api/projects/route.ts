@@ -19,6 +19,7 @@ export async function GET() {
         episodeDuration: true,
         artStyle: true,
         status: true,
+        modelProvider: true,
         createdAt: true,
         updatedAt: true,
       },
