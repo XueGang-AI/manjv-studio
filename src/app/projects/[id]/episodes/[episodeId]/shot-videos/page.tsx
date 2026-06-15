@@ -1,60 +1,26 @@
+/**
+ * 视频片段页面 — Aurora Studio V3
+ *
+ * 布局：镜头导航(左) | 视频审核区(中) | 右侧面板(右)
+ * 数据源：GET /api/projects/:id/episodes/:episodeId/shot-videos
+ * 操作：生成视频、检查任务、选择视频、确认视频、重新生成
+ *
+ * 轮询策略：
+ * - 项目状态 SHOT_VIDEO_GENERATING 时，每 10 秒调用 batch-check-tasks 检查远程 API
+ * - 组件卸载时清理定时器
+ * - 所有任务终态后自动停止
+ */
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Card, CardContent } from '@/components/ui/card'
+import { AlertTriangle, Video, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import {
-  Wand2, RefreshCw, CheckCircle2, AlertTriangle,
-  ArrowLeft, ArrowRight, Video, Loader2, X, Clock, Play,
-  Search, RotateCcw, FileJson, Download,
-} from 'lucide-react'
-
-interface ShotGroup {
-  shot: {
-    id: string; shotNo: number; shotName: string
-    startTime: number; endTime: number
-    videoPrompt: { prompt: string; duration: number; motionStrength: string } | null
-    confirmedImage: { id: string; imageUrl: string } | null
-  }
-  videos: Array<{
-    id: string; videoUrl: string; prompt: string; seed: string
-    duration: number; isSelected: boolean; isConfirmed: boolean
-    remoteTaskId?: string
-    remoteStatus?: string
-    remoteProgress?: number
-    lastPolledAt?: string
-    remoteResponseJson?: unknown
-    params?: Record<string, unknown>
-  }>
-  selectedVideo: { id: string; videoUrl: string } | null
-  confirmed: boolean
-}
-
-/** 远端任务状态的中文标签 */
-function remoteStatusLabel(status?: string): string {
-  if (!status) return ''
-  const s = status.toLowerCase()
-  if (s === 'queued' || s === 'pending' || s === 'waiting') return '已创建，正在排队...'
-  if (s === 'processing' || s === 'running' || s === 'in_progress' || s === 'generating') return '处理中...'
-  if (s === 'completed' || s === 'succeeded' || s === 'success' || s === 'done') return '生成完成'
-  if (s === 'failed' || s === 'error' || s === 'cancelled') return '生成失败'
-  if (s === 'timeout') return '轮询超时'
-  return status
-}
-
-/** 远端任务状态的颜色和图标 */
-function remoteStatusBadge(status?: string) {
-  if (!status) return null
-  const s = status.toLowerCase()
-  if (s === 'queued' || s === 'pending') return <Badge variant="default" className="text-xs bg-yellow-100 text-yellow-700 border-yellow-300"><Clock size={10} className="mr-1" />视频任务已创建，正在排队</Badge>
-  if (s === 'processing' || s === 'running') return <Badge variant="default" className="text-xs bg-blue-100 text-blue-700 border-blue-300"><Loader2 size={10} className="mr-1 animate-spin" />视频任务处理中</Badge>
-  if (s === 'completed' || s === 'succeeded' || s === 'success') return <Badge variant="default" className="text-xs bg-green-100 text-green-700 border-green-300"><CheckCircle2 size={10} className="mr-1" />视频生成完成</Badge>
-  if (s === 'failed' || s === 'error') return <Badge variant="default" className="text-xs bg-red-100 text-red-700 border-red-300"><AlertTriangle size={10} className="mr-1" />视频生成失败</Badge>
-  if (s === 'timeout') return <Badge variant="default" className="text-xs bg-orange-100 text-orange-700 border-orange-300"><Clock size={10} className="mr-1" />视频轮询超时，可继续检查</Badge>
-  return <Badge variant="default" className="text-xs">{remoteStatusLabel(status)}</Badge>
-}
+import { useToast } from '@/components/ui/toast'
+import { ShotVideoNavigation } from '@/components/shot-videos/shot-video-navigation'
+import { ShotVideoReview } from '@/components/shot-videos/shot-video-review'
+import { ShotVideoRightPanel } from '@/components/shot-videos/shot-video-right-panel'
+import { getVideoGroupStatus, STATUS_LABELS, type ShotVideosData } from '@/components/shot-videos/shot-videos-types'
 
 export default function ShotVideosPage() {
   const params = useParams()
@@ -62,385 +28,275 @@ export default function ShotVideosPage() {
   const projectId = params.id as string
   const episodeId = params.episodeId as string
 
-  const [state, setState] = useState<{ projectStatus: string; shots: ShotGroup[]; allConfirmed: boolean } | null>(null)
+  const [data, setData] = useState<ShotVideosData | null>(null)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
-  const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [activeShotId, setActiveShotId] = useState<string | null>(null)
+  const [mobileSelectorOpen, setMobileSelectorOpen] = useState(false)
 
-  const [autoPollTimer, setAutoPollTimer] = useState<ReturnType<typeof setInterval> | null>(null)
+  const { addToast } = useToast()
 
-  const fetchData = useCallback(async () => {
+  // Auto-poll timer ref
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Refresh data
+  const refreshData = useCallback(async () => {
     try {
       const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/shot-videos`)
-      const data = await res.json()
-      if (data.success) setState(data.data)
-      else setError(data.error)
-    } catch { setError('加载失败') } finally { setLoading(false) }
+      const json = await res.json()
+      if (json.success) setData(json.data)
+    } catch { /* silent */ }
   }, [projectId, episodeId])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  // Initial load
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      setLoading(true)
+      setError(null)
+      try {
+        const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/shot-videos`)
+        const json = await res.json()
+        if (cancelled) return
+        if (json.success) setData(json.data)
+        else setError(json.error || '加载失败')
+      } catch {
+        if (!cancelled) setError('网络错误，请重试')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [projectId, episodeId])
 
-  /** 批量轮询远端任务：调用 /batch-check-tasks 真正查询远程 API，再刷新本地数据 */
+  // Auto-poll: batch check remote tasks when generating
   const batchCheckTasks = useCallback(async () => {
     try {
       const res = await fetch(
         `/api/projects/${projectId}/episodes/${episodeId}/shot-videos/batch-check-tasks`,
         { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }
       )
-      const data = await res.json()
-      if (data.success) {
-        // 批量轮询后刷新本地数据
-        await fetchData()
-        // 如果所有任务都已终态，停止轮询
-        if (data.data?.pending === 0 && data.data?.checked > 0) {
-          stopAutoPoll()
+      const json = await res.json()
+      if (json.success) {
+        await refreshData()
+        // If all tasks are terminal, stop polling
+        if (json.data?.pending === 0 && json.data?.checked > 0) {
+          if (pollTimerRef.current) {
+            clearInterval(pollTimerRef.current)
+            pollTimerRef.current = null
+          }
         }
       }
-    } catch {
-      // 轮询失败不影响页面，静默跳过
-    }
-  }, [projectId, episodeId, fetchData])
+    } catch { /* silent */ }
+  }, [projectId, episodeId, refreshData])
 
-  const stopAutoPoll = useCallback(() => {
-    setAutoPollTimer(prev => {
-      if (prev) clearInterval(prev)
-      return null
-    })
-  }, [])
-
-  /** 启动自动轮询（真正查询远程 API，而非只读数据库） */
-  const startAutoPoll = useCallback(() => {
-    stopAutoPoll()
-    const timer = setInterval(batchCheckTasks, 10000) // 10 秒轮询一次远程状态
-    setAutoPollTimer(timer)
-  }, [batchCheckTasks, stopAutoPoll])
-
-  // 项目状态为 GENERATING 时，自动启动轮询
+  // Start/stop poll based on project status
   useEffect(() => {
-    if (state?.projectStatus === 'SHOT_VIDEO_GENERATING') {
-      // 只有尚未启动轮询时才启动
-      if (!autoPollTimer) {
-        startAutoPoll()
+    const isGenerating = data?.projectStatus === 'SHOT_VIDEO_GENERATING'
+    const hasPendingTasks = data?.shots.some(s =>
+      s.videos.some(v => v.remoteTaskId && !['completed', 'succeeded', 'success', 'done', 'failed', 'error', 'cancelled', 'timeout'].includes((v.remoteStatus || '').toLowerCase()))
+    )
+
+    if (isGenerating || hasPendingTasks) {
+      if (!pollTimerRef.current) {
+        pollTimerRef.current = setInterval(batchCheckTasks, 10000)
       }
     } else {
-      stopAutoPoll()
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current)
+        pollTimerRef.current = null
+      }
     }
-  }, [state?.projectStatus, autoPollTimer, startAutoPoll, stopAutoPoll])
+  }, [data?.projectStatus, data?.shots, batchCheckTasks])
 
-  // 组件卸载时清理轮询
+  // Cleanup on unmount
   useEffect(() => {
-    return () => stopAutoPoll()
-  }, [stopAutoPoll])
+    return () => {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current)
+        pollTimerRef.current = null
+      }
+    }
+  }, [])
 
+  // Derived
+  const isGenerating = data?.projectStatus === 'SHOT_VIDEO_GENERATING' || generating
+  const effectiveActiveShotId = activeShotId ?? (data?.shots?.length ? data.shots[0].shot.id : null)
+  const activeGroup = data?.shots.find(s => s.shot.id === effectiveActiveShotId) ?? data?.shots[0] ?? null
+  const episodeIdFromData = data?.episodeId ?? episodeId
+
+  // Actions
   const handleGenerate = async () => {
-    setGenerating(true); setError(null)
+    setGenerating(true)
     try {
-      const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/shot-videos/generate`, { method: 'POST' })
-      const data = await res.json()
-      if (data.success) {
-        await fetchData()
-        // 异步任务模式下，立即启动自动轮询
-        if (data.data?.isAsync) {
-          startAutoPoll()
+      const res = await fetch(`/api/projects/${projectId}/episodes/${episodeIdFromData}/shot-videos/generate`, { method: 'POST' })
+      const json = await res.json()
+      if (json.success) {
+        if (json.data?.isAsync) {
+          addToast({ type: 'success', title: '视频任务已创建', description: '系统将自动轮询生成状态' })
+        } else {
+          addToast({ type: 'success', title: '视频生成完成' })
         }
-      } else setError(data.error || '生成失败')
-    } catch { setError('请求失败') } finally { setGenerating(false) }
+        await refreshData()
+      } else {
+        addToast({ type: 'error', title: '生成失败', description: json.error })
+      }
+    } catch {
+      addToast({ type: 'error', title: '请求失败' })
+    } finally { setGenerating(false) }
   }
 
-  /** 检查单个远端视频任务 */
-  const handleCheckTask = async (videoId: string) => {
-    setActionLoading(videoId)
+  const handleBatchCheck = async () => {
     try {
-      const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/shot-videos/${videoId}/check-task`, { method: 'POST' })
-      const data = await res.json()
-      if (data.success) {
-        await fetchData()
-      } else setError(data.error || '检查失败')
-    } catch { setError('请求失败') } finally { setActionLoading(null) }
-  }
-
-  /** 重新创建单个镜头的视频任务 */
-  const handleRegenerate = async (shotId: string) => {
-    setActionLoading(shotId)
-    try {
-      const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/shots/${shotId}/videos/regenerate`, { method: 'POST' })
-      const data = await res.json()
-      if (data.success) await fetchData()
-      else setError(data.error || '重新生成失败')
-    } catch { setError('请求失败') } finally { setActionLoading(null) }
-  }
-
-  /** 查看原始响应 */
-  const handleViewRawResponse = (video: ShotGroup['videos'][0]) => {
-    const response = video.remoteResponseJson || video.params
-    const content = JSON.stringify(response, null, 2)
-    const win = window.open('', '_blank', 'width=600,height=400')
-    if (win) {
-      win.document.write(`<pre style="padding:16px;font-size:12px;white-space:pre-wrap;word-break:break-all">${content.replace(/</g, '&lt;')}</pre>`)
+      const res = await fetch(
+        `/api/projects/${projectId}/episodes/${episodeIdFromData}/shot-videos/batch-check-tasks`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }
+      )
+      const json = await res.json()
+      if (json.success) {
+        addToast({ type: 'success', title: `已检查 ${json.data.checked} 个任务`, description: `完成: ${json.data.completed}, 失败: ${json.data.failed}, 待处理: ${json.data.pending}` })
+        await refreshData()
+      } else {
+        addToast({ type: 'error', title: '批量检查失败', description: json.error })
+      }
+    } catch {
+      addToast({ type: 'error', title: '请求失败' })
     }
   }
 
-  const handleSelect = async (vid: string) => { setActionLoading(vid); await fetch(`/api/projects/${projectId}/episodes/${episodeId}/shot-videos/${vid}/select`, { method: 'POST' }); await fetchData(); setActionLoading(null) }
-  const handleConfirm = async (vid: string) => {
-    setActionLoading(vid)
-    try {
-      const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/shot-videos/${vid}/confirm`, { method: 'POST' })
-      const data = await res.json()
-      if (data.success) await fetchData()
-      else setError(data.error || '请先选择')
-    } catch { setError('请求失败') } finally { setActionLoading(null) }
+  // ─── Render ──────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 rounded-[var(--radius-md)] bg-[var(--bg-panel)] animate-pulse" />
+          <div className="h-6 w-32 bg-[var(--bg-panel)] rounded animate-pulse" />
+        </div>
+        {[1, 2, 3].map(i => (
+          <div key={i} className="space-y-3">
+            <div className="h-8 bg-[var(--bg-panel)] rounded animate-pulse w-48" />
+            <div className="aspect-video bg-[var(--bg-panel)] rounded-[var(--radius-lg)] animate-pulse" />
+          </div>
+        ))}
+      </div>
+    )
   }
 
-  const shots = state?.shots || []
-  const isGenerating = state?.projectStatus === 'SHOT_VIDEO_GENERATING' || generating
-  const hasVideos = shots.some(s => s.videos.length > 0)
-  const allConfirmed = state?.allConfirmed || false
+  if (error && !data) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center py-20 text-center p-6">
+        <div className="w-16 h-16 rounded-[var(--radius-xl)] bg-[var(--color-danger-muted)] flex items-center justify-center mb-5 text-[var(--color-danger)]">
+          <AlertTriangle size={28} />
+        </div>
+        <h3 className="text-lg font-semibold text-[var(--color-text-primary)] mb-2">加载失败</h3>
+        <p className="text-sm text-[var(--color-text-muted)] max-w-sm mb-6">{error}</p>
+        <Button variant="outline" size="sm" onClick={() => { setError(null); setLoading(true); refreshData() }}>重试</Button>
+      </div>
+    )
+  }
 
-  if (loading) return <div className="flex justify-center py-16"><Loader2 size={32} className="animate-spin text-gray-300" /></div>
+  if (!data || data.shots.length === 0) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center py-20 text-center p-6">
+        <div className="w-16 h-16 rounded-[var(--radius-xl)] bg-[var(--color-warning-muted)] flex items-center justify-center mb-5 text-[var(--color-warning)]">
+          <Video size={28} />
+        </div>
+        <h3 className="text-lg font-semibold text-[var(--color-text-primary)] mb-2">暂无分镜数据</h3>
+        <p className="text-sm text-[var(--color-text-muted)] max-w-sm mb-6">
+          请先完成分镜图确认，再进入视频生成
+        </p>
+        <Button variant="outline" size="sm" onClick={() => router.push(`/projects/${projectId}/episodes/${episodeId}/shot-images`)}>
+          返回分镜图
+        </Button>
+      </div>
+    )
+  }
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">视频片段</h1>
-          <p className="text-gray-500 mt-1">
-            {allConfirmed ? '所有镜头视频已确认 ✓' : hasVideos ? `为 ${shots.length} 个镜头选择最终视频` : 'AI 将为每个镜头生成视频片段'}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {hasVideos && !allConfirmed && (
-            <Button variant="outline" onClick={handleGenerate} disabled={isGenerating}>
-              <RefreshCw size={16} className={`mr-1 ${isGenerating ? 'animate-spin' : ''}`} /> 重新生成全部
-            </Button>
-          )}
-          {!hasVideos && !isGenerating && (
-            <Button size="lg" onClick={handleGenerate} disabled={isGenerating}>
-              <Wand2 size={20} className="mr-2" /> 生成全部视频片段
-            </Button>
-          )}
-          {allConfirmed && (
-            <Button onClick={() => router.push(`/projects/${projectId}/episodes/${episodeId}/final-preview`)}>
-              进入成片预览 <ArrowRight size={16} className="ml-1" />
-            </Button>
-          )}
-        </div>
+    <div className="flex flex-1 overflow-hidden">
+      {/* Desktop: side navigation */}
+      <div className="hidden md:block">
+        <ShotVideoNavigation
+          shots={data.shots}
+          isGenerating={isGenerating}
+          activeShotId={activeGroup?.shot.id ?? null}
+          onSelect={setActiveShotId}
+        />
       </div>
 
-      {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
-          <AlertTriangle size={18} className="text-red-500 mt-0.5" />
-          <p className="text-sm text-red-600 flex-1">{error}</p>
-          <button onClick={() => setError(null)} className="text-red-400"><X size={16} /></button>
-        </div>
-      )}
-
-      {/* 远端任务状态概览 */}
-      {hasVideos && !allConfirmed && shots.some(sg => sg.videos.some(v => v.remoteTaskId)) && (
-        <Card className="mb-4 border-blue-200 bg-blue-50">
-          <CardContent className="py-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm text-blue-700">
-                <Loader2 size={14} className="animate-spin" />
-                <span>部分视频远端任务仍在处理中，系统会自动轮询状态</span>
-              </div>
-              <Button variant="outline" size="sm" onClick={fetchData}>
-                <RefreshCw size={14} className="mr-1" /> 刷新状态
-              </Button>
+      {/* Mobile: top shot selector */}
+      <div className="md:hidden w-full">
+        <div className="relative border-b border-[var(--color-border-dim)] bg-[var(--bg-surface)]">
+          <button
+            className="w-full px-4 py-2.5 flex items-center justify-between cursor-pointer"
+            onClick={() => setMobileSelectorOpen(!mobileSelectorOpen)}
+          >
+            <div className="flex items-center gap-2">
+              <span className="w-6 h-6 rounded-[var(--radius-sm)] flex items-center justify-center text-xs font-bold text-white" style={{ background: 'var(--gradient-aurora)' }}>
+                {activeGroup?.shot.shotNo ?? '-'}
+              </span>
+              <span className="text-sm font-medium text-[var(--color-text-primary)]">{activeGroup?.shot.shotName || `镜头 ${activeGroup?.shot.shotNo ?? ''}`}</span>
+              {activeGroup && (
+                <span className="text-[10px] text-[var(--color-text-muted)]">
+                  {STATUS_LABELS[getVideoGroupStatus(activeGroup, isGenerating)]}
+                </span>
+              )}
             </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {isGenerating && (
-        <Card><CardContent className="flex flex-col items-center py-16">
-          <Loader2 size={48} className="animate-spin text-indigo-500 mb-4" />
-          <h3 className="text-lg font-medium text-gray-700 mb-1">AI 正在生成视频片段...</h3>
-          <p className="text-gray-400 text-sm">{shots.length} 个镜头</p>
-        </CardContent></Card>
-      )}
-
-      {!hasVideos && !isGenerating && (
-        <Card className="border-dashed"><CardContent className="flex flex-col items-center py-16">
-          <Video size={56} className="text-gray-300 mb-4" />
-          <h3 className="text-lg font-medium text-gray-500 mb-2">尚未生成视频片段</h3>
-          <p className="text-gray-400 mb-6 text-center max-w-md">系统将为每个镜头的确认分镜图生成图生视频片段</p>
-          <Button size="lg" onClick={handleGenerate} disabled={isGenerating}>
-            <Wand2 size={20} className="mr-2" /> 生成全部视频片段
-          </Button>
-        </CardContent></Card>
-      )}
-
-      {shots.map(sg => (
-        <div key={sg.shot.id} className="mb-8">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-sm font-bold text-blue-600">{sg.shot.shotNo}</div>
-              <div>
-                <h3 className="font-semibold text-gray-900">{sg.shot.shotName}</h3>
-                <div className="flex items-center gap-2 text-xs text-gray-500">
-                  <Clock size={10} /> {sg.shot.startTime}-{sg.shot.endTime}s
-                  {sg.confirmed && <Badge variant="success" className="text-xs">已确认</Badge>}
-                </div>
-              </div>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => handleRegenerate(sg.shot.id)} disabled={actionLoading === sg.shot.id}>
-              <RefreshCw size={14} className={`mr-1 ${actionLoading === sg.shot.id ? 'animate-spin' : ''}`} /> 重新生成
-            </Button>
-          </div>
-
-          {/* 确认的分镜图缩略图 */}
-          {sg.shot.confirmedImage && (
-            <div className="flex items-center gap-2 mb-3 text-xs text-gray-400">
-              <span>参考图：</span>
-              <img src={sg.shot.confirmedImage.imageUrl} className="w-12 h-20 object-cover rounded border" alt="ref" />
-            </div>
-          )}
-
-          {/* 视频 Prompt */}
-          {sg.shot.videoPrompt?.prompt && (
-            <p className="text-xs text-gray-400 mb-3 bg-gray-50 p-2 rounded truncate">{sg.shot.videoPrompt.prompt.substring(0, 100)}...</p>
-          )}
-
-          {sg.videos.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {sg.videos.map(v => {
-                const isSelected = v.isSelected; const isConfirmed = v.isConfirmed
-                const hasRemoteTask = !!v.remoteTaskId
-                const remoteIsCompleted = v.remoteStatus === 'completed' || v.remoteStatus === 'succeeded' || v.remoteStatus === 'success'
-                const remoteIsFailed = v.remoteStatus === 'failed' || v.remoteStatus === 'error'
-                const remoteIsTimedOut = v.remoteStatus === 'timeout'
-                const remoteIsPending = hasRemoteTask && !remoteIsCompleted && !remoteIsFailed && !remoteIsTimedOut
-
+            <ChevronDown size={14} className={`text-[var(--color-text-muted)] transition-transform ${mobileSelectorOpen ? 'rotate-180' : ''}`} />
+          </button>
+          {mobileSelectorOpen && (
+            <div className="absolute top-full left-0 right-0 bg-[var(--bg-surface)] border-b border-[var(--color-border-dim)] z-30 max-h-64 overflow-y-auto shadow-lg">
+              {data.shots.map(group => {
+                const isActive = activeGroup?.shot.id === group.shot.id
+                const status = getVideoGroupStatus(group, isGenerating)
                 return (
-                  <div key={v.id} className={`relative border rounded-lg overflow-hidden ${isConfirmed ? 'ring-2 ring-green-500' : isSelected ? 'ring-2 ring-indigo-500' : 'border-gray-200'}`}>
-                    <div className="aspect-video bg-gray-900 relative flex items-center justify-center">
-                      {v.videoUrl && (remoteIsCompleted || !hasRemoteTask) ? (
-                        <video src={v.videoUrl} controls className="w-full h-full" preload="metadata" />
-                      ) : remoteIsPending ? (
-                        <div className="text-center text-gray-400">
-                          <Loader2 size={40} className="animate-spin mx-auto mb-2 text-indigo-400" />
-                          <p className="text-sm">{remoteStatusLabel(v.remoteStatus)}</p>
-                          {v.remoteProgress != null && (
-                            <div className="mt-2 w-32 mx-auto bg-gray-700 rounded-full h-1.5">
-                              <div className="bg-indigo-500 h-1.5 rounded-full transition-all" style={{ width: `${v.remoteProgress}%` }} />
-                            </div>
-                          )}
-                        </div>
-                      ) : remoteIsFailed ? (
-                        <div className="text-center text-gray-400">
-                          <AlertTriangle size={40} className="mx-auto mb-2 text-red-400" />
-                          <p className="text-sm text-red-400">{remoteStatusLabel(v.remoteStatus)}</p>
-                        </div>
-                      ) : (
-                        <div className="text-center text-gray-400">
-                          <Video size={40} className="mx-auto mb-2 opacity-50" />
-                          <p className="text-sm">等待视频...</p>
-                        </div>
-                      )}
-                      {(isSelected || isConfirmed) && (
-                        <div className={`absolute top-2 right-2 rounded-full p-1 ${isConfirmed ? 'bg-green-500' : 'bg-indigo-500'}`}>
-                          <CheckCircle2 size={16} className="text-white" />
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="p-2 space-y-1.5">
-                      {/* 远端任务状态 */}
-                      {hasRemoteTask && (
-                        <div className="flex items-center justify-between">
-                          {remoteStatusBadge(v.remoteStatus)}
-                          <span className="text-[10px] text-gray-400">task: {v.remoteTaskId?.substring(0, 12)}...</span>
-                        </div>
-                      )}
-
-                      <div className="flex items-center justify-between text-xs text-gray-400">
-                        <span>{v.duration?.toFixed(1)}s</span>
-                        <span>seed: {(v.seed || '-').substring(0, 10)}</span>
-                      </div>
-
-                      {/* 操作按钮行 */}
-                      <div className="flex flex-col gap-1">
-                        {/* 继续检查任务按钮 */}
-                        {hasRemoteTask && remoteIsPending && (
-                          <Button
-                            size="sm" variant="outline" className="text-xs h-7 w-full"
-                            onClick={() => handleCheckTask(v.id)}
-                            disabled={actionLoading === v.id}
-                          >
-                            {actionLoading === v.id ? <Loader2 size={12} className="animate-spin mr-1" /> : <Search size={12} className="mr-1" />}
-                            继续检查任务
-                          </Button>
-                        )}
-
-                        {/* 超时时提示 */}
-                        {remoteIsTimedOut && (
-                          <div className="space-y-1">
-                            <Button
-                              size="sm" variant="outline" className="text-xs h-7 w-full border-orange-300 text-orange-600"
-                              onClick={() => handleCheckTask(v.id)}
-                              disabled={actionLoading === v.id}
-                            >
-                              {actionLoading === v.id ? <Loader2 size={12} className="animate-spin mr-1" /> : <Search size={12} className="mr-1" />}
-                              继续检查任务
-                            </Button>
-                            <Button
-                              size="sm" variant="outline" className="text-xs h-7 w-full"
-                              onClick={() => handleRegenerate(sg.shot.id)}
-                              disabled={!!actionLoading}
-                            >
-                              <RotateCcw size={12} className="mr-1" /> 重新创建视频任务
-                            </Button>
-                          </div>
-                        )}
-
-                        {/* 查看原始响应 */}
-                        {Boolean(v.remoteResponseJson) && (
-                          <Button
-                            size="sm" variant="ghost" className="text-xs h-7 w-full text-gray-400"
-                            onClick={() => handleViewRawResponse(v)}
-                          >
-                            <FileJson size={12} className="mr-1" /> 查看原始响应
-                          </Button>
-                        )}
-
-                        {/* 选择/确认按钮（仅当视频可用时） */}
-                        {!isConfirmed && (v.videoUrl || remoteIsCompleted) && (
-                          <div className="flex gap-1 mt-1">
-                            {!isSelected && (
-                              <Button size="sm" variant="outline" className="flex-1 text-xs h-7" onClick={() => handleSelect(v.id)} disabled={!!actionLoading}>
-                                {actionLoading === v.id ? <Loader2 size={12} className="animate-spin" /> : '选择'}
-                              </Button>
-                            )}
-                            {isSelected && (
-                              <Button size="sm" className="flex-1 text-xs h-7" onClick={() => handleConfirm(v.id)} disabled={!!actionLoading}>
-                                {actionLoading === v.id ? <Loader2 size={12} className="animate-spin" /> : '确认'}
-                              </Button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                  <button
+                    key={group.shot.id}
+                    onClick={() => { setActiveShotId(group.shot.id); setMobileSelectorOpen(false) }}
+                    className={`w-full text-left px-4 py-2 border-b border-[var(--color-border-dim)] flex items-center gap-2 cursor-pointer transition-colors ${
+                      isActive ? 'bg-[var(--color-primary-muted)]' : 'hover:bg-[var(--bg-elevated)]'
+                    }`}
+                  >
+                    <span className="w-5 h-5 rounded-[var(--radius-sm)] flex items-center justify-center text-[10px] font-bold bg-[var(--bg-panel)] text-[var(--color-text-muted)]">{group.shot.shotNo}</span>
+                    <span className="text-sm text-[var(--color-text-primary)] truncate">{group.shot.shotName || `镜头 ${group.shot.shotNo}`}</span>
+                    <span className="ml-auto text-[10px] text-[var(--color-text-muted)]">{STATUS_LABELS[status]}</span>
+                  </button>
                 )
               })}
             </div>
-          ) : (
-            <div className="text-center py-8 text-gray-400 text-sm border rounded-lg border-dashed">尚未生成</div>
           )}
         </div>
-      ))}
+      </div>
 
-      <div className="flex justify-between mt-8 pt-6 border-t border-gray-200">
-        <Button variant="outline" onClick={() => router.push(`/projects/${projectId}/episodes/${episodeId}/shot-images`)}>
-          <ArrowLeft size={16} className="mr-1" /> 返回分镜图
-        </Button>
-        {allConfirmed && (
-          <Button onClick={() => router.push(`/projects/${projectId}/episodes/${episodeId}/final-preview`)}>
-            进入成片预览 <ArrowRight size={16} className="ml-1" />
-          </Button>
+      <div className="flex-1 overflow-y-auto">
+        {activeGroup ? (
+          <ShotVideoReview
+            group={activeGroup}
+            isConfirmed={data.allConfirmed}
+            isGenerating={isGenerating}
+            projectId={projectId}
+            episodeId={episodeId}
+            onRefresh={refreshData}
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full text-[var(--color-text-muted)]">
+            选择一个镜头查看视频
+          </div>
         )}
       </div>
+
+      <ShotVideoRightPanel
+        projectId={projectId}
+        episodeId={episodeIdFromData}
+        shots={data.shots}
+        allConfirmed={data.allConfirmed}
+        isGenerating={isGenerating}
+        onGenerate={handleGenerate}
+        onBatchCheck={handleBatchCheck}
+      />
     </div>
   )
 }
