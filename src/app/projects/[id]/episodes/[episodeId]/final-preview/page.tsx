@@ -1,19 +1,25 @@
+/**
+ * 成片预览与合成页面 — Aurora Studio V3
+ *
+ * 布局：前置检查+主预览区(左/中) | 右侧面板(右)
+ * 数据源：GET /api/projects/:id/episodes/:episodeId/final-preview
+ * 操作：启动合成、重新合成、下载、预览
+ *
+ * 合成模型：FFmpeg 在 API Server 内同步执行
+ * 轮询策略：项目状态 RENDERING 时每 5 秒查询
+ */
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Card, CardContent } from '@/components/ui/card'
+import { AlertTriangle, Clapperboard, Film, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import {
-  Wand2, RefreshCw, Download, AlertTriangle,
-  ArrowLeft, Clapperboard, Loader2, X, Play, CheckCircle2,
-} from 'lucide-react'
-
-interface FinalVideo {
-  id: string; videoUrl: string; duration: number
-  aspectRatio: string; fps: number; status: string; createdAt: string
-}
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { useToast } from '@/components/ui/toast'
+import { PreflightCheck } from '@/components/final-preview/preflight-check'
+import { FinalVideoPlayer } from '@/components/final-preview/final-video-player'
+import { FinalPreviewRightPanel } from '@/components/final-preview/final-preview-right-panel'
+import { getRenderStatus, getPreflightIssues, type FinalPreviewData } from '@/components/final-preview/final-preview-types'
 
 export default function FinalPreviewPage() {
   const params = useParams()
@@ -21,170 +27,246 @@ export default function FinalPreviewPage() {
   const projectId = params.id as string
   const episodeId = params.episodeId as string
 
-  const [state, setState] = useState<{
-    projectStatus: string; finalVideos: FinalVideo[]; latest: FinalVideo | null
-    shotsWithVideos: Array<{shotNo: number; shotName: string; videoCount: number}>
-    canRender: boolean
-  } | null>(null)
+  const [data, setData] = useState<FinalPreviewData | null>(null)
   const [loading, setLoading] = useState(true)
   const [rendering, setRendering] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
-  const fetchData = useCallback(async () => {
+  const { addToast } = useToast()
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Refresh data (useCallback to satisfy hook deps)
+  const refreshData = useCallback(async () => {
     try {
       const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/final-preview`)
-      const data = await res.json()
-      if (data.success) setState(data.data)
-      else setError(data.error)
-    } catch { setError('加载失败') } finally { setLoading(false) }
+      const json = await res.json()
+      if (json.success) setData(json.data)
+    } catch { /* silent */ }
   }, [projectId, episodeId])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  // Initial load
   useEffect(() => {
-    if (state?.projectStatus === 'RENDERING') {
-      const interval = setInterval(fetchData, 2000); return () => clearInterval(interval)
+    let cancelled = false
+    async function load() {
+      setLoading(true)
+      setError(null)
+      try {
+        const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/final-preview`)
+        const json = await res.json()
+        if (cancelled) return
+        if (json.success) setData(json.data)
+        else setError(json.error || '加载失败')
+      } catch {
+        if (!cancelled) setError('网络错误，请重试')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
     }
-  }, [state?.projectStatus, fetchData])
+    load()
+    return () => { cancelled = true }
+  }, [projectId, episodeId])
 
+  // Auto-poll while rendering
+  useEffect(() => {
+    const isRendering = data?.projectStatus === 'RENDERING'
+    if (isRendering) {
+      if (!pollTimerRef.current) {
+        pollTimerRef.current = setInterval(refreshData, 5000)
+      }
+    } else {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current)
+        pollTimerRef.current = null
+      }
+    }
+  }, [data?.projectStatus, refreshData])
+
+  // Cleanup
+  useEffect(() => {
+    return () => {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current)
+        pollTimerRef.current = null
+      }
+    }
+  }, [])
+
+  // Derived
+  const status = getRenderStatus(data, rendering)
+  const isRendering = status === 'rendering'
+  const isRendered = status === 'rendered'
+  const canRender = data?.canRender ?? false
+  const preflightIssues = getPreflightIssues(data)
+  const allPreflightPassed = preflightIssues.every(i => i.passed)
+
+  // Actions
   const handleRender = async () => {
-    setRendering(true); setError(null)
+    setRendering(true)
+    setError(null)
     try {
       const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/final-preview/render`, { method: 'POST' })
-      const data = await res.json()
-      if (data.success) await fetchData()
-      else setError(data.error || '渲染失败')
-    } catch { setError('请求失败') } finally { setRendering(false) }
+      const json = await res.json()
+      if (json.success) {
+        addToast({ type: 'success', title: '成片合成完成' })
+        await refreshData()
+      } else {
+        addToast({ type: 'error', title: '合成失败', description: json.error })
+        setError(json.error || '合成失败')
+        await refreshData()
+      }
+    } catch {
+      addToast({ type: 'error', title: '请求失败' })
+      setError('请求失败，请重试')
+      await refreshData()
+    } finally {
+      setRendering(false)
+      setConfirmOpen(false)
+    }
   }
 
-  const latestVideo = state?.latest
-  const isRendering = state?.projectStatus === 'RENDERING' || rendering
-  const isReady = latestVideo?.status === 'READY' || state?.projectStatus === 'RENDERED'
+  // ─── Render ──────────────────────────────────────────────────────
 
-  if (loading) return <div className="flex justify-center py-16"><Loader2 size={32} className="animate-spin text-gray-300" /></div>
-
-  return (
-    <div className="max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">成片预览</h1>
-          <p className="text-gray-500 mt-1">
-            {isReady ? '最终视频已生成 ✓' : isRendering ? '正在合成视频...' : '合成最终成片并下载'}
-          </p>
+  if (loading) {
+    return (
+      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 rounded-[var(--radius-md)] bg-[var(--bg-panel)] animate-pulse" />
+          <div className="h-6 w-32 bg-[var(--bg-panel)] rounded animate-pulse" />
         </div>
-        <div className="flex items-center gap-2">
-          {isReady && (
-            <>
-              <Button variant="outline" onClick={handleRender} disabled={isRendering}>
-                <RefreshCw size={16} className={`mr-1 ${isRendering ? 'animate-spin' : ''}`} /> 重新合成
-              </Button>
-              {latestVideo?.videoUrl && (
-                <a href={latestVideo.videoUrl} download target="_blank" rel="noopener noreferrer">
-                  <Button><Download size={16} className="mr-1" /> 下载视频</Button>
-                </a>
-              )}
-            </>
-          )}
-          {!isReady && !isRendering && state?.canRender && (
-            <Button size="lg" onClick={handleRender} disabled={isRendering}>
-              <Clapperboard size={20} className="mr-2" /> 合成最终视频
-            </Button>
-          )}
-        </div>
+        <div className="aspect-video bg-[var(--bg-panel)] rounded-[var(--radius-lg)] animate-pulse max-w-lg mx-auto" />
       </div>
+    )
+  }
 
-      {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
-          <AlertTriangle size={18} className="text-red-500 mt-0.5" />
-          <p className="text-sm text-red-600 flex-1">{error}</p>
-          <button onClick={() => setError(null)} className="text-red-400"><X size={16} /></button>
+  if (error && !data) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center py-20 text-center p-6">
+        <div className="w-16 h-16 rounded-[var(--radius-xl)] bg-[var(--color-danger-muted)] flex items-center justify-center mb-5 text-[var(--color-danger)]">
+          <AlertTriangle size={28} />
         </div>
-      )}
+        <h3 className="text-lg font-semibold text-[var(--color-text-primary)] mb-2">加载失败</h3>
+        <p className="text-sm text-[var(--color-text-muted)] max-w-sm mb-6">{error}</p>
+        <Button variant="outline" size="sm" onClick={() => { setError(null); setLoading(true); refreshData() }}>重试</Button>
+      </div>
+    )
+  }
 
-      {/* 渲染中 */}
-      {isRendering && (
-        <Card><CardContent className="flex flex-col items-center py-16">
-          <Loader2 size={48} className="animate-spin text-indigo-500 mb-4" />
-          <h3 className="text-lg font-medium text-gray-700 mb-1">FFmpeg 正在合成视频...</h3>
-          <p className="text-gray-400 text-sm mb-4">拼接镜头片段、添加转场、统一分辨率</p>
-          <div className="w-64 h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div className="h-full bg-indigo-500 rounded-full animate-pulse" style={{ width: '60%' }} />
-          </div>
-        </CardContent></Card>
-      )}
-
-      {/* 未渲染 */}
-      {!isReady && !isRendering && (
-        <Card className="border-dashed"><CardContent className="flex flex-col items-center py-16">
-          <Clapperboard size={56} className="text-gray-300 mb-4" />
-          <h3 className="text-lg font-medium text-gray-500 mb-2">
-            {state?.canRender ? '可以合成最终视频' : '请先确认所有镜头视频'}
-          </h3>
-          <p className="text-gray-400 mb-2 text-center max-w-md">
-            {state?.canRender
-              ? `将 ${state?.shotsWithVideos?.length || 0} 个镜头的视频片段按顺序拼接为完整 MP4`
-              : '需要在视频片段页面确认每个镜头的最终视频后，才能合成'}
-          </p>
-          {state?.canRender && (
-            <Button size="lg" onClick={handleRender}><Wand2 size={20} className="mr-2" />合成最终视频</Button>
-          )}
-        </CardContent></Card>
-      )}
-
-      {/* 已渲染 */}
-      {isReady && latestVideo && (
-        <div className="space-y-6">
-          <Card>
-            <CardContent className="p-4">
-              <div className="aspect-[9/16] max-w-sm mx-auto bg-black rounded-lg overflow-hidden">
-                <video
-                  src={latestVideo.videoUrl}
-                  controls
-                  className="w-full h-full"
-                  poster={latestVideo.videoUrl ? undefined : undefined}
-                >
-                  <source src={latestVideo.videoUrl} type="video/mp4" />
-                </video>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                <div><span className="text-gray-400 text-xs">时长</span><p className="font-medium">{latestVideo.duration?.toFixed(1)}s</p></div>
-                <div><span className="text-gray-400 text-xs">画面比例</span><p className="font-medium">{latestVideo.aspectRatio}</p></div>
-                <div><span className="text-gray-400 text-xs">帧率</span><p className="font-medium">{latestVideo.fps} fps</p></div>
-                <div><span className="text-gray-400 text-xs">状态</span><Badge variant="success">已生成</Badge></div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 历史版本 */}
-          {state.finalVideos.length > 1 && (
-            <Card>
-              <CardContent className="p-4">
-                <h4 className="text-sm font-medium mb-2">历史版本</h4>
-                <div className="space-y-1">
-                  {state.finalVideos.slice(1).map((v, i) => (
-                    <div key={v.id} className="flex items-center justify-between text-xs text-gray-500 py-1">
-                      <span>v{state.finalVideos.length - i}</span>
-                      <span>{v.duration?.toFixed(1)}s</span>
-                      <span>{new Date(v.createdAt).toLocaleString('zh-CN')}</span>
-                      <a href={v.videoUrl} download className="text-indigo-500 hover:text-indigo-700">下载</a>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+  if (!data) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center py-20 text-center p-6">
+        <div className="w-16 h-16 rounded-[var(--radius-xl)] bg-[var(--color-warning-muted)] flex items-center justify-center mb-5 text-[var(--color-warning)]">
+          <Film size={28} />
         </div>
-      )}
-
-      <div className="flex justify-between mt-8 pt-6 border-t border-gray-200">
-        <Button variant="outline" onClick={() => router.push(`/projects/${projectId}/episodes/${episodeId}/shot-videos`)}>
-          <ArrowLeft size={16} className="mr-1" /> 返回视频片段
+        <h3 className="text-lg font-semibold text-[var(--color-text-primary)] mb-2">暂无数据</h3>
+        <p className="text-sm text-[var(--color-text-muted)] max-w-sm mb-6">
+          请先完成视频片段确认，再进入成片预览
+        </p>
+        <Button variant="outline" size="sm" onClick={() => router.push(`/projects/${projectId}/episodes/${episodeId}/shot-videos`)}>
+          返回视频片段
         </Button>
       </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-1 overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-4 md:p-6 space-y-5 max-w-3xl">
+          {/* Header */}
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-[var(--color-text-primary)]">成片预览</h2>
+              <p className="text-sm text-[var(--color-text-muted)] mt-1">
+                {isRendered ? '最终视频已生成' : isRendering ? '正在合成视频…' : canRender ? '可以合成最终成片' : '请先完成视频确认'}
+              </p>
+            </div>
+            {canRender && !isRendering && !isRendered && (
+              <Button
+                variant="aurora"
+                size="sm"
+                icon={<Clapperboard size={14} />}
+                onClick={() => setConfirmOpen(true)}
+                disabled={!allPreflightPassed}
+              >
+                开始合成
+              </Button>
+            )}
+          </div>
+
+          {/* Error banner */}
+          {error && data && (
+            <div className="rounded-[var(--radius-md)] p-3 bg-[var(--color-danger-muted)] border border-[var(--color-danger)]/20 flex items-start gap-2">
+              <AlertTriangle size={14} className="text-[var(--color-danger)] mt-0.5 shrink-0" />
+              <p className="text-xs text-[var(--color-danger)]">{error}</p>
+              <button onClick={() => setError(null)} className="ml-auto text-[var(--color-danger)]/60 hover:text-[var(--color-danger)] cursor-pointer">
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* Preflight check — show when not yet rendered */}
+          {!isRendered && !isRendering && (
+            <PreflightCheck data={data} canRender={canRender} />
+          )}
+
+          {/* Rendering state */}
+          {isRendering && (
+            <div className="py-12 text-center">
+              <div className="w-16 h-16 rounded-[var(--radius-xl)] bg-[var(--color-accent-cyan-muted)] flex items-center justify-center mx-auto mb-4 text-[var(--color-accent-cyan)] animate-pulse-glow">
+                <Loader2 size={28} className="animate-spin" />
+              </div>
+              <h3 className="text-lg font-semibold text-[var(--color-text-primary)] mb-2">FFmpeg 正在合成视频</h3>
+              <p className="text-sm text-[var(--color-text-muted)] max-w-md mx-auto">
+                拼接 {data.shotsWithVideos.length} 个镜头片段、统一分辨率、添加转场效果…页面将自动刷新
+              </p>
+            </div>
+          )}
+
+          {/* Cannot render state */}
+          {!canRender && !isRendering && !isRendered && (
+            <div className="py-8 text-center">
+              <Clapperboard size={48} className="text-[var(--color-text-muted)] mx-auto mb-3 opacity-50" />
+              <p className="text-sm text-[var(--color-text-muted)] mb-4">
+                需要在视频片段页面确认每个镜头的最终视频后，才能合成
+              </p>
+              <Button variant="outline" size="sm" onClick={() => router.push(`/projects/${projectId}/episodes/${episodeId}/shot-videos`)}>
+                返回视频片段
+              </Button>
+            </div>
+          )}
+
+          {/* Rendered state — show player */}
+          {isRendered && (
+            <FinalVideoPlayer
+              video={data.latest}
+              onRerender={() => setConfirmOpen(true)}
+              rerendering={rendering}
+            />
+          )}
+        </div>
+      </div>
+
+      <FinalPreviewRightPanel
+        data={data}
+        isRendering={isRendering}
+        onRerender={() => setConfirmOpen(true)}
+      />
+
+      {/* Render confirm dialog */}
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        variant="warning"
+        title={data.latest ? '重新合成成片' : '合成最终成片'}
+        description={data.latest
+          ? `将重新拼接 ${data.shotsWithVideos.length} 个镜头视频为完整 MP4。之前的成片将保留在历史版本中。合成可能需要较长时间。`
+          : `将拼接 ${data.shotsWithVideos.length} 个镜头的已确认视频片段为完整 MP4。合成可能需要较长时间，请耐心等待。`
+        }
+        confirmLabel={rendering ? '合成中…' : '开始合成'}
+        loading={rendering}
+        onConfirm={handleRender}
+      />
     </div>
   )
 }
