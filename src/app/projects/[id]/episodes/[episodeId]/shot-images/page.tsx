@@ -1,32 +1,22 @@
+/**
+ * 分镜图页面 — Aurora Studio V3
+ *
+ * 布局：镜头导航(左) | 图片审核区(中) | 右侧面板(右)
+ * 数据源：GET /api/projects/:id/episodes/:episodeId/shot-images
+ * 操作：生成图片、选择图片、确认图片、批量确认、重新生成
+ */
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Card, CardContent } from '@/components/ui/card'
+import { AlertTriangle, Film, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import {
-  Wand2, RefreshCw, CheckCircle2, AlertTriangle,
-  ArrowLeft, ArrowRight, ImageIcon, Loader2, X,
-  Film, Clock,
-} from 'lucide-react'
-
-interface ShotGroup {
-  shot: {
-    id: string; shotNo: number; shotName: string
-    startTime: number; endTime: number; location: string
-    characters: string[]; action: string
-    imagePrompt: { zhPrompt: string; enPrompt: string; negativePrompt: string } | null
-  }
-  images: Array<{
-    id: string; imageUrl: string; prompt: string; seed: string
-    style: string; aspectRatio: string
-    referenceImages: Array<{character_name: string; image_url: string; reference_type?: string}>
-    isSelected: boolean; isConfirmed: boolean
-  }>
-  selectedImage: { id: string; imageUrl: string } | null
-  confirmed: boolean
-}
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { useToast } from '@/components/ui/toast'
+import { ShotImageNavigation } from '@/components/shot-images/shot-image-navigation'
+import { ShotImageReview } from '@/components/shot-images/shot-image-review'
+import { ShotImageRightPanel } from '@/components/shot-images/shot-image-right-panel'
+import { getImageGroupStatus, STATUS_LABELS, type ShotImagesData } from '@/components/shot-images/shot-images-types'
 
 export default function ShotImagesPage() {
   const params = useParams()
@@ -34,258 +24,247 @@ export default function ShotImagesPage() {
   const projectId = params.id as string
   const episodeId = params.episodeId as string
 
-  const [state, setState] = useState<{ projectStatus: string; shots: ShotGroup[]; allConfirmed: boolean } | null>(null)
+  const [data, setData] = useState<ShotImagesData | null>(null)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
-  const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [batchConfirming, setBatchConfirming] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [activeShotId, setActiveShotId] = useState<string | null>(null)
+  const [batchConfirmOpen, setBatchConfirmOpen] = useState(false)
+  // Mobile shot selector dropdown
+  const [mobileSelectorOpen, setMobileSelectorOpen] = useState(false)
 
-  const fetchData = useCallback(async () => {
+  const { addToast } = useToast()
+
+  // Refresh data (for use after mutations)
+  const refreshData = async () => {
     try {
       const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/shot-images`)
-      const data = await res.json()
-      if (data.success) setState(data.data)
-      else setError(data.error)
-    } catch { setError('加载失败') }
-    finally { setLoading(false) }
+      const json = await res.json()
+      if (json.success) setData(json.data)
+    } catch { /* silent */ }
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      setLoading(true)
+      setError(null)
+      try {
+        const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/shot-images`)
+        const json = await res.json()
+        if (cancelled) return
+        if (json.success) setData(json.data)
+        else setError(json.error || '加载失败')
+      } catch {
+        if (!cancelled) setError('网络错误，请重试')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
   }, [projectId, episodeId])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  // Derived: first shot as active
+  const effectiveActiveShotId = activeShotId ?? (data?.shots?.length ? data.shots[0].shot.id : null)
+
+  // Auto-refresh during generation
   useEffect(() => {
-    if (state?.projectStatus === 'SHOT_IMAGE_GENERATING') {
-      const interval = setInterval(fetchData, 2000)
-      return () => clearInterval(interval)
-    }
-  }, [state?.projectStatus, fetchData])
+    if (data?.projectStatus !== 'SHOT_IMAGE_GENERATING') return
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/shot-images`)
+        const json = await res.json()
+        if (json.success) setData(json.data)
+      } catch { /* silently retry */ }
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [data?.projectStatus, projectId, episodeId])
 
+  // Derived
+  const isGenerating = data?.projectStatus === 'SHOT_IMAGE_GENERATING' || generating
+  const activeGroup = data?.shots.find(s => s.shot.id === effectiveActiveShotId) ?? data?.shots[0] ?? null
+  const episodeIdFromData = data?.episodeId ?? episodeId
+
+  // Actions
   const handleGenerate = async () => {
-    setGenerating(true); setError(null)
+    setGenerating(true)
     try {
-      const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/shot-images/generate`, { method: 'POST' })
-      const data = await res.json()
-      if (data.success) await fetchData()
-      else setError(data.error || '生成失败')
-    } catch { setError('请求失败') }
-    finally { setGenerating(false) }
-  }
-
-  const handleSelect = async (imageId: string) => {
-    setActionLoading(imageId)
-    await fetch(`/api/projects/${projectId}/episodes/${episodeId}/shot-images/${imageId}/select`, { method: 'POST' })
-    await fetchData()
-    setActionLoading(null)
-  }
-
-  const handleConfirm = async (imageId: string) => {
-    setActionLoading(imageId)
-    try {
-      const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/shot-images/${imageId}/confirm`, { method: 'POST' })
-      const data = await res.json()
-      if (data.success) await fetchData()
-      else setError(data.error || '确认失败，请先选择')
-    } catch { setError('请求失败') }
-    finally { setActionLoading(null) }
-  }
-
-  const handleRegenerate = async (shotId: string) => {
-    setActionLoading(shotId)
-    try {
-      const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/shots/${shotId}/images/regenerate`, { method: 'POST' })
-      const data = await res.json()
-      if (data.success) await fetchData()
-      else setError(data.error || '重新生成失败')
-    } catch { setError('请求失败') }
-    finally { setActionLoading(null) }
+      const res = await fetch(`/api/projects/${projectId}/episodes/${episodeIdFromData}/shot-images/generate`, { method: 'POST' })
+      const json = await res.json()
+      if (json.success) {
+        addToast({ type: 'success', title: '分镜图生成完成' })
+        await refreshData()
+      } else {
+        addToast({ type: 'error', title: '生成失败', description: json.error })
+      }
+    } catch {
+      addToast({ type: 'error', title: '请求失败' })
+    } finally { setGenerating(false) }
   }
 
   const handleBatchConfirm = async () => {
-    setActionLoading('batch-confirm')
+    setBatchConfirming(true)
     try {
-      const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/shot-images/batch-confirm`, { method: 'POST' })
-      const data = await res.json()
-      if (data.success) await fetchData()
-      else setError(data.error || '批量确认失败')
-    } catch { setError('请求失败') }
-    finally { setActionLoading(null) }
+      const res = await fetch(`/api/projects/${projectId}/episodes/${episodeIdFromData}/shot-images/batch-confirm`, { method: 'POST' })
+      const json = await res.json()
+      if (json.success) {
+        addToast({ type: 'success', title: `已批量确认 ${json.data.confirmedCount} 张图片` })
+        setBatchConfirmOpen(false)
+        await refreshData()
+      } else {
+        addToast({ type: 'error', title: '批量确认失败', description: json.error })
+      }
+    } catch {
+      addToast({ type: 'error', title: '请求失败' })
+    } finally { setBatchConfirming(false) }
   }
 
-  const shots = state?.shots || []
-  const isGenerating = state?.projectStatus === 'SHOT_IMAGE_GENERATING' || generating
-  const hasImages = shots.some(s => s.images.length > 0)
-  const allConfirmed = state?.allConfirmed || false
+  // ─── Render ──────────────────────────────────────────────────────
 
-  if (loading) return <div className="flex justify-center py-16"><Loader2 size={32} className="animate-spin text-gray-300" /></div>
+  if (loading) {
+    return (
+      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 rounded-[var(--radius-md)] bg-[var(--bg-panel)] animate-pulse" />
+          <div className="h-6 w-32 bg-[var(--bg-panel)] rounded animate-pulse" />
+        </div>
+        {[1, 2, 3].map(i => (
+          <div key={i} className="flex gap-3">
+            <div className="w-24 h-32 bg-[var(--bg-panel)] rounded-[var(--radius-lg)] animate-pulse" />
+            <div className="flex-1 h-32 bg-[var(--bg-elevated)] border border-[var(--color-border-dim)] rounded-[var(--radius-lg)] animate-pulse" />
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (error && !data) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center py-20 text-center p-6">
+        <div className="w-16 h-16 rounded-[var(--radius-xl)] bg-[var(--color-danger-muted)] flex items-center justify-center mb-5 text-[var(--color-danger)]">
+          <AlertTriangle size={28} />
+        </div>
+        <h3 className="text-lg font-semibold text-[var(--color-text-primary)] mb-2">加载失败</h3>
+        <p className="text-sm text-[var(--color-text-muted)] max-w-sm mb-6">{error}</p>
+        <Button variant="outline" size="sm" onClick={() => { setError(null); setLoading(true); refreshData() }}>重试</Button>
+      </div>
+    )
+  }
+
+  if (!data || data.shots.length === 0) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center py-20 text-center p-6">
+        <div className="w-16 h-16 rounded-[var(--radius-xl)] bg-[var(--color-warning-muted)] flex items-center justify-center mb-5 text-[var(--color-warning)]">
+          <Film size={28} />
+        </div>
+        <h3 className="text-lg font-semibold text-[var(--color-text-primary)] mb-2">暂无分镜数据</h3>
+        <p className="text-sm text-[var(--color-text-muted)] max-w-sm mb-6">
+          请先完成分镜脚本确认，再进入分镜图生成
+        </p>
+        <Button variant="outline" size="sm" onClick={() => router.push(`/projects/${projectId}/episodes/${episodeId}/storyboard`)}>
+          返回分镜脚本
+        </Button>
+      </div>
+    )
+  }
 
   return (
-    <div className="max-w-6xl mx-auto">
-      {/* 头部 */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">分镜图</h1>
-          <p className="text-gray-500 mt-1">
-            {allConfirmed ? '所有镜头图已确认 ✓' :
-             hasImages ? `为 ${shots.length} 个镜头选择最终图` :
-             'AI 将为每个镜头生成分镜候选图'}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {hasImages && !allConfirmed && (
-            <>
-              <Button variant="outline" onClick={handleGenerate} disabled={isGenerating}>
-                <RefreshCw size={16} className={`mr-1 ${isGenerating ? 'animate-spin' : ''}`} /> 重新生成全部
-              </Button>
-              <Button onClick={handleBatchConfirm} disabled={actionLoading === 'batch-confirm'}>
-                {actionLoading === 'batch-confirm' ? <Loader2 size={16} className="animate-spin mr-1" /> : <CheckCircle2 size={16} className="mr-1" />}
-                全部确认
-              </Button>
-            </>
-          )}
-          {!hasImages && !isGenerating && (
-            <Button size="lg" onClick={handleGenerate} disabled={isGenerating}>
-              <Wand2 size={20} className="mr-2" /> 生成全部分镜图
-            </Button>
-          )}
-          {allConfirmed && (
-            <Button onClick={() => router.push(`/projects/${projectId}/episodes/${episodeId}/shot-videos`)}>
-              进入视频片段 <ArrowRight size={16} className="ml-1" />
-            </Button>
-          )}
-        </div>
+    <div className="flex flex-1 overflow-hidden">
+      {/* Desktop: side navigation */}
+      <div className="hidden md:block">
+        <ShotImageNavigation
+          shots={data.shots}
+          isGenerating={isGenerating}
+          activeShotId={activeGroup?.shot.id ?? null}
+          onSelect={setActiveShotId}
+        />
       </div>
 
-      {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
-          <AlertTriangle size={18} className="text-red-500 mt-0.5" />
-          <p className="text-sm text-red-600 flex-1">{error}</p>
-          <button onClick={() => setError(null)} className="text-red-400"><X size={16} /></button>
-        </div>
-      )}
-
-      {isGenerating && (
-        <Card><CardContent className="flex flex-col items-center py-16">
-          <Loader2 size={48} className="animate-spin text-indigo-500 mb-4" />
-          <h3 className="text-lg font-medium text-gray-700 mb-1">AI 正在生成分镜图...</h3>
-          <p className="text-gray-400 text-sm">共 {shots.length} 个镜头</p>
-        </CardContent></Card>
-      )}
-
-      {!hasImages && !isGenerating && (
-        <Card className="border-dashed"><CardContent className="flex flex-col items-center py-16">
-          <ImageIcon size={56} className="text-gray-300 mb-4" />
-          <h3 className="text-lg font-medium text-gray-500 mb-2">尚未生成分镜图</h3>
-          <p className="text-gray-400 mb-6 text-center max-w-md">
-            点击下方按钮为每个镜头生成分镜图，并使用已确认的标准角色图作为参考
-          </p>
-          <Button size="lg" onClick={handleGenerate} disabled={isGenerating}>
-            <Wand2 size={20} className="mr-2" /> 生成全部分镜图
-          </Button>
-        </CardContent></Card>
-      )}
-
-      {/* 按镜头分组 */}
-      {shots.map((shotGroup) => (
-        <div key={shotGroup.shot.id} className="mb-8">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-sm font-bold text-indigo-600">
-                {shotGroup.shot.shotNo}
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900">{shotGroup.shot.shotName}</h3>
-                <div className="flex items-center gap-2 text-xs text-gray-500">
-                  <Clock size={10} /> {shotGroup.shot.startTime}-{shotGroup.shot.endTime}s
-                  <span>|</span> {shotGroup.shot.location}
-                  {shotGroup.confirmed && <Badge variant="success" className="text-xs">已确认</Badge>}
-                </div>
-              </div>
+      {/* Mobile: top shot selector */}
+      <div className="md:hidden w-full">
+        <div className="relative border-b border-[var(--color-border-dim)] bg-[var(--bg-surface)]">
+          <button
+            className="w-full px-4 py-2.5 flex items-center justify-between cursor-pointer"
+            onClick={() => setMobileSelectorOpen(!mobileSelectorOpen)}
+          >
+            <div className="flex items-center gap-2">
+              <span className="w-6 h-6 rounded-[var(--radius-sm)] flex items-center justify-center text-xs font-bold text-white" style={{ background: 'var(--gradient-aurora)' }}>
+                {activeGroup?.shot.shotNo ?? '-'}
+              </span>
+              <span className="text-sm font-medium text-[var(--color-text-primary)]">{activeGroup?.shot.shotName || `镜头 ${activeGroup?.shot.shotNo ?? ''}`}</span>
+              {activeGroup && (
+                <span className="text-[10px] text-[var(--color-text-muted)]">
+                  {STATUS_LABELS[getImageGroupStatus(activeGroup, isGenerating)]}
+                </span>
+              )}
             </div>
-            <Button variant="outline" size="sm" onClick={() => handleRegenerate(shotGroup.shot.id)}
-              disabled={actionLoading === shotGroup.shot.id}>
-              <RefreshCw size={14} className={`mr-1 ${actionLoading === shotGroup.shot.id ? 'animate-spin' : ''}`} />
-              重新生成
-            </Button>
-          </div>
-
-          {/* Prompt 简览 */}
-          {shotGroup.shot.imagePrompt?.enPrompt && (
-            <p className="text-xs text-gray-400 mb-3 bg-gray-50 p-2 rounded truncate">
-              {shotGroup.shot.imagePrompt.enPrompt.substring(0, 120)}...
-            </p>
-          )}
-
-          {/* 图片网格 — 列数随实际图片数自适应：1 张用 1 列, 2-3 张用 2-3 列, 4 张用 4 列 */}
-          {shotGroup.images.length > 0 ? (
-            <div className={`grid gap-3 ${
-              shotGroup.images.length === 1
-                ? 'grid-cols-1 max-w-xs'
-                : shotGroup.images.length === 2
-                  ? 'grid-cols-2 max-w-md'
-                  : shotGroup.images.length === 3
-                    ? 'grid-cols-3 max-w-2xl'
-                    : 'grid-cols-2 md:grid-cols-4'
-            }`}>
-              {shotGroup.images.map((img) => {
-                const isSelected = img.isSelected
-                const isConfirmed = img.isConfirmed
-                const isLoading = actionLoading === img.id
-                // 单图时"选"和"确认"等价，按钮合并为"确认"
-                const showSelect = !isSelected && shotGroup.images.length > 1
+            <ChevronDown size={14} className={`text-[var(--color-text-muted)] transition-transform ${mobileSelectorOpen ? 'rotate-180' : ''}`} />
+          </button>
+          {mobileSelectorOpen && (
+            <div className="absolute top-full left-0 right-0 bg-[var(--bg-surface)] border-b border-[var(--color-border-dim)] z-30 max-h-64 overflow-y-auto shadow-lg">
+              {data.shots.map(group => {
+                const isActive = activeGroup?.shot.id === group.shot.id
+                const status = getImageGroupStatus(group, isGenerating)
                 return (
-                  <div key={img.id} className={`relative border rounded-lg overflow-hidden ${
-                    isConfirmed ? 'ring-2 ring-green-500' : isSelected ? 'ring-2 ring-indigo-500' : 'border-gray-200'
-                  }`}>
-                    <div className="aspect-[9/16] bg-gray-100 relative">
-                      <img src={img.imageUrl} alt={`Shot ${shotGroup.shot.shotNo} candidate`}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {(e.target as HTMLImageElement).src = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="270" height="480" fill="%23f3f4f6"><rect width="270" height="480"/><text x="135" y="240" text-anchor="middle" fill="%239ca3af" font-size="14">S${shotGroup.shot.shotNo}</text></svg>`}} />
-                      {(isSelected || isConfirmed) && (
-                        <div className={`absolute top-2 right-2 rounded-full p-1 ${isConfirmed ? 'bg-green-500' : 'bg-indigo-500'}`}>
-                          <CheckCircle2 size={16} className="text-white" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-2 space-y-1.5">
-                      <div className="text-xs text-gray-400 truncate">seed: {(img.seed || '-').substring(0, 12)}</div>
-                      {img.referenceImages && (img.referenceImages as unknown[]).length > 0 && (
-                        <div className="text-xs text-gray-500 mt-0.5">
-                          🎯 参考角色: {(img.referenceImages as Array<{character_name: string; reference_type?: string}>).map(r =>
-                            r.reference_type ? `${r.character_name}(${r.reference_type})` : r.character_name
-                          ).join(', ')}
-                        </div>
-                      )}
-                      {!isConfirmed && (
-                        <div className="flex gap-1">
-                          <Button size="sm" className={`text-xs h-7 ${showSelect ? 'flex-1' : 'w-full'}`} onClick={() => handleConfirm(img.id)} disabled={!!actionLoading}>
-                            {isLoading ? <Loader2 size={12} className="animate-spin" /> : '确认'}
-                          </Button>
-                          {showSelect && (
-                            <Button size="sm" variant="outline" className="text-xs h-7 px-1" onClick={() => handleSelect(img.id)} disabled={!!actionLoading} title="选择（同镜头有多个候选时使用）">
-                              {isLoading ? <Loader2 size={12} className="animate-spin" /> : '选'}
-                            </Button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  <button
+                    key={group.shot.id}
+                    onClick={() => { setActiveShotId(group.shot.id); setMobileSelectorOpen(false) }}
+                    className={`w-full text-left px-4 py-2 border-b border-[var(--color-border-dim)] flex items-center gap-2 cursor-pointer transition-colors ${
+                      isActive ? 'bg-[var(--color-primary-muted)]' : 'hover:bg-[var(--bg-elevated)]'
+                    }`}
+                  >
+                    <span className="w-5 h-5 rounded-[var(--radius-sm)] flex items-center justify-center text-[10px] font-bold bg-[var(--bg-panel)] text-[var(--color-text-muted)]">{group.shot.shotNo}</span>
+                    <span className="text-sm text-[var(--color-text-primary)] truncate">{group.shot.shotName || `镜头 ${group.shot.shotNo}`}</span>
+                    <span className="ml-auto text-[10px] text-[var(--color-text-muted)]">{STATUS_LABELS[status]}</span>
+                  </button>
                 )
               })}
             </div>
-          ) : (
-            <div className="text-center py-8 text-gray-400 text-sm border rounded-lg border-dashed">尚未生成</div>
           )}
         </div>
-      ))}
+      </div>
 
-      <div className="flex justify-between mt-8 pt-6 border-t border-gray-200">
-        <Button variant="outline" onClick={() => router.push(`/projects/${projectId}/episodes/${episodeId}/storyboard`)}>
-          <ArrowLeft size={16} className="mr-1" /> 返回分镜脚本
-        </Button>
-        {allConfirmed && (
-          <Button onClick={() => router.push(`/projects/${projectId}/episodes/${episodeId}/shot-videos`)}>
-            进入视频片段 <ArrowRight size={16} className="ml-1" />
-          </Button>
+      <div className="flex-1 overflow-y-auto">
+        {activeGroup ? (
+          <ShotImageReview
+            group={activeGroup}
+            isConfirmed={data.allConfirmed}
+            isGenerating={isGenerating}
+            projectId={projectId}
+            episodeId={episodeId}
+            onRefresh={refreshData}
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full text-[var(--color-text-muted)]">
+            选择一个镜头查看图片
+          </div>
         )}
       </div>
+
+      <ShotImageRightPanel
+        projectId={projectId}
+        episodeId={episodeIdFromData}
+        shots={data.shots}
+        allConfirmed={data.allConfirmed}
+        projectStatus={data.projectStatus}
+        isGenerating={isGenerating}
+        onGenerate={handleGenerate}
+        onBatchConfirm={() => setBatchConfirmOpen(true)}
+      />
+
+      {/* Batch confirm dialog */}
+      <ConfirmDialog
+        open={batchConfirmOpen}
+        onOpenChange={setBatchConfirmOpen}
+        variant="warning"
+        title="批量确认分镜图"
+        description={`将自动为每个镜头选择最佳候选图片并确认。已确认的镜头保持不变，未选择的镜头将选取第一张候选图。确认后项目将进入视频生成阶段。`}
+        confirmLabel={batchConfirming ? '确认中…' : '确认'}
+        loading={batchConfirming}
+        onConfirm={handleBatchConfirm}
+      />
     </div>
   )
 }
