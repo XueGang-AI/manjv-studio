@@ -7,10 +7,9 @@ import { type FinalPreviewData, getPreflightIssues } from './final-preview-types
 
 interface PreflightCheckProps {
   data: FinalPreviewData
-  canRender: boolean
 }
 
-export function PreflightCheck({ data, canRender }: PreflightCheckProps) {
+export function PreflightCheck({ data }: PreflightCheckProps) {
   const issues = getPreflightIssues(data)
   const allPassed = issues.every(i => i.passed)
 

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ProgressBar } from '@/components/ui/progress-bar'
 import { useToast } from '@/components/ui/toast'
-import type { FinalPreviewData, FinalVideoItem } from './final-preview-types'
+import type { FinalPreviewData } from './final-preview-types'
 
 interface FinalPreviewRightPanelProps {
   data: FinalPreviewData

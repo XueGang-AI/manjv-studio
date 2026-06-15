@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { AlertCircle, Loader2, RefreshCw, Video } from 'lucide-react'
+import { AlertCircle, RefreshCw, Video } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { FinalVideoItem } from './final-preview-types'
 

@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { ffmpegService } from '@/server/services/ffmpeg.service'
-import path from 'path'
+import { ffmpegService, sanitizeError, RenderError } from '@/server/services/ffmpeg.service'
 
+/**
+ * POST — 合成最终成片
+ *
+ * 安全加固：
+ * - 检测已有 RENDERING 状态，防止并发重复提交
+ * - FFmpeg 使用 spawn + 参数数组，不拼接 shell 命令
+ * - 远程 URL 先下载再合成，防止 SSRF 和 concat 注入
+ * - ffprobe 预校验输入文件
+ * - 错误信息脱敏，不泄露服务器路径和 FFmpeg 详情
+ */
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; episodeId: string }> }
@@ -13,10 +22,18 @@ export async function POST(
     const project = await prisma.project.findUnique({ where: { id: projectId } })
     if (!project) return NextResponse.json({ success: false, error: '项目不存在' }, { status: 404 })
 
+    // Prevent concurrent renders
+    if (project.status === 'RENDERING') {
+      return NextResponse.json({
+        success: false,
+        error: { code: 'RENDER_ALREADY_RUNNING', message: '当前已有合成任务正在执行，请等待完成后再试' },
+      }, { status: 409 })
+    }
+
     const episode = await prisma.episode.findFirst({ where: { id: episodeId, projectId } })
     if (!episode) return NextResponse.json({ success: false, error: '剧集不存在' }, { status: 404 })
 
-    // 获取所有已确认的视频片段
+    // Get all confirmed videos
     const shots = await prisma.shot.findMany({
       where: { episodeId, projectId },
       orderBy: { shotNo: 'asc' },
@@ -30,24 +47,25 @@ export async function POST(
       return NextResponse.json({ success: false, error: '没有已确认的视频片段' }, { status: 400 })
     }
 
-    // 更新状态
+    // Update status
     await prisma.project.update({ where: { id: projectId }, data: { status: 'RENDERING' } })
-
     const task = await prisma.generationTask.create({
-      data: { projectId, episodeId, taskType: 'RENDER_FINAL_VIDEO',
-        modelName: 'FFmpeg', status: 'running', input: { shot_count: confirmedVideos.length } },
+      data: {
+        projectId, episodeId, taskType: 'RENDER_FINAL_VIDEO',
+        modelName: 'FFmpeg', status: 'running',
+        input: { shot_count: confirmedVideos.length },
+      },
     })
 
     try {
       const ffAvailable = await ffmpegService.checkAvailable()
       const outputFileName = `${projectId}_ep${episode.episodeNo}_${Date.now()}.mp4`
-      const outputPath = path.join(ffmpegService['outputDir'], outputFileName)
       const aspectRatio = project.aspectRatio || '9:16'
 
       let result: { success: boolean; outputPath?: string; duration?: number; error?: string }
 
       if (ffAvailable && confirmedVideos.length > 1) {
-        // FFmpeg 拼接（支持本地文件和远程 URL）
+        // FFmpeg concat (downloads URLs first, validates with ffprobe)
         result = await ffmpegService.concatVideos({
           shotVideos: confirmedVideos.map(v => ({
             videoUrl: v.videoUrl || '',
@@ -59,22 +77,23 @@ export async function POST(
           addFadeTransition: true,
         })
       } else if (ffAvailable) {
-        // 单视频：生成占位视频
+        // Single video: generate placeholder
+        const outputPath = `${project.aspectRatio || '9:16'}_placeholder.mp4`
         result = await ffmpegService.generatePlaceholder(
           outputPath,
           episode.duration || confirmedVideos[0]?.duration || 90,
           aspectRatio,
         )
       } else {
-        // FFmpeg 不可用，直接使用第一个视频
+        // FFmpeg unavailable: use first video directly
         result = { success: true, outputPath: confirmedVideos[0]?.videoUrl || '', duration: confirmedVideos[0]?.duration || 5 }
       }
 
       if (!result.success) {
-        throw new Error(result.error || '渲染失败')
+        throw new RenderError('RENDER_FAILED', result.error || '渲染失败')
       }
 
-      // 保存记录
+      // Save final video record
       const finalVideo = await prisma.finalVideo.create({
         data: {
           episodeId, projectId,
@@ -86,7 +105,7 @@ export async function POST(
         },
       })
 
-      // 更新项目状态
+      // Update project status
       await prisma.project.update({ where: { id: projectId }, data: { status: 'RENDERED' } })
 
       const { versionService: vs } = await import('@/server/services/version.service')
@@ -109,13 +128,32 @@ export async function POST(
         },
       })
     } catch (genError) {
-      const msg = (genError as Error).message
-      await prisma.project.update({ where: { id: projectId }, data: { status: 'SHOT_VIDEO_CONFIRMED' } })
-      await prisma.generationTask.update({ where: { id: task.id }, data: { status: 'failed', errorMessage: msg } })
-      return NextResponse.json({ success: false, error: msg }, { status: 500 })
+      const sanitized = sanitizeError(genError)
+      const internalMsg = genError instanceof RenderError ? genError.internalDetail : (genError as Error).message
+
+      // Log internal detail server-side only
+      console.error(`[render] Failed: code=${sanitized.code}, internal=${internalMsg}`)
+
+      // Restore project status to allow retry
+      await prisma.project.update({
+        where: { id: projectId },
+        data: { status: 'SHOT_VIDEO_CONFIRMED' },
+      })
+      await prisma.generationTask.update({
+        where: { id: task.id },
+        data: { status: 'failed', errorMessage: internalMsg?.substring(0, 500) },
+      })
+
+      return NextResponse.json({
+        success: false,
+        error: sanitized,
+      }, { status: 500 })
     }
   } catch (error) {
     console.error('Failed to render final video:', error)
-    return NextResponse.json({ success: false, error: '渲染失败' }, { status: 500 })
+    return NextResponse.json({
+      success: false,
+      error: { code: 'RENDER_FAILED', message: '成片合成失败，请稍后重试' },
+    }, { status: 500 })
   }
 }

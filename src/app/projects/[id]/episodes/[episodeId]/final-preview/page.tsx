@@ -111,8 +111,12 @@ export default function FinalPreviewPage() {
         addToast({ type: 'success', title: '成片合成完成' })
         await refreshData()
       } else {
-        addToast({ type: 'error', title: '合成失败', description: json.error })
-        setError(json.error || '合成失败')
+        // API now returns { code, message } object or plain string
+        const errMsg = typeof json.error === 'object' && json.error?.message
+          ? json.error.message
+          : String(json.error || '合成失败')
+        addToast({ type: 'error', title: '合成失败', description: errMsg })
+        setError(errMsg)
         await refreshData()
       }
     } catch {
@@ -207,7 +211,7 @@ export default function FinalPreviewPage() {
 
           {/* Preflight check — show when not yet rendered */}
           {!isRendered && !isRendering && (
-            <PreflightCheck data={data} canRender={canRender} />
+            <PreflightCheck data={data} />
           )}
 
           {/* Rendering state */}
