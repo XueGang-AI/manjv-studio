@@ -200,13 +200,17 @@ export class ArkVideoAdapter extends BaseVideoAdapter {
 
     if (status === 'completed' || status === 'succeeded' || status === 'success') {
       // Extract video_url from confirmed field paths
-      result.videoUrl = (data.video_url
+      // Ark API: content.video_url (actual observed path)
+      // Fallback: top-level video_url, url, output_url, data.video_url, data.url
+      const content = data.content as Record<string, unknown> | undefined
+      result.videoUrl = (content?.video_url
+        || data.video_url
         || data.url
         || data.output_url
         || (data.data as Record<string, unknown>)?.video_url
         || (data.data as Record<string, unknown>)?.url
         || '') as string
-      result.duration = (data.duration || data.seconds) as number | undefined
+      result.duration = (data.duration || data.seconds || content?.duration) as number | undefined
     }
 
     if (status === 'failed' || status === 'error') {

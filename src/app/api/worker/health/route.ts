@@ -1,16 +1,27 @@
 import { NextResponse } from 'next/server'
+import { checkWorkerHealth } from '@/server/workers/worker-heartbeat'
 
 /**
  * GET /api/worker/health
- * Worker 健康状态检查
+ * 系统健康状态检查
  *
- * 注意：此端点运行在 Next.js 进程中，只能检查共享资源（DB、Redis）。
- * Worker 进程本身的存活需要通过部署平台进程健康检查确认。
+ * 检查维度：
+ * - 数据库（PostgreSQL）：可达性
+ * - Redis：主动 PING 验证
+ * - Worker：进程 heartbeat（通过 Redis key）
+ *
+ * 健康语义：
+ * - healthy：DB + Redis + Worker heartbeat 均正常
+ * - degraded：DB 正常，但 Redis 或 Worker heartbeat 异常
+ * - unhealthy：DB 不可用
+ *
+ * 注意：Redis 不可用时 Worker heartbeat 也无法读取，
+ * 两者同时异常应标记为 degraded（不是 unhealthy，因为 DB 正常时核心功能可用）。
  */
 export async function GET() {
   const checks: Record<string, { status: string; latency?: number; error?: string; note?: string }> = {}
 
-  // 数据库检查
+  // ─── 数据库检查 ────────────────────────────────────────────────────
   try {
     const start = Date.now()
     const prisma = (await import('@/lib/prisma')).default
@@ -20,11 +31,10 @@ export async function GET() {
     checks.database = { status: 'error', error: (e as Error).message?.substring(0, 100) }
   }
 
-  // Redis 检查：主动 PING 验证连接，而非仅检查已有连接的标志
+  // ─── Redis 检查 ────────────────────────────────────────────────────
   try {
     const start = Date.now()
     const { isRedisAvailable } = await import('@/server/workers/task-events')
-    // 先检查已有连接
     if (isRedisAvailable()) {
       checks.redis = { status: 'ok', latency: Date.now() - start }
     } else {
@@ -52,20 +62,39 @@ export async function GET() {
     checks.redis = { status: 'error', error: (e as Error).message?.substring(0, 100) }
   }
 
-  const allOk = Object.values(checks).every(c => c.status === 'ok')
-  const someUnavailable = Object.values(checks).some(c => c.status === 'unavailable')
+  // ─── Worker heartbeat 检查 ─────────────────────────────────────────
+  let workerHealth: { status: string; workers: unknown[]; note?: string } = { status: 'unknown', workers: [] }
+  try {
+    workerHealth = await checkWorkerHealth()
+    checks.worker = {
+      status: workerHealth.status === 'healthy' ? 'ok' : workerHealth.status === 'degraded' ? 'degraded' : 'unknown',
+      note: workerHealth.note || `${workerHealth.workers.length} worker(s) found`,
+    }
+  } catch {
+    checks.worker = { status: 'unknown', note: 'Cannot check worker heartbeat' }
+  }
+
+  // ─── 综合状态 ──────────────────────────────────────────────────────
+  const dbOk = checks.database?.status === 'ok'
+  const redisOk = checks.redis?.status === 'ok'
+  const workerOk = checks.worker?.status === 'ok'
+
+  let overallStatus: 'healthy' | 'degraded' | 'unhealthy'
+  if (!dbOk) {
+    overallStatus = 'unhealthy'
+  } else if (redisOk && workerOk) {
+    overallStatus = 'healthy'
+  } else {
+    overallStatus = 'degraded'
+  }
 
   return NextResponse.json({
     success: true,
     data: {
-      status: allOk ? 'healthy' : someUnavailable ? 'degraded' : 'unhealthy',
+      status: overallStatus,
       checks,
-      worker: {
-        // Worker 进程状态需通过独立机制检查
-        // 此端点只能反映 Next.js 进程侧的健康状态
-        note: 'Worker process health requires separate process monitoring',
-      },
+      workers: workerHealth.workers,
       timestamp: new Date().toISOString(),
     },
-  }, { status: allOk ? 200 : 503 })
+  }, { status: overallStatus === 'unhealthy' ? 503 : 200 })
 }

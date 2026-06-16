@@ -18,6 +18,11 @@
 //     → 仅进程内 EventEmitter（不跨进程）
 //     → SSE 依赖 DB 增量轮询降级
 //
+//   Redis 自动重连：
+//     → Subscriber 监听 close/reconnecting/ready 事件
+//     → ready 后自动重新订阅所有 refCount > 0 的频道
+//     → 不需要重启 Web 进程
+//
 // 连接管理：
 //   - Publisher：1 个共享连接（Worker + API 共用）
 //   - Subscriber：1 个共享连接，使用 psubscribe 模式
@@ -160,7 +165,7 @@ async function initSubscriber(): Promise<import('ioredis').Redis | null> {
     const client = new Redis(process.env.REDIS_URL!, {
       maxRetriesPerRequest: null, // 订阅模式不设超时
       retryStrategy(times) {
-        if (times > 10) return null
+        // 允许无限重试，确保 Redis 恢复后能自动重连
         return Math.min(times * 500, 5000)
       },
       lazyConnect: true,
@@ -183,8 +188,42 @@ async function initSubscriber(): Promise<import('ioredis').Redis | null> {
       } catch { /* ignore parse errors */ }
     })
 
-    client.on('error', () => {
-      // 订阅错误静默，依赖进程内 + DB fallback
+    // ─── 自动重连事件监听 ───────────────────────────────────────────
+
+    let isReconnecting = false
+
+    client.on('error', (err) => {
+      // 连接错误静默，依赖进程内 + DB fallback
+      if (redisAvailable) {
+        console.warn('[task-events] Redis subscriber error:', err.message?.substring(0, 100))
+      }
+    })
+
+    client.on('close', () => {
+      redisAvailable = false
+      isReconnecting = true
+      console.warn('[task-events] Redis subscriber connection closed, will auto-reconnect')
+    })
+
+    client.on('reconnecting', () => {
+      isReconnecting = true
+      console.log('[task-events] Redis subscriber reconnecting...')
+    })
+
+    client.on('end', () => {
+      redisAvailable = false
+      console.warn('[task-events] Redis subscriber connection ended (no more retries)')
+    })
+
+    client.on('ready', async () => {
+      redisAvailable = true
+
+      if (isReconnecting) {
+        isReconnecting = false
+        console.log('[task-events] Redis subscriber reconnected, resubscribing active channels...')
+        await resubscribeActiveChannels()
+        console.log('[task-events] Redis subscriber resubscription complete')
+      }
     })
 
     await client.connect()
@@ -195,6 +234,41 @@ async function initSubscriber(): Promise<import('ioredis').Redis | null> {
     subscriber = null
     subscriberInitPromise = null
     return null
+  }
+}
+
+/**
+ * 重新订阅所有活跃频道（refCount > 0）
+ *
+ * 在 Redis Subscriber 重新连接后调用。
+ * 只订阅引用计数 > 0 的频道，不重复订阅，不丢失引用计数。
+ */
+async function resubscribeActiveChannels(): Promise<void> {
+  const sub = subscriber
+  if (!sub) return
+
+  const channels: string[] = []
+
+  // 重新订阅所有引用计数 > 0 的项目频道
+  for (const [projectId, count] of projectRefCounts) {
+    if (count > 0) {
+      channels.push(projectChannel(projectId))
+    }
+  }
+
+  // 重新订阅全局频道
+  if (globalRefCount > 0) {
+    channels.push(GLOBAL_CHANNEL)
+  }
+
+  if (channels.length === 0) return
+
+  try {
+    // 使用 subscribe 批量订阅，ioredis 内部保证幂等
+    await sub.subscribe(...channels)
+    console.log(`[task-events] Resubscribed ${channels.length} channels: ${channels.join(', ')}`)
+  } catch (err) {
+    console.error('[task-events] Failed to resubscribe channels:', (err as Error).message?.substring(0, 200))
   }
 }
 
@@ -485,4 +559,17 @@ export function getChannelRefCounts(): { projects: Record<string, number>; globa
     projects: Object.fromEntries(projectRefCounts),
     global: globalRefCount,
   }
+}
+
+/**
+ * 获取活跃频道列表（refCount > 0）
+ * 用于监控和验证重新订阅是否正确
+ */
+export function getActiveChannels(): string[] {
+  const channels: string[] = []
+  for (const [projectId, count] of projectRefCounts) {
+    if (count > 0) channels.push(projectChannel(projectId))
+  }
+  if (globalRefCount > 0) channels.push(GLOBAL_CHANNEL)
+  return channels
 }

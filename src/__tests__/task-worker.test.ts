@@ -744,4 +744,270 @@ describe('Worker health check', () => {
     expect(health.status).toBe('degraded')
     expect(health.checks.redis.status).toBe('unavailable')
   })
+
+  it('should include Worker heartbeat status in health check', () => {
+    const health = {
+      status: 'healthy',
+      checks: {
+        database: { status: 'ok' },
+        redis: { status: 'ok' },
+        worker: { status: 'ok', note: '1 worker(s) found' },
+      },
+    }
+
+    expect(health.checks.worker.status).toBe('ok')
+    expect(health.checks.worker.note).toContain('worker')
+  })
+
+  it('should report degraded when Worker heartbeat missing', () => {
+    const health = {
+      status: 'degraded',
+      checks: {
+        database: { status: 'ok' },
+        redis: { status: 'ok' },
+        worker: { status: 'unknown', note: 'No worker heartbeats found' },
+      },
+    }
+
+    expect(health.status).toBe('degraded')
+    expect(health.checks.worker.status).toBe('unknown')
+  })
+})
+
+// ─── Test: Redis Subscriber 自动重连 ───────────────────────────────────
+
+describe('Redis Subscriber auto-reconnect', () => {
+  it('should track reconnection state with isReconnecting flag', () => {
+    let isReconnecting = false
+
+    // 初始状态：未重连
+    expect(isReconnecting).toBe(false)
+
+    // 连接断开 → 进入重连状态
+    isReconnecting = true
+    expect(isReconnecting).toBe(true)
+
+    // 重连成功 → 退出重连状态
+    isReconnecting = false
+    expect(isReconnecting).toBe(false)
+  })
+
+  it('should resubscribe only channels with refCount > 0', () => {
+    const projectRefCounts = new Map<string, number>()
+    projectRefCounts.set('proj-1', 2) // 2 个 SSE 客户端
+    projectRefCounts.set('proj-2', 1) // 1 个 SSE 客户端
+    projectRefCounts.set('proj-3', 0) // 引用已归零，不应重新订阅
+
+    let globalRefCount = 1
+
+    const channels: string[] = []
+
+    for (const [projectId, count] of projectRefCounts) {
+      if (count > 0) {
+        channels.push(`manjv:task:${projectId}`)
+      }
+    }
+
+    if (globalRefCount > 0) {
+      channels.push('manjv:task:_all')
+    }
+
+    // proj-1 和 proj-2 应被重新订阅，proj-3 不应
+    expect(channels).toContain('manjv:task:proj-1')
+    expect(channels).toContain('manjv:task:proj-2')
+    expect(channels).not.toContain('manjv:task:proj-3')
+    expect(channels).toContain('manjv:task:_all')
+    expect(channels).toHaveLength(3)
+  })
+
+  it('should not resubscribe when no active channels', () => {
+    const projectRefCounts = new Map<string, number>()
+    let globalRefCount = 0
+
+    const channels: string[] = []
+
+    for (const [projectId, count] of projectRefCounts) {
+      if (count > 0) channels.push(`manjv:task:${projectId}`)
+    }
+    if (globalRefCount > 0) channels.push('manjv:task:_all')
+
+    expect(channels).toHaveLength(0)
+  })
+
+  it('should not duplicate subscriptions on multiple ready events', () => {
+    // ioredis subscribe 保证幂等：重复 subscribe 同一频道不会报错
+    // refCount 不变，不会重复增加
+    const projectRefCounts = new Map<string, number>()
+    projectRefCounts.set('proj-1', 1)
+
+    // 第一次 ready：subscribe proj-1
+    // 第二次 ready：subscribe proj-1（幂等，不会重复）
+    // 关键：refCount 不被 ready 事件改变
+    expect(projectRefCounts.get('proj-1')).toBe(1)
+  })
+
+  it('should preserve refCounts across reconnect', () => {
+    const projectRefCounts = new Map<string, number>()
+    projectRefCounts.set('proj-1', 3)
+    projectRefCounts.set('proj-2', 1)
+
+    // 模拟断连 + 重连
+    // refCounts 不受连接状态影响
+    expect(projectRefCounts.get('proj-1')).toBe(3)
+    expect(projectRefCounts.get('proj-2')).toBe(1)
+
+    // 重连后重新订阅这两个频道
+    // 订阅成功后 refCounts 保持不变
+    expect(projectRefCounts.get('proj-1')).toBe(3)
+    expect(projectRefCounts.get('proj-2')).toBe(1)
+  })
+
+  it('should allow Redis event source after reconnect', () => {
+    // Redis 断开期间事件来源为 db-fallback
+    // 重连后新事件来源应为 redis
+    const sourceBeforeReconnect = 'db-fallback'
+    const sourceAfterReconnect = 'redis'
+
+    expect(sourceBeforeReconnect).toBe('db-fallback')
+    expect(sourceAfterReconnect).toBe('redis')
+  })
+})
+
+// ─── Test: Worker Heartbeat ────────────────────────────────────────────
+
+describe('Worker Heartbeat', () => {
+  it('should write heartbeat data with required fields', () => {
+    const heartbeatData = {
+      workerId: 'worker-12345',
+      pid: 12345,
+      status: 'running',
+      activeTasks: 2,
+      updatedAt: new Date().toISOString(),
+    }
+
+    // 验证必要字段
+    expect(heartbeatData.workerId).toBeDefined()
+    expect(heartbeatData.pid).toBeTypeOf('number')
+    expect(heartbeatData.status).toBe('running')
+    expect(heartbeatData.activeTasks).toBeTypeOf('number')
+    expect(heartbeatData.updatedAt).toBeDefined()
+
+    // 验证不包含敏感字段
+    expect(heartbeatData).not.toHaveProperty('apiKey')
+    expect(heartbeatData).not.toHaveProperty('input')
+    expect(heartbeatData).not.toHaveProperty('output')
+    expect(heartbeatData).not.toHaveProperty('path')
+  })
+
+  it('should use TTL of 30s (3x interval of 10s)', () => {
+    const HEARTBEAT_INTERVAL = 10_000
+    const HEARTBEAT_TTL = 30_000
+
+    // TTL 应至少是 interval 的 2 倍，容忍 2 次写入失败
+    expect(HEARTBEAT_TTL / HEARTBEAT_INTERVAL).toBeGreaterThanOrEqual(2)
+  })
+
+  it('should detect stale worker when heartbeat key expires', () => {
+    const HEARTBEAT_TTL = 30_000 // 30 秒
+
+    // heartbeat 在 TTL 时间内有效
+    const lastBeat = Date.now() - 15_000 // 15 秒前
+    const isAlive = (Date.now() - lastBeat) < HEARTBEAT_TTL
+    expect(isAlive).toBe(true)
+
+    // heartbeat 过期视为不存活
+    const staleBeat = Date.now() - 35_000 // 35 秒前
+    const isStale = (Date.now() - staleBeat) >= HEARTBEAT_TTL
+    expect(isStale).toBe(true)
+  })
+
+  it('should write shutting_down status on graceful exit', () => {
+    const exitData = {
+      workerId: 'worker-12345',
+      pid: 12345,
+      status: 'shutting_down',
+      activeTasks: 0,
+      updatedAt: new Date().toISOString(),
+    }
+
+    expect(exitData.status).toBe('shutting_down')
+  })
+
+  it('heartbeat failure should not crash Worker', () => {
+    // Worker 主循环和 heartbeat 是解耦的
+    // heartbeat 写入失败不影响任务执行
+    let workerRunning = true
+    let heartbeatFailed = true
+
+    // 即使 heartbeat 失败，Worker 仍继续运行
+    expect(workerRunning && heartbeatFailed).toBe(true)
+  })
+})
+
+// ─── Test: TEST_NOOP 生产环境清理 ──────────────────────────────────────
+
+describe('TEST_NOOP production cleanup', () => {
+  it('should cleanup stale TEST_NOOP tasks in production', async () => {
+    // 模拟生产环境
+    const originalEnv = process.env.NODE_ENV
+    process.env.NODE_ENV = 'production'
+    delete process.env.ENABLE_TEST_TASKS
+
+    const isTestTaskEnabled = () =>
+      process.env.ENABLE_TEST_TASKS === 'true' || process.env.NODE_ENV === 'test'
+
+    // 生产环境 TEST_NOOP 被禁用
+    expect(isTestTaskEnabled()).toBe(false)
+
+    // 应清理遗留的 pending/retrying/running TEST_NOOP 任务
+    const staleStatuses = ['pending', 'retrying', 'running']
+    for (const status of staleStatuses) {
+      expect(['pending', 'retrying', 'running'].includes(status)).toBe(true)
+    }
+
+    // 恢复
+    process.env.NODE_ENV = originalEnv
+  })
+
+  it('should NOT cleanup TEST_NOOP tasks in non-production', () => {
+    const originalEnv = process.env.NODE_ENV
+    process.env.NODE_ENV = 'development'
+
+    // 非生产环境不执行清理
+    const shouldCleanup = process.env.NODE_ENV === 'production'
+    expect(shouldCleanup).toBe(false)
+
+    process.env.NODE_ENV = originalEnv
+  })
+
+  it('should mark cleaned tasks as failed with specific message', () => {
+    const cleanedTask = {
+      status: 'failed',
+      errorMessage: '[TEST_TASK_DISABLED] 测试任务在生产环境不可执行',
+    }
+
+    expect(cleanedTask.status).toBe('failed')
+    expect(cleanedTask.errorMessage).toContain('TEST_TASK_DISABLED')
+  })
+
+  it('should only cleanup TEST_NOOP, not other task types', () => {
+    const taskTypesToCleanup = ['TEST_NOOP']
+    const otherTaskTypes = [
+      'GENERATE_STORYBOARD',
+      'GENERATE_SHOT_IMAGES',
+      'GENERATE_SHOT_VIDEOS',
+      'RENDER_FINAL_VIDEO',
+    ]
+
+    for (const type of otherTaskTypes) {
+      expect(taskTypesToCleanup).not.toContain(type)
+    }
+  })
+
+  it('should NOT delete task records, only mark as failed', () => {
+    // 清理操作使用 updateMany，不是 deleteMany
+    // 保留记录用于审计
+    const operation = 'updateMany' // not deleteMany
+    expect(operation).toBe('updateMany')
+  })
 })

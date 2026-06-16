@@ -16,6 +16,46 @@ import { handleShotImages } from './handlers/shot-images.handler'
 import { handleShotVideos } from './handlers/shot-videos.handler'
 import { handleTestNoop, isTestTaskEnabled } from './handlers/test-noop.handler'
 import { emitTaskEvent, taskToUpdateEvent, closeEventConnections } from './task-events'
+import { startHeartbeat, stopHeartbeat } from './worker-heartbeat'
+
+// ─── 生产环境 TEST_NOOP 遗留任务清理 ──────────────────────────────────
+
+/**
+ * 清理生产环境中的 TEST_NOOP 遗留任务
+ *
+ * 当 NODE_ENV=production 时，TEST_NOOP handler 不会注册，
+ * 但数据库中可能存在遗留的 pending/retrying/running TEST_NOOP 任务，
+ * 这些任务永远不会被领取，成为孤儿。
+ *
+ * Worker 启动时调用此函数，将这些任务标记为 failed。
+ */
+async function cleanupStaleTestNoopTasks(): Promise<number> {
+  if (process.env.NODE_ENV !== 'production') return 0
+  if (isTestTaskEnabled()) return 0
+
+  try {
+    const result = await prisma.generationTask.updateMany({
+      where: {
+        taskType: 'TEST_NOOP',
+        status: { in: ['pending', 'retrying', 'running'] },
+      },
+      data: {
+        status: 'failed',
+        errorMessage: '[TEST_TASK_DISABLED] 测试任务在生产环境不可执行',
+        finishedAt: new Date(),
+      },
+    })
+
+    if (result.count > 0) {
+      console.log(`[worker] Cleaned up ${result.count} stale TEST_NOOP tasks in production`)
+    }
+
+    return result.count
+  } catch (err) {
+    console.error('[worker] Failed to cleanup stale TEST_NOOP tasks:', (err as Error).message)
+    return 0
+  }
+}
 
 // ─── 配置 ──────────────────────────────────────────────────────────
 
@@ -338,6 +378,16 @@ async function main(): Promise<void> {
     console.log(`[worker] Recovered ${recoveredCount} stale tasks`)
   }
 
+  // 生产环境 TEST_NOOP 遗留任务清理
+  const cleanedCount = await cleanupStaleTestNoopTasks()
+  if (cleanedCount > 0) {
+    console.log(`[worker] Cleaned up ${cleanedCount} stale TEST_NOOP tasks`)
+  }
+
+  // 启动 Worker heartbeat
+  startHeartbeat(WORKER_ID, () => runningTotal)
+  console.log(`[worker] Heartbeat started (interval=10s, TTL=30s)`)
+
   // 优雅退出
   process.on('SIGINT', () => {
     console.log('[worker] SIGINT received, shutting down...')
@@ -379,6 +429,7 @@ async function main(): Promise<void> {
   }
 
   // 关闭连接
+  await stopHeartbeat(WORKER_ID)
   await closeEventConnections()
   await prisma.$disconnect()
 

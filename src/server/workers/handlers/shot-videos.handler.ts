@@ -64,6 +64,7 @@ export async function handleShotVideos(taskId: string): Promise<void> {
       include: {
         videoPrompts: { take: 1, orderBy: { createdAt: 'desc' } },
         shotImages: { where: { isConfirmed: true }, take: 1 },
+        shotVideos: { orderBy: { createdAt: 'desc' } },
       },
     })
 
@@ -83,11 +84,25 @@ export async function handleShotVideos(taskId: string): Promise<void> {
     const isMock = process.env.USE_MOCK_MODEL === 'true'
 
     // ─── 阶段 1：为每个镜头创建视频生成任务 ─────────────────────────
+    //
+    // 幂等性保护：
+    // - 如果镜头已有 ShotVideo 且带 remoteTaskId，说明远端任务已提交
+    // - 不重复提交远端任务，直接跳过该镜头
+    // - Worker 重启后通过崩溃恢复重新领取，只提交缺少远端任务的镜头
 
     const allResults: Array<{ shotId: string; shotNo: number; videos: unknown[] }> = []
 
     for (let i = 0; i < shots.length; i++) {
       const shot = shots[i]
+
+      // 幂等性保护：已有远端任务的镜头不重复提交
+      const existingVideo = shot.shotVideos.find(sv => sv.remoteTaskId)
+      if (existingVideo && !isMock) {
+        console.log(`[worker:shot-videos] Shot #${shot.shotNo}: remote task ${existingVideo.remoteTaskId} already exists, skipping creation`)
+        allResults.push({ shotId: shot.id, shotNo: shot.shotNo, videos: [existingVideo] })
+        continue
+      }
+
       const vidPrompt = shot.videoPrompts[0]
       const confirmedImage = shot.shotImages[0]
       let prompt = vidPrompt?.prompt || ''

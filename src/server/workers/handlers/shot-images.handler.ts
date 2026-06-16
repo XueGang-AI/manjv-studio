@@ -254,7 +254,10 @@ export async function handleShotImages(taskId: string): Promise<void> {
     const shots = await prisma.shot.findMany({
       where: { episodeId, projectId },
       orderBy: { shotNo: 'asc' },
-      include: { imagePrompts: { take: 1, orderBy: { createdAt: 'desc' } } },
+      include: {
+        imagePrompts: { take: 1, orderBy: { createdAt: 'desc' } },
+        shotImages: { orderBy: { createdAt: 'desc' } },
+      },
     })
 
     if (shots.length === 0) throw new Error('没有镜头数据')
@@ -272,6 +275,20 @@ export async function handleShotImages(taskId: string): Promise<void> {
 
     for (let i = 0; i < shots.length; i++) {
       const shot = shots[i]
+
+      // 幂等性保护：已有 ShotImage 的镜头不重复调用图片 API
+      // 这防止 Worker 重启后对已提交但任务未完成的镜头重复扣费
+      if (shot.shotImages && shot.shotImages.length > 0) {
+        console.log(`[worker:shot-images] Shot #${shot.shotNo}: ${shot.shotImages.length} existing images, skipping`)
+        allResults.push({ shotId: shot.id, shotNo: shot.shotNo, images: shot.shotImages })
+        // 更新进度（跳过但仍计入）
+        const progress = Math.round(((i + 1) / shots.length) * 80) + 10
+        await taskService.updateProgress(taskId, progress)
+        const updated = await prisma.generationTask.findUnique({ where: { id: taskId } })
+        if (updated) await emitTaskEvent('task.progress', taskToUpdateEvent(updated))
+        continue
+      }
+
       const imgPrompt = shot.imagePrompts[0]
       const basePrompt = imgPrompt?.enPrompt || imgPrompt?.zhPrompt || shot.action || ''
 
