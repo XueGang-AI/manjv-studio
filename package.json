@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev:all": "npx tsx src/server/workers/task.worker.ts & next dev",
+    "dev:all": "bash scripts/dev-all.sh",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",

@@ -3,22 +3,11 @@
 // ============================================
 //
 // 独立进程运行，轮询数据库中的 pending 任务并执行。
-//
-// 加固特性：
-// - 原子领取：条件更新 + affected rows 检查
-// - Allowlist：只领取已注册 handler 的任务类型
-// - 崩溃恢复：启动时回收超时的 running 任务
-// - 并发控制：按任务类型限制并发数
-// - 优雅退出：SIGTERM/SIGINT 后完成当前任务
-// - Redis 事件发布：跨进程通知 SSE
-//
-// 用法：
-//   npm run worker
-//
-// 环境变量：
-//   WORKER_POLL_INTERVAL   轮询间隔 ms（默认 3000）
-//   WORKER_CONCURRENCY     全局最大并发（默认 3）
-//   WORKER_ID              Worker 标识（默认自动生成）
+// Worker 是独立进程，不经过 Next.js，不会自动加载 .env，
+// 必须在所有 import 之前手动加载环境变量。
+
+import { config } from 'dotenv'
+config()
 
 import prisma from '@/lib/prisma'
 import { handleFinalRender } from './handlers/final-render.handler'
@@ -321,13 +310,9 @@ async function pollOnce(): Promise<number> {
 
       claimed++
 
-      // 发布 running 事件
-      const updated = await prisma.generationTask.findUnique({ where: { id: task.id } })
-      if (updated) {
-        emitTaskEvent('task.running', taskToUpdateEvent(updated))
-      }
-
       // 异步执行（不 await，实现并发）
+      // 注意：task.running 事件由各 handler 内部在 startTask() 后发布，
+      // 不在主循环重复发布，避免重复事件
       dispatchTask(task.id, task.taskType).catch(() => { /* handled inside */ })
     }
 

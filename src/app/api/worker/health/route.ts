@@ -8,7 +8,7 @@ import { NextResponse } from 'next/server'
  * Worker 进程本身的存活需要通过部署平台进程健康检查确认。
  */
 export async function GET() {
-  const checks: Record<string, { status: string; latency?: number; error?: string }> = {}
+  const checks: Record<string, { status: string; latency?: number; error?: string; note?: string }> = {}
 
   // 数据库检查
   try {
@@ -20,14 +20,33 @@ export async function GET() {
     checks.database = { status: 'error', error: (e as Error).message?.substring(0, 100) }
   }
 
-  // Redis 检查
+  // Redis 检查：主动 PING 验证连接，而非仅检查已有连接的标志
   try {
     const start = Date.now()
     const { isRedisAvailable } = await import('@/server/workers/task-events')
-    const available = isRedisAvailable()
-    checks.redis = {
-      status: available ? 'ok' : 'unavailable',
-      latency: available ? Date.now() - start : undefined,
+    // 先检查已有连接
+    if (isRedisAvailable()) {
+      checks.redis = { status: 'ok', latency: Date.now() - start }
+    } else {
+      // 尝试创建新连接验证 Redis 可达性
+      try {
+        const Redis = (await import('ioredis')).default
+        if (process.env.REDIS_URL) {
+          const testClient = new Redis(process.env.REDIS_URL, {
+            maxRetriesPerRequest: 1,
+            lazyConnect: true,
+            connectTimeout: 2000,
+          })
+          await testClient.connect()
+          await testClient.ping()
+          await testClient.quit()
+          checks.redis = { status: 'ok', latency: Date.now() - start, note: 'verified via PING' }
+        } else {
+          checks.redis = { status: 'unavailable', note: 'REDIS_URL not set' }
+        }
+      } catch {
+        checks.redis = { status: 'error', note: 'Redis unreachable' }
+      }
     }
   } catch (e) {
     checks.redis = { status: 'error', error: (e as Error).message?.substring(0, 100) }

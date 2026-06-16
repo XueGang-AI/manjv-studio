@@ -1,5 +1,5 @@
 // ============================================
-// 任务事件系统 — Redis Pub/Sub + 共享 Subscriber + 进程内回退
+// 任务事件系统 — Redis Pub/Sub + 共享 Subscriber + 引用计数频道管理
 // ============================================
 //
 // 架构：
@@ -23,6 +23,12 @@
 //   - Subscriber：1 个共享连接，使用 psubscribe 模式
 //   - 每个 SSE 客户端只注册进程内 listener，不创建 Redis 连接
 //   - 客户端断开时只移除 listener，不断开 Redis
+//
+// 频道引用计数：
+//   - 每个 SSE 订阅对项目频道 +1 引用
+//   - 取消订阅时 -1 引用
+//   - 引用归零时 unsubscribe Redis 频道，从 Set 中删除
+//   - 防止频道集合永久增长
 //
 // 安全约束：
 //   事件只包含必要字段，不含 input/output/FFmpeg stderr/密钥/路径
@@ -124,13 +130,14 @@ async function initPublisher(): Promise<import('ioredis').Redis | null> {
   }
 }
 
-// ─── Redis Subscriber（共享单连接 + 频道管理） ─────────────────────
+// ─── Redis Subscriber（共享单连接 + 引用计数频道管理） ─────────────
 
 let subscriber: import('ioredis').Redis | null = null
 let subscriberInitPromise: Promise<import('ioredis').Redis | null> | null = null
-/** 当前已订阅的项目频道集合 */
-const subscribedProjects = new Set<string>()
-let globalSubscribed = false
+/** 项目频道引用计数：projectId → 订阅者数量 */
+const projectRefCounts = new Map<string, number>()
+/** 全局频道引用计数 */
+let globalRefCount = 0
 
 /**
  * 获取或初始化共享 Subscriber
@@ -182,6 +189,7 @@ async function initSubscriber(): Promise<import('ioredis').Redis | null> {
 
     await client.connect()
     subscriber = client
+    redisAvailable = true
     return client
   } catch {
     subscriber = null
@@ -190,31 +198,78 @@ async function initSubscriber(): Promise<import('ioredis').Redis | null> {
   }
 }
 
-/** 确保项目频道已订阅 */
-async function ensureProjectSubscribed(projectId: string): Promise<void> {
-  if (subscribedProjects.has(projectId)) return
+/** 增加项目频道引用计数，首次时订阅 Redis 频道 */
+async function refProjectChannel(projectId: string): Promise<void> {
+  const count = projectRefCounts.get(projectId) || 0
+  if (count > 0) {
+    // 已有订阅者，只增加引用计数
+    projectRefCounts.set(projectId, count + 1)
+    return
+  }
+
+  // 首次订阅：subscribe Redis 频道
   const sub = await getSubscriber()
   if (!sub) return
 
   try {
     await sub.subscribe(projectChannel(projectId))
-    subscribedProjects.add(projectId)
+    projectRefCounts.set(projectId, 1)
   } catch {
     // 订阅失败不阻塞
   }
 }
 
-/** 确保全局频道已订阅 */
-async function ensureGlobalSubscribed(): Promise<void> {
-  if (globalSubscribed) return
+/** 减少项目频道引用计数，归零时取消 Redis 频道订阅 */
+async function unrefProjectChannel(projectId: string): Promise<void> {
+  const count = projectRefCounts.get(projectId) || 0
+  if (count <= 1) {
+    // 引用归零：取消订阅并删除记录
+    projectRefCounts.delete(projectId)
+    const sub = subscriber
+    if (sub) {
+      try {
+        await sub.unsubscribe(projectChannel(projectId))
+      } catch {
+        // 取消订阅失败不影响
+      }
+    }
+  } else {
+    projectRefCounts.set(projectId, count - 1)
+  }
+}
+
+/** 增加全局频道引用计数 */
+async function refGlobalChannel(): Promise<void> {
+  if (globalRefCount > 0) {
+    globalRefCount++
+    return
+  }
+
   const sub = await getSubscriber()
   if (!sub) return
 
   try {
     await sub.subscribe(GLOBAL_CHANNEL)
-    globalSubscribed = true
+    globalRefCount = 1
   } catch {
     // 订阅失败不阻塞
+  }
+}
+
+/** 减少全局频道引用计数 */
+async function unrefGlobalChannel(): Promise<void> {
+  if (globalRefCount <= 1) {
+    globalRefCount = 0
+    const sub = subscriber
+    if (sub) {
+      try {
+        await sub.unsubscribe(GLOBAL_CHANNEL)
+      } catch {
+        // 取消订阅失败不影响
+      }
+    }
+  } else {
+    globalRefCount--
   }
 }
 
@@ -263,7 +318,8 @@ export interface TaskEventSubscription {
  * 使用共享 Redis Subscriber + 进程内 listener 模式：
  * - 不为每个 SSE 客户端创建 Redis 连接
  * - 每个客户端只注册进程内 EventEmitter listener
- * - 断开时只移除 listener
+ * - 断开时移除 listener 并减少频道引用计数
+ * - 引用归零时自动取消 Redis 频道订阅
  *
  * 事件来源标记：
  * - source=local：同进程直推（Worker 与 SSE 同进程）
@@ -290,9 +346,9 @@ export async function subscribeToProjectEvents(
   TASK_EVENT_BUS.on(`redis_event:${projectId}`, redisHandler)
   cleanups.push(() => TASK_EVENT_BUS.off(`redis_event:${projectId}`, redisHandler))
 
-  // 3. 确保共享 Subscriber 已订阅该项目频道
-  await ensureProjectSubscribed(projectId)
-  await ensureGlobalSubscribed()
+  // 3. 增加引用计数（可能触发 Redis subscribe）
+  await refProjectChannel(projectId)
+  await refGlobalChannel()
 
   // 全局 Redis 事件也转发（避免遗漏）
   const globalRedisHandler = (event: { type: TaskEventType; payload: TaskUpdateEvent; source: string }) => {
@@ -303,11 +359,18 @@ export async function subscribeToProjectEvents(
   TASK_EVENT_BUS.on('redis_event', globalRedisHandler)
   cleanups.push(() => TASK_EVENT_BUS.off('redis_event', globalRedisHandler))
 
+  let unsubscribed = false
   return {
     unsubscribe: () => {
+      if (unsubscribed) return
+      unsubscribed = true
+      // 移除 listener
       for (const cleanup of cleanups) {
         try { cleanup() } catch { /* ignore */ }
       }
+      // 减少频道引用计数（可能触发 Redis unsubscribe）
+      unrefProjectChannel(projectId).catch(() => {})
+      unrefGlobalChannel().catch(() => {})
     },
   }
 }
@@ -334,13 +397,17 @@ export async function subscribeToAllEvents(
   TASK_EVENT_BUS.on('redis_event', redisHandler)
   cleanups.push(() => TASK_EVENT_BUS.off('redis_event', redisHandler))
 
-  await ensureGlobalSubscribed()
+  await refGlobalChannel()
 
+  let unsubscribed = false
   return {
     unsubscribe: () => {
+      if (unsubscribed) return
+      unsubscribed = true
       for (const cleanup of cleanups) {
         try { cleanup() } catch { /* ignore */ }
       }
+      unrefGlobalChannel().catch(() => {})
     },
   }
 }
@@ -400,8 +467,8 @@ export async function closeEventConnections(): Promise<void> {
   }
 
   await Promise.all(promises)
-  subscribedProjects.clear()
-  globalSubscribed = false
+  projectRefCounts.clear()
+  globalRefCount = 0
   redisAvailable = false
   publisherInitPromise = null
   subscriberInitPromise = null
@@ -410,4 +477,12 @@ export async function closeEventConnections(): Promise<void> {
 /** 检查 Redis 是否可用 */
 export function isRedisAvailable(): boolean {
   return redisAvailable
+}
+
+/** 获取当前项目频道引用计数（用于调试和监控） */
+export function getChannelRefCounts(): { projects: Record<string, number>; global: number } {
+  return {
+    projects: Object.fromEntries(projectRefCounts),
+    global: globalRefCount,
+  }
 }

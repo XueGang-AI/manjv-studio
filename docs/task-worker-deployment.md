@@ -14,8 +14,9 @@ Worker (独立进程)
 ```
 
 - **数据库（PostgreSQL）是任务状态的唯一真相源**
-- **Redis 是低延迟事件通知层**，不可用时自动降级到 DB 轮询
+- **Redis 是低延迟事件通知层**，不可用时自动降级到 DB 轮询（3 秒间隔）
 - **Worker 与 Next.js 是独立进程**，通过 DB 领取任务，通过 Redis 推送事件
+- **Redis 频道使用引用计数管理**，SSE 客户端断开后自动取消订阅
 
 ## 进程启动命令
 
@@ -35,8 +36,13 @@ npm run worker       # 单 Worker
 ### 开发组合启动
 
 ```bash
-npm run dev:all      # 同时启动 Next.js + Worker
+npm run dev:all      # 同时启动 Next.js + Worker（Ctrl+C 同时终止）
 ```
+
+`dev:all` 使用 `scripts/dev-all.sh`，确保：
+- Ctrl+C 同时终止 Web 和 Worker 进程
+- 任一子进程异常退出时终止另一个
+- 无残留进程
 
 ## Redis
 
@@ -161,9 +167,11 @@ curl http://localhost:3000/api/worker/health
 }
 ```
 
-- `healthy`：DB + Redis 均正常
+- `healthy`：DB + Redis 均正常（Redis 通过主动 PING 验证）
 - `degraded`：DB 正常但 Redis 不可用（SSE 降级到 DB 轮询）
 - `unhealthy`：DB 不可用
+
+注意：此端点检查的是 DB 和 Redis 的可达性，不等于 Worker 进程存活。Worker 进程需通过进程监控工具检查。
 
 ### Worker 进程
 
@@ -209,6 +217,36 @@ Worker 启动时自动扫描超时的 `running` 任务：
 - `retryCount < maxRetries` → 重置为 `pending`，等待重新领取
 - `retryCount >= maxRetries` → 标记为 `failed`
 - 自动恢复项目业务状态（避免用户卡在 GENERATING）
+
+## 重要注意事项
+
+### Worker 环境变量
+
+Worker 作为独立进程运行，**不会自动加载 `.env`**。入口文件已添加 `dotenv.config()` 确保环境变量加载。
+
+生产环境需确保 `DATABASE_URL`、`REDIS_URL` 等变量通过环境注入或 `.env` 文件可访问。
+
+### Redis 连接管理
+
+- Publisher：1 个共享连接（按需初始化）
+- Subscriber：1 个共享连接（按需初始化）
+- 频道引用计数：每个 SSE 客户端订阅项目时 +1，断开时 -1
+- 引用归零时自动 unsubscribe Redis 频道，防止频道集合增长
+- Worker 进程只有 Publisher，没有 Subscriber
+- Web 进程有 Subscriber（SSE 需要），Publisher 按需初始化
+
+### 事件去重
+
+- Redis 事件通过 `eventId` 去重（SSE 端维护最近 100 个已发送 eventId）
+- DB fallback 事件是独立格式（`update` 类型），不与 Redis 事件重复
+- 前端 Hook 维护 `seenEventIds` Set（最近 50 个）
+
+### SSE 断线重连
+
+- 浏览器原生 EventSource 自动携带 `Last-Event-ID` 重连
+- SSE Route 解析 Last-Event-ID 中的时间戳，推送 `updatedAt > since` 的增量快照
+- 中间 progress 值无法重放（数据库只保留最新状态）
+- curl 不具备浏览器自动重连行为，需手动携带 `Last-Event-ID` header
 
 ## FFmpeg 依赖
 
