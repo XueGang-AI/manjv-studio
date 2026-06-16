@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { taskService } from '@/server/queues/task-queue.service'
 import {
   subscribeToProjectEvents,
+  isRedisAvailable,
   type TaskEventType,
   type TaskUpdateEvent,
 } from '@/server/workers/task-events'
@@ -11,14 +12,14 @@ import {
  * SSE 实时任务状态推送 — Redis Pub/Sub + DB fallback
  *
  * 事件层级：
- * 1. Redis Pub/Sub（跨进程，Worker → Next.js SSE）
- * 2. 进程内 EventEmitter（同进程直推）
- * 3. DB 增量轮询 fallback（3 秒，仅查 updatedAt > lastSeenAt）
+ * 1. Redis Pub/Sub（跨进程，Worker → Next.js SSE）source=redis
+ * 2. 进程内 EventEmitter（同进程直推）source=local
+ * 3. DB 增量轮询 fallback（3 秒，仅查 updatedAt > lastSeenAt）source=db-fallback
  *
  * SSE 协议：
- * - event: 类型（snapshot / task.created / task.updated / task.completed / task.failed / heartbeat）
+ * - event: 类型（snapshot / task.* / heartbeat / update / error）
  * - id: 事件 ID（用于 Last-Event-ID 重连）
- * - data: JSON
+ * - data: JSON（含 source 字段标记事件来源）
  *
  * 安全约束：
  * - 事件不含完整 input/output/FFmpeg stderr/密钥/路径
@@ -28,9 +29,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   const encoder = new TextEncoder()
   let closed = false
-  /** 已发送的最大事件 ID（用于 Last-Event-ID 去重） */
   let lastSentEventId = ''
-  /** 已发送的事件 ID 集合（最近 100 个，用于去重） */
   const sentEventIds: string[] = []
 
   const stream = new ReadableStream({
@@ -42,7 +41,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           if (eventId) {
             message += `id: ${eventId}\n`
             lastSentEventId = eventId
-            // 维护去重窗口
             sentEventIds.push(eventId)
             if (sentEventIds.length > 100) sentEventIds.shift()
           }
@@ -53,18 +51,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         }
       }
 
-      const sendTaskEvent = (type: TaskEventType, payload: TaskUpdateEvent) => {
+      const sendTaskEvent = (type: TaskEventType, payload: TaskUpdateEvent, source: string) => {
         // 去重：跳过已发送的事件
         if (payload.eventId && sentEventIds.includes(payload.eventId)) return
-        send(type, JSON.stringify(payload), payload.eventId)
+        // 在 data 中包含 source 标记
+        send(type, JSON.stringify({ ...payload, source }), payload.eventId)
       }
 
       // ─── 1. Last-Event-ID 恢复 ──────────────────────────────────
       const lastEventId = request.headers.get('Last-Event-ID')
       if (lastEventId) {
-        // 客户端重连，推送自上次断开后的增量
         try {
-          // 从 eventId 中提取时间戳（格式：evt_<timestamp>_<random>）
           const tsMatch = lastEventId.match(/^evt_(\d+)_/)
           if (tsMatch) {
             const since = new Date(Number(tsMatch[1]))
@@ -91,7 +88,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
       // ─── 3. 订阅 Redis + 进程内事件 ──────────────────────────────
       const subscription = await subscribeToProjectEvents(projectId, (event) => {
-        sendTaskEvent(event.type, event.payload)
+        sendTaskEvent(event.type, event.payload, event.source)
       })
 
       // ─── 4. 心跳保活（30 秒） ────────────────────────────────────
@@ -101,18 +98,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       }, 30_000)
 
       // ─── 5. DB 增量轮询 fallback（3 秒） ────────────────────────
-      // 仅在 Redis 不可用时作为主要推送通道，
-      // Redis 可用时仍运行但间隔更长（10 秒），用于兜底去重
       let lastSeenUpdatedAt = new Date()
 
       const fallbackPoll = setInterval(async () => {
         if (closed) return
         try {
-          // 增量查询：只查 updatedAt > lastSeenUpdatedAt 的任务
           const changed = await prismaQueryRecent(projectId, lastSeenUpdatedAt)
           if (changed.length > 0) {
-            send('update', JSON.stringify({ success: true, data: changed }))
-            // 更新 lastSeenUpdatedAt 为最新记录的时间
+            // DB fallback 事件标记 source=db-fallback
+            send('update', JSON.stringify({ success: true, data: changed, source: 'db-fallback' }))
             for (const t of changed) {
               const d = new Date(t.updatedAt)
               if (d > lastSeenUpdatedAt) lastSeenUpdatedAt = d
@@ -150,10 +144,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
 /** 增量查询：只返回 updatedAt > since 的任务 */
 async function prismaQueryRecent(projectId: string, since: Date) {
-  const { PrismaClient } = await import('@prisma/client')
-  // 使用原始 Prisma 查询，直接用已有的 taskService
-  const { taskService } = await import('@/server/queues/task-queue.service')
-  // taskService.getProjectTasks 不支持 since 参数，使用 prisma 直接查询
   const prisma = (await import('@/lib/prisma')).default
   return prisma.generationTask.findMany({
     where: {

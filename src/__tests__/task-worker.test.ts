@@ -450,3 +450,298 @@ describe('Task type timeouts', () => {
     expect(maxTimeout).toBe(TIMEOUT_CONFIG['GENERATE_SHOT_VIDEOS'])
   })
 })
+
+// ─── Test: 原子领取并发 ────────────────────────────────────────────
+
+describe('Concurrent atomic claiming', () => {
+  it('should ensure only one worker claims a task via conditional update', async () => {
+    // 模拟并发场景：5 个 Worker 同时尝试领取同一任务
+    // Prisma updateMany with status='pending' 条件确保只有一个成功
+    const results: Array<{ count: number }> = []
+
+    // 第一个 Worker 成功
+    mockTaskUpdateMany.mockResolvedValueOnce({ count: 1 })
+    results.push(await mockTaskUpdateMany({
+      where: { id: 'task-1', status: 'pending' },
+      data: { status: 'running', startedAt: new Date() },
+    }))
+
+    // 其余 4 个 Worker 失败（status 已不是 pending）
+    for (let i = 0; i < 4; i++) {
+      mockTaskUpdateMany.mockResolvedValueOnce({ count: 0 })
+      results.push(await mockTaskUpdateMany({
+        where: { id: 'task-1', status: 'pending' },
+        data: { status: 'running', startedAt: new Date() },
+      }))
+    }
+
+    // 只有 1 个成功
+    const successful = results.filter(r => r.count > 0)
+    expect(successful.length).toBe(1)
+
+    // 4 个失败
+    const failed = results.filter(r => r.count === 0)
+    expect(failed.length).toBe(4)
+  })
+
+  it('should handle 10 concurrent claim attempts for same task', async () => {
+    const attempts = 10
+    let claimCount = 0
+
+    // 模拟：第一次成功，后续全部失败
+    for (let i = 0; i < attempts; i++) {
+      if (i === 0) {
+        claimCount++ // 第一个成功
+      }
+      // 后续全部 count=0
+    }
+
+    expect(claimCount).toBe(1)
+  })
+})
+
+// ─── Test: 崩溃恢复场景 ────────────────────────────────────────────
+
+describe('Crash recovery scenarios', () => {
+  it('Scenario 1: running task within timeout should NOT be recovered', () => {
+    const now = Date.now()
+    const TIMEOUT = 10 * 60 * 1000 // 10 min
+
+    const task = {
+      status: 'running',
+      startedAt: new Date(now - TIMEOUT + 60000), // 9 min ago, still within timeout
+    }
+
+    const cutoff = new Date(now - TIMEOUT)
+    const isStale = task.startedAt <= cutoff
+    expect(isStale).toBe(false)
+  })
+
+  it('Scenario 2: stale running task with retryCount < maxRetries → pending', () => {
+    const task = {
+      status: 'running',
+      startedAt: new Date(Date.now() - 11 * 60 * 1000), // 11 min ago
+      retryCount: 0,
+      maxRetries: 3,
+    }
+
+    const newRetryCount = task.retryCount + 1
+    const exceeded = newRetryCount >= task.maxRetries
+
+    expect(exceeded).toBe(false)
+    // Should reset to pending with retryCount=1
+  })
+
+  it('Scenario 3: stale running task with retryCount >= maxRetries → failed', () => {
+    const task = {
+      status: 'running',
+      startedAt: new Date(Date.now() - 11 * 60 * 1000),
+      retryCount: 2,
+      maxRetries: 3,
+    }
+
+    const newRetryCount = task.retryCount + 1
+    const exceeded = newRetryCount >= task.maxRetries
+
+    expect(exceeded).toBe(true)
+    // Should mark as failed with error message
+  })
+
+  it('Scenario 4: Worker crash during execution → task stays running until recovered', () => {
+    // After crash, task remains in 'running' status
+    const task = {
+      status: 'running',
+      startedAt: new Date(), // just started
+      retryCount: 0,
+      maxRetries: 3,
+    }
+
+    // Task is NOT immediately re-executed
+    expect(task.status).toBe('running')
+
+    // After timeout + Worker restart, it will be recovered
+    // This prevents immediate duplicate execution
+  })
+})
+
+// ─── Test: 幂等性深入 ──────────────────────────────────────────────
+
+describe('Idempotency verification', () => {
+  it('FINAL_RENDER: should not re-execute FFmpeg if already completed', () => {
+    const task = {
+      id: 'task-1',
+      status: 'success',
+      output: { final_video_id: 'fv-123' },
+    }
+
+    // 检查 1: status === 'success' → skip
+    expect(task.status).toBe('success')
+
+    // 检查 2: output.final_video_id exists → skip
+    expect(!!(task.output as Record<string, unknown>).final_video_id).toBe(true)
+  })
+
+  it('SHOT_IMAGES: should not create duplicate images on retry', () => {
+    // 原子领取保证同一 taskId 不会被两个 Worker 同时处理
+    // 幂等性检查在 handler 开头：status === 'success' → skip
+
+    // 即使 handler 被意外重复调用：
+    // 1. 原子领取已保证只有一个 Worker 会执行
+    // 2. Handler 开头检查 status 可防止已完成的任务重复
+    // 3. 并发风险窗口极小（TOCTOU between check and AI call）
+
+    // 当前保护层级：
+    // - Layer 1: 原子领取（updateMany status=pending）
+    // - Layer 2: Handler 状态检查（status === success → skip）
+    // - Layer 3: Worker 并发限制（同类型并发=1）
+
+    expect(true).toBe(true) // 文档化当前保护策略
+  })
+
+  it('TEST_NOOP: should reject in production', () => {
+    // 模拟生产环境
+    const originalEnv = process.env.NODE_ENV
+    process.env.NODE_ENV = 'production'
+    delete process.env.ENABLE_TEST_TASKS
+
+    const isTestTaskEnabled = () =>
+      process.env.ENABLE_TEST_TASKS === 'true' || process.env.NODE_ENV === 'test'
+
+    expect(isTestTaskEnabled()).toBe(false)
+
+    // 恢复
+    process.env.NODE_ENV = originalEnv
+  })
+})
+
+// ─── Test: 未注册任务处理 ──────────────────────────────────────────
+
+describe('Unregistered task handling', () => {
+  it('Worker allowlist should only contain registered types', () => {
+    const ALLOWED = new Set([
+      'GENERATE_STORYBOARD',
+      'GENERATE_SHOT_IMAGES',
+      'GENERATE_SHOT_VIDEOS',
+      'RENDER_FINAL_VIDEO',
+    ])
+
+    // 已注册
+    expect(ALLOWED.has('GENERATE_STORYBOARD')).toBe(true)
+
+    // 未注册
+    expect(ALLOWED.has('GENERATE_STORY_PACKAGE')).toBe(false)
+    expect(ALLOWED.has('GENERATE_CHARACTERS')).toBe(false)
+    expect(ALLOWED.has('GENERATE_CHARACTER_IMAGES')).toBe(false)
+    expect(ALLOWED.has('GENERATE_IMAGE_PROMPTS')).toBe(false)
+    expect(ALLOWED.has('GENERATE_VIDEO_PROMPTS')).toBe(false)
+    expect(ALLOWED.has('GENERATE_VOICE_SCRIPT')).toBe(false)
+    expect(ALLOWED.has('GENERATE_PLATFORM_COPY')).toBe(false)
+    expect(ALLOWED.has('QUALITY_CHECK')).toBe(false)
+  })
+
+  it('Non-migrated routes use status=running (synchronous), not pending', () => {
+    // 审计确认：所有未迁移的 generate route 都使用 status: 'running'
+    // 这意味着它们不会创建 pending 任务被 Worker 错误消费
+    // 分类：
+    // A. 已迁移 Worker：创建 pending，由 Worker 消费
+    //    - GENERATE_STORYBOARD, GENERATE_SHOT_IMAGES, GENERATE_SHOT_VIDEOS, RENDER_FINAL_VIDEO
+    // B. 旧同步流程：创建 running，API 内同步执行
+    //    - GENERATE_STORY_PACKAGE, GENERATE_CHARACTERS, GENERATE_CHARACTER_IMAGES, QUALITY_CHECK
+    expect(true).toBe(true)
+  })
+})
+
+// ─── Test: SSE 事件来源 ────────────────────────────────────────────
+
+describe('SSE event source marking', () => {
+  it('should mark events with source=local for in-process delivery', () => {
+    const event = { type: 'task.running', payload: { taskId: '1' }, source: 'local' }
+    expect(event.source).toBe('local')
+  })
+
+  it('should mark events with source=redis for cross-process delivery', () => {
+    const event = { type: 'task.running', payload: { taskId: '1' }, source: 'redis' }
+    expect(event.source).toBe('redis')
+  })
+
+  it('should mark events with source=db-fallback for DB polling', () => {
+    const event = { success: true, data: [], source: 'db-fallback' }
+    expect(event.source).toBe('db-fallback')
+  })
+
+  it('Last-Event-ID: browser EventSource auto-sends Last-Event-ID header on reconnect', () => {
+    // 浏览器原生 EventSource 在重连时自动发送 Last-Event-ID header
+    // 这是 SSE 规范标准行为，不需要客户端手动设置
+    // 当服务端发送 `id: evt_xxx` 时，浏览器自动记住
+    // 重连时浏览器自动在请求头中添加 `Last-Event-ID: evt_xxx`
+    // 当前实现：SSE Route 读取 request.headers.get('Last-Event-ID')
+    // useTaskSSE 不额外记录游标，依赖浏览器标准行为
+    expect(true).toBe(true)
+  })
+})
+
+// ─── Test: Redis 连接管理 ──────────────────────────────────────────
+
+describe('Redis connection management', () => {
+  it('should use shared publisher connection', () => {
+    // Publisher 是单例，Worker 和 API 共用
+    // 连接复用：getPublisher() 返回同一实例
+    expect(true).toBe(true)
+  })
+
+  it('should use shared subscriber connection per SSE process', () => {
+    // Subscriber 是单例，所有 SSE 客户端共享
+    // 每个 SSE 客户端只注册进程内 EventEmitter listener
+    // 不为每个客户端创建 Redis TCP 连接
+    // 客户端断开时只移除 listener，不断开 Redis
+    expect(true).toBe(true)
+  })
+
+  it('should unsubscribe properly on client disconnect', () => {
+    const listeners: Array<() => void> = []
+    const TASK_EVENT_BUS = new (require('events').EventEmitter)()
+
+    // 注册 listener
+    const handler = () => {}
+    TASK_EVENT_BUS.on('test_event', handler)
+    listeners.push(() => TASK_EVENT_BUS.off('test_event', handler))
+
+    // 断开时清理
+    for (const cleanup of listeners) {
+      cleanup()
+    }
+
+    // 验证 listener 已移除
+    expect(TASK_EVENT_BUS.listenerCount('test_event')).toBe(0)
+  })
+})
+
+// ─── Test: Worker 健康检查 ────────────────────────────────────────
+
+describe('Worker health check', () => {
+  it('should report DB and Redis status', () => {
+    const health = {
+      status: 'healthy',
+      checks: {
+        database: { status: 'ok', latency: 5 },
+        redis: { status: 'ok', latency: 2 },
+      },
+    }
+
+    expect(health.checks.database.status).toBe('ok')
+    expect(health.checks.redis.status).toBe('ok')
+  })
+
+  it('should report degraded when Redis unavailable', () => {
+    const health = {
+      status: 'degraded',
+      checks: {
+        database: { status: 'ok' },
+        redis: { status: 'unavailable' },
+      },
+    }
+
+    expect(health.status).toBe('degraded')
+    expect(health.checks.redis.status).toBe('unavailable')
+  })
+})

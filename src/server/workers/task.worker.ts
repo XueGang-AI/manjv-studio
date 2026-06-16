@@ -25,6 +25,7 @@ import { handleFinalRender } from './handlers/final-render.handler'
 import { handleStoryboard } from './handlers/storyboard.handler'
 import { handleShotImages } from './handlers/shot-images.handler'
 import { handleShotVideos } from './handlers/shot-videos.handler'
+import { handleTestNoop, isTestTaskEnabled } from './handlers/test-noop.handler'
 import { emitTaskEvent, taskToUpdateEvent, closeEventConnections } from './task-events'
 
 // ─── 配置 ──────────────────────────────────────────────────────────
@@ -62,6 +63,14 @@ const TASK_TYPE_REGISTRY: Record<string, TaskTypeConfig> = {
     concurrency: 1, // FFmpeg 信号量已限制
     timeout: 10 * 60 * 1000, // 10 分钟
   },
+  // 测试任务：仅在 ENABLE_TEST_TASKS=true 或 NODE_ENV=test 时注册
+  ...(isTestTaskEnabled() ? {
+    TEST_NOOP: {
+      handler: handleTestNoop,
+      concurrency: 5,
+      timeout: 1 * 60 * 1000, // 1 分钟
+    },
+  } : {}),
 }
 
 /** 允许领取的任务类型（allowlist） */

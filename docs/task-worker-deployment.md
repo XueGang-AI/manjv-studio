@@ -141,14 +141,44 @@ Worker 收到 SIGTERM/SIGINT 后：
 
 ## 健康检查
 
-Worker 进程存活即为健康。建议：
+### Web 进程
 
 ```bash
-# 简单存活检查
-pgrep -f "task.worker.ts" > /dev/null
+curl http://localhost:3000/api/worker/health
 ```
 
-数据库健康检查通过 Prisma 连接池自动处理。
+返回示例：
+```json
+{
+  "success": true,
+  "data": {
+    "status": "healthy",
+    "checks": {
+      "database": { "status": "ok", "latency": 5 },
+      "redis": { "status": "ok", "latency": 2 }
+    }
+  }
+}
+```
+
+- `healthy`：DB + Redis 均正常
+- `degraded`：DB 正常但 Redis 不可用（SSE 降级到 DB 轮询）
+- `unhealthy`：DB 不可用
+
+### Worker 进程
+
+```bash
+# 进程存活检查
+pgrep -f "task.worker.ts" > /dev/null && echo "running" || echo "stopped"
+```
+
+建议使用 PM2 或 systemd 管理进程，自带健康检查和自动重启。
+
+### Redis 健康
+
+```bash
+redis-cli ping  # 应返回 PONG
+```
 
 ## 日志
 

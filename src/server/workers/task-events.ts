@@ -1,5 +1,5 @@
 // ============================================
-// 任务事件系统 — Redis Pub/Sub + 进程内回退
+// 任务事件系统 — Redis Pub/Sub + 共享 Subscriber + 进程内回退
 // ============================================
 //
 // 架构：
@@ -7,19 +7,25 @@
 //     → 更新 GenerationTask（DB 是 Source of Truth）
 //     → emitTaskEvent()
 //     → Redis PUBLISH（跨进程低延迟通知）
-//     → 进程内 EventEmitter（同进程直推，如 Worker 内嵌时）
+//     → 进程内 EventEmitter（同进程直推）
 //
 //   Next.js 进程（SSE Route）
-//     → Redis SUBSCRIBE（接收跨进程事件）
+//     → 共享 Redis Subscriber（单连接，多频道）
 //     → 进程内 EventEmitter（同进程直推）
 //     → SSE 推送到浏览器
 //
 //   Redis 不可用时：
 //     → 仅进程内 EventEmitter（不跨进程）
-//     → SSE 依赖 DB 轮询降级
+//     → SSE 依赖 DB 增量轮询降级
+//
+// 连接管理：
+//   - Publisher：1 个共享连接（Worker + API 共用）
+//   - Subscriber：1 个共享连接，使用 psubscribe 模式
+//   - 每个 SSE 客户端只注册进程内 listener，不创建 Redis 连接
+//   - 客户端断开时只移除 listener，不断开 Redis
 //
 // 安全约束：
-//   事件只包含必要字段，不包含完整 input/output/FFmpeg stderr/密钥/路径
+//   事件只包含必要字段，不含 input/output/FFmpeg stderr/密钥/路径
 
 import { EventEmitter } from 'events'
 
@@ -62,47 +68,153 @@ const GLOBAL_CHANNEL = `${REDIS_CHANNEL_PREFIX}_all`
 // ─── 进程内事件总线（同进程直推） ──────────────────────────────────
 
 const TASK_EVENT_BUS = new EventEmitter()
-TASK_EVENT_BUS.setMaxListeners(50)
+TASK_EVENT_BUS.setMaxListeners(200) // SSE 可能很多客户端
 
-// ─── Redis 客户端（懒初始化） ──────────────────────────────────────
+// ─── Redis Publisher（共享单连接） ─────────────────────────────────
 
 let publisher: import('ioredis').Redis | null = null
 let redisAvailable = false
+let publisherInitPromise: Promise<import('ioredis').Redis | null> | null = null
 
 async function getPublisher(): Promise<import('ioredis').Redis | null> {
   if (publisher) return publisher
   if (!process.env.REDIS_URL) return null
+  // 防止并发初始化
+  if (publisherInitPromise) return publisherInitPromise
 
+  publisherInitPromise = initPublisher()
+  return publisherInitPromise
+}
+
+async function initPublisher(): Promise<import('ioredis').Redis | null> {
   try {
     const Redis = (await import('ioredis')).default
-    publisher = new Redis(process.env.REDIS_URL, {
+    const client = new Redis(process.env.REDIS_URL!, {
       maxRetriesPerRequest: 1,
       retryStrategy(times) {
-        if (times > 3) return null // 放弃重连
-        return Math.min(times * 200, 2000)
+        if (times > 5) return null
+        return Math.min(times * 500, 3000)
       },
       lazyConnect: true,
       connectTimeout: 3000,
     })
 
-    publisher.on('error', (err) => {
-      if (!redisAvailable) return // 连接阶段的错误，静默
-      console.error('[task-events] Redis publisher error:', err.message)
+    client.on('error', (err) => {
+      // 连接阶段静默，运行时错误限流日志
+      if (redisAvailable) {
+        console.error('[task-events] Redis publisher error:', err.message?.substring(0, 100))
+      }
       redisAvailable = false
     })
 
-    publisher.on('ready', () => {
+    client.on('ready', () => {
       redisAvailable = true
     })
 
-    await publisher.connect()
+    await client.connect()
+    publisher = client
     redisAvailable = true
-    return publisher
+    return client
   } catch (err) {
     console.warn('[task-events] Redis not available, falling back to in-process events:', (err as Error).message)
     publisher = null
     redisAvailable = false
+    publisherInitPromise = null
     return null
+  }
+}
+
+// ─── Redis Subscriber（共享单连接 + 频道管理） ─────────────────────
+
+let subscriber: import('ioredis').Redis | null = null
+let subscriberInitPromise: Promise<import('ioredis').Redis | null> | null = null
+/** 当前已订阅的项目频道集合 */
+const subscribedProjects = new Set<string>()
+let globalSubscribed = false
+
+/**
+ * 获取或初始化共享 Subscriber
+ *
+ * 每个进程只创建一个 Redis Subscriber 连接，
+ * 所有 SSE 客户端共享此连接，只注册进程内 listener。
+ */
+async function getSubscriber(): Promise<import('ioredis').Redis | null> {
+  if (subscriber) return subscriber
+  if (!process.env.REDIS_URL) return null
+  if (subscriberInitPromise) return subscriberInitPromise
+
+  subscriberInitPromise = initSubscriber()
+  return subscriberInitPromise
+}
+
+async function initSubscriber(): Promise<import('ioredis').Redis | null> {
+  try {
+    const Redis = (await import('ioredis')).default
+    const client = new Redis(process.env.REDIS_URL!, {
+      maxRetriesPerRequest: null, // 订阅模式不设超时
+      retryStrategy(times) {
+        if (times > 10) return null
+        return Math.min(times * 500, 5000)
+      },
+      lazyConnect: true,
+      connectTimeout: 3000,
+    })
+
+    // 收到 Redis 消息后，转发到进程内 EventEmitter
+    client.on('message', (channel: string, message: string) => {
+      try {
+        const event = JSON.parse(message) as { type: TaskEventType; payload: TaskUpdateEvent }
+        const payload = event.payload
+
+        // 转发到进程内总线（SSE 客户端监听这里）
+        TASK_EVENT_BUS.emit('redis_event', event)
+
+        // 也按 projectId 转发
+        if (payload.projectId) {
+          TASK_EVENT_BUS.emit(`redis_event:${payload.projectId}`, event)
+        }
+      } catch { /* ignore parse errors */ }
+    })
+
+    client.on('error', () => {
+      // 订阅错误静默，依赖进程内 + DB fallback
+    })
+
+    await client.connect()
+    subscriber = client
+    return client
+  } catch {
+    subscriber = null
+    subscriberInitPromise = null
+    return null
+  }
+}
+
+/** 确保项目频道已订阅 */
+async function ensureProjectSubscribed(projectId: string): Promise<void> {
+  if (subscribedProjects.has(projectId)) return
+  const sub = await getSubscriber()
+  if (!sub) return
+
+  try {
+    await sub.subscribe(projectChannel(projectId))
+    subscribedProjects.add(projectId)
+  } catch {
+    // 订阅失败不阻塞
+  }
+}
+
+/** 确保全局频道已订阅 */
+async function ensureGlobalSubscribed(): Promise<void> {
+  if (globalSubscribed) return
+  const sub = await getSubscriber()
+  if (!sub) return
+
+  try {
+    await sub.subscribe(GLOBAL_CHANNEL)
+    globalSubscribed = true
+  } catch {
+    // 订阅失败不阻塞
   }
 }
 
@@ -119,38 +231,24 @@ export async function emitTaskEvent(type: TaskEventType, payload: Omit<TaskUpdat
   const eventId = generateEventId()
   const fullPayload: TaskUpdateEvent = { ...payload, eventId }
 
-  // 进程内直推
-  TASK_EVENT_BUS.emit('task_update', { type, payload: fullPayload })
-  TASK_EVENT_BUS.emit(`task_update:${payload.projectId}`, { type, payload: fullPayload })
+  // 进程内直推（标记来源为 local）
+  const event = { type, payload: fullPayload, source: 'local' as const }
+  TASK_EVENT_BUS.emit('task_update', event)
+  TASK_EVENT_BUS.emit(`task_update:${payload.projectId}`, event)
 
   // Redis 跨进程发布
   try {
     const pub = await getPublisher()
     if (pub && redisAvailable) {
-      const message = JSON.stringify({ type, payload: fullPayload })
-      // 发布到项目频道和全局频道
+      const message = JSON.stringify({ type, payload: fullPayload, source: 'redis' })
       await Promise.all([
         pub.publish(projectChannel(payload.projectId), message),
         pub.publish(GLOBAL_CHANNEL, message),
       ])
     }
   } catch {
-    // Redis 发布失败不影响业务流程
     redisAvailable = false
   }
-}
-
-/** 同步版本（用于不关心 Redis 结果的场景） */
-export function emitTaskEventSync(type: TaskEventType, payload: Omit<TaskUpdateEvent, 'eventId'>): void {
-  const eventId = generateEventId()
-  const fullPayload: TaskUpdateEvent = { ...payload, eventId }
-
-  // 进程内直推
-  TASK_EVENT_BUS.emit('task_update', { type, payload: fullPayload })
-  TASK_EVENT_BUS.emit(`task_update:${payload.projectId}`, { type, payload: fullPayload })
-
-  // 异步 Redis 发布（不阻塞）
-  emitTaskEvent(type, payload).catch(() => { /* ignore */ })
 }
 
 // ─── SSE 侧订阅 ───────────────────────────────────────────────────
@@ -162,67 +260,53 @@ export interface TaskEventSubscription {
 /**
  * SSE 端点：订阅项目任务事件
  *
- * 同时使用：
- * 1. 进程内 EventEmitter（同进程直推）
- * 2. Redis SUBSCRIBE（跨进程通知）
+ * 使用共享 Redis Subscriber + 进程内 listener 模式：
+ * - 不为每个 SSE 客户端创建 Redis 连接
+ * - 每个客户端只注册进程内 EventEmitter listener
+ * - 断开时只移除 listener
  *
- * 返回 unsubscribe 函数。
+ * 事件来源标记：
+ * - source=local：同进程直推（Worker 与 SSE 同进程）
+ * - source=redis：跨进程 Redis 推送
+ * - source=db-fallback：DB 增量轮询
  */
 export async function subscribeToProjectEvents(
   projectId: string,
-  callback: (event: { type: TaskEventType; payload: TaskUpdateEvent }) => void,
+  callback: (event: { type: TaskEventType; payload: TaskUpdateEvent; source: string }) => void,
 ): Promise<TaskEventSubscription> {
-  const subscriptions: Array<() => void> = []
+  const cleanups: Array<() => void> = []
 
-  // 1. 进程内订阅
-  const inProcHandler = (event: { type: TaskEventType; payload: TaskUpdateEvent }) => {
-    callback(event)
+  // 1. 进程内：同进程 Worker 直推
+  const localHandler = (event: { type: TaskEventType; payload: TaskUpdateEvent; source: string }) => {
+    callback({ ...event, source: event.source || 'local' })
   }
-  TASK_EVENT_BUS.on(`task_update:${projectId}`, inProcHandler)
-  subscriptions.push(() => TASK_EVENT_BUS.off(`task_update:${projectId}`, inProcHandler))
+  TASK_EVENT_BUS.on(`task_update:${projectId}`, localHandler)
+  cleanups.push(() => TASK_EVENT_BUS.off(`task_update:${projectId}`, localHandler))
 
-  // 2. Redis 订阅
-  let subscriber: import('ioredis').Redis | null = null
-  try {
-    const Redis = (await import('ioredis')).default
-    subscriber = new Redis(process.env.REDIS_URL!, {
-      maxRetriesPerRequest: null, // 订阅模式不设超时
-      retryStrategy(times) {
-        if (times > 10) return null
-        return Math.min(times * 500, 5000)
-      },
-      lazyConnect: true,
-      connectTimeout: 3000,
-    })
-
-    subscriber.on('message', (channel: string, message: string) => {
-      if (channel === projectChannel(projectId) || channel === GLOBAL_CHANNEL) {
-        try {
-          const event = JSON.parse(message)
-          // 去重：检查 eventId
-          callback(event)
-        } catch { /* ignore parse errors */ }
-      }
-    })
-
-    subscriber.on('error', () => {
-      // Redis 订阅错误静默，依赖进程内 + DB fallback
-    })
-
-    await subscriber.connect()
-    await subscriber.subscribe(projectChannel(projectId), GLOBAL_CHANNEL)
-    subscriptions.push(() => {
-      subscriber?.disconnect()
-    })
-  } catch {
-    // Redis 不可用，仅依赖进程内 + DB fallback
-    subscriber?.disconnect()
+  // 2. 进程内：Redis Subscriber 转发（跨进程事件）
+  const redisHandler = (event: { type: TaskEventType; payload: TaskUpdateEvent; source: string }) => {
+    callback({ ...event, source: 'redis' })
   }
+  TASK_EVENT_BUS.on(`redis_event:${projectId}`, redisHandler)
+  cleanups.push(() => TASK_EVENT_BUS.off(`redis_event:${projectId}`, redisHandler))
+
+  // 3. 确保共享 Subscriber 已订阅该项目频道
+  await ensureProjectSubscribed(projectId)
+  await ensureGlobalSubscribed()
+
+  // 全局 Redis 事件也转发（避免遗漏）
+  const globalRedisHandler = (event: { type: TaskEventType; payload: TaskUpdateEvent; source: string }) => {
+    if (event.payload.projectId === projectId) {
+      callback({ ...event, source: 'redis' })
+    }
+  }
+  TASK_EVENT_BUS.on('redis_event', globalRedisHandler)
+  cleanups.push(() => TASK_EVENT_BUS.off('redis_event', globalRedisHandler))
 
   return {
     unsubscribe: () => {
-      for (const unsub of subscriptions) {
-        try { unsub() } catch { /* ignore */ }
+      for (const cleanup of cleanups) {
+        try { cleanup() } catch { /* ignore */ }
       }
     },
   }
@@ -232,50 +316,30 @@ export async function subscribeToProjectEvents(
  * SSE 端点：订阅全局任务事件
  */
 export async function subscribeToAllEvents(
-  callback: (event: { type: TaskEventType; payload: TaskUpdateEvent }) => void,
+  callback: (event: { type: TaskEventType; payload: TaskUpdateEvent; source: string }) => void,
 ): Promise<TaskEventSubscription> {
-  const subscriptions: Array<() => void> = []
+  const cleanups: Array<() => void> = []
 
-  // 进程内
-  const inProcHandler = (event: { type: TaskEventType; payload: TaskUpdateEvent }) => {
-    callback(event)
+  // 进程内：同进程直推
+  const localHandler = (event: { type: TaskEventType; payload: TaskUpdateEvent; source: string }) => {
+    callback({ ...event, source: event.source || 'local' })
   }
-  TASK_EVENT_BUS.on('task_update', inProcHandler)
-  subscriptions.push(() => TASK_EVENT_BUS.off('task_update', inProcHandler))
+  TASK_EVENT_BUS.on('task_update', localHandler)
+  cleanups.push(() => TASK_EVENT_BUS.off('task_update', localHandler))
 
-  // Redis
-  let subscriber: import('ioredis').Redis | null = null
-  try {
-    const Redis = (await import('ioredis')).default
-    subscriber = new Redis(process.env.REDIS_URL!, {
-      maxRetriesPerRequest: null,
-      retryStrategy(times) {
-        if (times > 10) return null
-        return Math.min(times * 500, 5000)
-      },
-      lazyConnect: true,
-      connectTimeout: 3000,
-    })
-
-    subscriber.on('message', (_channel: string, message: string) => {
-      try {
-        callback(JSON.parse(message))
-      } catch { /* ignore */ }
-    })
-
-    subscriber.on('error', () => {})
-
-    await subscriber.connect()
-    await subscriber.subscribe(GLOBAL_CHANNEL)
-    subscriptions.push(() => { subscriber?.disconnect() })
-  } catch {
-    subscriber?.disconnect()
+  // 进程内：Redis 转发
+  const redisHandler = (event: { type: TaskEventType; payload: TaskUpdateEvent; source: string }) => {
+    callback({ ...event, source: 'redis' })
   }
+  TASK_EVENT_BUS.on('redis_event', redisHandler)
+  cleanups.push(() => TASK_EVENT_BUS.off('redis_event', redisHandler))
+
+  await ensureGlobalSubscribed()
 
   return {
     unsubscribe: () => {
-      for (const unsub of subscriptions) {
-        try { unsub() } catch { /* ignore */ }
+      for (const cleanup of cleanups) {
+        try { cleanup() } catch { /* ignore */ }
       }
     },
   }
@@ -294,7 +358,7 @@ export function statusToEventType(status: string): TaskEventType {
   }
 }
 
-/** 从 GenerationTask 记录构造 TaskUpdateEvent（不含 eventId，由 emitTaskEvent 补充） */
+/** 从 GenerationTask 记录构造 TaskUpdateEvent（不含 eventId） */
 export function taskToUpdateEvent(task: {
   id: string
   projectId: string
@@ -317,22 +381,30 @@ export function taskToUpdateEvent(task: {
   }
 }
 
-/** 生成事件 ID（用于去重和 Last-Event-ID） */
+/** 生成事件 ID */
 function generateEventId(): string {
-  // 格式：evt_<timestamp>_<random>，便于 Last-Event-ID 比较
   const ts = Date.now()
   const rand = Math.random().toString(36).substring(2, 8)
   return `evt_${ts}_${rand}`
 }
 
-/** 关闭 Redis 连接（Worker 退出时调用） */
+/** 关闭 Redis 连接（Worker/应用 退出时调用） */
 export async function closeEventConnections(): Promise<void> {
+  const promises: Array<Promise<void>> = []
+
   if (publisher) {
-    try {
-      await publisher.quit()
-    } catch { /* ignore */ }
-    publisher = null
+    promises.push(publisher.quit().then(() => { publisher = null }).catch(() => { publisher = null }))
   }
+  if (subscriber) {
+    promises.push(subscriber.quit().then(() => { subscriber = null }).catch(() => { subscriber = null }))
+  }
+
+  await Promise.all(promises)
+  subscribedProjects.clear()
+  globalSubscribed = false
+  redisAvailable = false
+  publisherInitPromise = null
+  subscriberInitPromise = null
 }
 
 /** 检查 Redis 是否可用 */
