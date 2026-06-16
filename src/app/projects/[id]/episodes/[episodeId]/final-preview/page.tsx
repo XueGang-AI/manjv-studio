@@ -5,12 +5,14 @@
  * 数据源：GET /api/projects/:id/episodes/:episodeId/final-preview
  * 操作：启动合成、重新合成、下载、预览
  *
- * 合成模型：FFmpeg 在 API Server 内同步执行
- * 轮询策略：项目状态 RENDERING 时每 5 秒查询
+ * 实时更新：
+ * - SSE 订阅任务状态变更，自动刷新数据
+ * - FFmpeg 合成在 Worker 中异步执行
+ * - 不再使用 setInterval 轮询
  */
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { AlertTriangle, Clapperboard, Film, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -20,6 +22,7 @@ import { PreflightCheck } from '@/components/final-preview/preflight-check'
 import { FinalVideoPlayer } from '@/components/final-preview/final-video-player'
 import { FinalPreviewRightPanel } from '@/components/final-preview/final-preview-right-panel'
 import { getRenderStatus, getPreflightIssues, type FinalPreviewData } from '@/components/final-preview/final-preview-types'
+import { useTaskSSE, type TaskEventType, type TaskUpdateEvent } from '@/lib/hooks/use-task-sse'
 
 export default function FinalPreviewPage() {
   const params = useParams()
@@ -34,9 +37,8 @@ export default function FinalPreviewPage() {
   const [confirmOpen, setConfirmOpen] = useState(false)
 
   const { addToast } = useToast()
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Refresh data (useCallback to satisfy hook deps)
+  // Refresh data
   const refreshData = useCallback(async () => {
     try {
       const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/final-preview`)
@@ -67,30 +69,29 @@ export default function FinalPreviewPage() {
     return () => { cancelled = true }
   }, [projectId, episodeId])
 
-  // Auto-poll while rendering
-  useEffect(() => {
-    const isRendering = data?.projectStatus === 'RENDERING'
-    if (isRendering) {
-      if (!pollTimerRef.current) {
-        pollTimerRef.current = setInterval(refreshData, 5000)
-      }
-    } else {
-      if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current)
-        pollTimerRef.current = null
-      }
-    }
-  }, [data?.projectStatus, refreshData])
+  // SSE 实时更新 — 替代 setInterval polling
+  useTaskSSE(projectId, {
+    onTaskUpdate: (type: TaskEventType, payload: TaskUpdateEvent) => {
+      // 只关心渲染任务
+      if (payload.taskType === 'RENDER_FINAL_VIDEO') {
+        refreshData()
 
-  // Cleanup
-  useEffect(() => {
-    return () => {
-      if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current)
-        pollTimerRef.current = null
+        if (type === 'task.completed') {
+          addToast({ type: 'success', title: '成片合成完成' })
+          setRendering(false)
+        } else if (type === 'task.failed') {
+          addToast({ type: 'error', title: '合成失败', description: payload.errorMessage || '请重试' })
+          setError(payload.errorMessage || '合成失败')
+          setRendering(false)
+        } else if (type === 'task.running') {
+          setRendering(true)
+        }
       }
-    }
-  }, [])
+    },
+    onSnapshot: () => {
+      refreshData()
+    },
+  })
 
   // Derived
   const status = getRenderStatus(data, rendering)
@@ -108,14 +109,13 @@ export default function FinalPreviewPage() {
       const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/final-preview/render`, { method: 'POST' })
       const json = await res.json()
       if (json.success) {
-        addToast({ type: 'success', title: '成片合成完成' })
+        addToast({ type: 'success', title: '合成任务已创建', description: 'Worker 将异步执行，SSE 自动推送状态' })
         await refreshData()
       } else {
-        // API now returns { code, message } object or plain string
         const errMsg = typeof json.error === 'object' && json.error?.message
           ? json.error.message
-          : String(json.error || '合成失败')
-        addToast({ type: 'error', title: '合成失败', description: errMsg })
+          : String(json.error || '创建任务失败')
+        addToast({ type: 'error', title: '创建任务失败', description: errMsg })
         setError(errMsg)
         await refreshData()
       }
@@ -124,7 +124,6 @@ export default function FinalPreviewPage() {
       setError('请求失败，请重试')
       await refreshData()
     } finally {
-      setRendering(false)
       setConfirmOpen(false)
     }
   }
@@ -222,7 +221,7 @@ export default function FinalPreviewPage() {
               </div>
               <h3 className="text-lg font-semibold text-[var(--color-text-primary)] mb-2">FFmpeg 正在合成视频</h3>
               <p className="text-sm text-[var(--color-text-muted)] max-w-md mx-auto">
-                拼接 {data.shotsWithVideos.length} 个镜头片段、统一分辨率、添加转场效果…页面将自动刷新
+                拼接 {data.shotsWithVideos.length} 个镜头片段、统一分辨率、添加转场效果…SSE 将自动推送状态
               </p>
             </div>
           )}

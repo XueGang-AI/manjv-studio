@@ -9,6 +9,7 @@ import {
   RefreshCw, XCircle, RotateCcw, FileText, Loader2,
   ChevronDown, ChevronUp, Clock, Trash2, AlertTriangle, X,
 } from 'lucide-react'
+import { useTaskSSE, type TaskUpdateEvent } from '@/lib/hooks/use-task-sse'
 
 const STATUS_CONFIG: Record<string, { variant: 'default'|'success'|'warning'|'danger'|'info'; label: string }> = {
   pending: { variant: 'default', label: '等待中' },
@@ -65,19 +66,20 @@ export default function TasksPage() {
 
   useEffect(() => { fetchTasks() }, [fetchTasks])
 
-  // SSE 实时连接
-  useEffect(() => {
-    const es = new EventSource(`/api/projects/${projectId}/tasks/stream`)
-    es.onopen = () => setStreamConnected(true)
-    es.onmessage = (e) => {
-      try {
-        const d = JSON.parse(e.data)
-        if (d.success) setTasks(d.data || [])
-      } catch {}
-    }
-    es.onerror = () => { setStreamConnected(false); es.close() }
-    return () => { es.close(); setStreamConnected(false) }
-  }, [projectId])
+  // SSE 实时连接 — 使用统一 Hook
+  useTaskSSE(projectId, {
+    onTaskUpdate: () => {
+      // 增量事件触发刷新
+      fetchTasks()
+    },
+    onSnapshot: (taskList) => {
+      // 全量快照直接更新
+      setTasks(taskList as TaskItem[])
+    },
+    onConnectionChange: (connected) => {
+      setStreamConnected(connected)
+    },
+  })
 
   const fetchLogs = async (taskId: string) => {
     const res = await fetch(`/api/tasks/${taskId}/logs`)

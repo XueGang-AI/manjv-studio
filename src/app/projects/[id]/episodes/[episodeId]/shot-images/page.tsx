@@ -4,6 +4,8 @@
  * 布局：镜头导航(左) | 图片审核区(中) | 右侧面板(右)
  * 数据源：GET /api/projects/:id/episodes/:episodeId/shot-images
  * 操作：生成图片、选择图片、确认图片、批量确认、重新生成
+ *
+ * 实时更新：SSE 订阅任务状态变更，自动刷新数据
  */
 'use client'
 
@@ -17,6 +19,7 @@ import { ShotImageNavigation } from '@/components/shot-images/shot-image-navigat
 import { ShotImageReview } from '@/components/shot-images/shot-image-review'
 import { ShotImageRightPanel } from '@/components/shot-images/shot-image-right-panel'
 import { getImageGroupStatus, STATUS_LABELS, type ShotImagesData } from '@/components/shot-images/shot-images-types'
+import { useTaskSSE, type TaskEventType, type TaskUpdateEvent } from '@/lib/hooks/use-task-sse'
 
 export default function ShotImagesPage() {
   const params = useParams()
@@ -69,18 +72,24 @@ export default function ShotImagesPage() {
   // Derived: first shot as active
   const effectiveActiveShotId = activeShotId ?? (data?.shots?.length ? data.shots[0].shot.id : null)
 
-  // Auto-refresh during generation
-  useEffect(() => {
-    if (data?.projectStatus !== 'SHOT_IMAGE_GENERATING') return
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/shot-images`)
-        const json = await res.json()
-        if (json.success) setData(json.data)
-      } catch { /* silently retry */ }
-    }, 3000)
-    return () => clearInterval(interval)
-  }, [data?.projectStatus, projectId, episodeId])
+  // SSE 实时更新 — 替代 setInterval polling
+  useTaskSSE(projectId, {
+    onTaskUpdate: (type: TaskEventType, payload: TaskUpdateEvent) => {
+      if (payload.taskType === 'GENERATE_SHOT_IMAGES') {
+        refreshData()
+        if (type === 'task.completed') {
+          addToast({ type: 'success', title: '分镜图生成完成' })
+          setGenerating(false)
+        } else if (type === 'task.failed') {
+          addToast({ type: 'error', title: '生成失败', description: payload.errorMessage || '请重试' })
+          setGenerating(false)
+        }
+      }
+    },
+    onSnapshot: () => {
+      refreshData()
+    },
+  })
 
   // Derived
   const isGenerating = data?.projectStatus === 'SHOT_IMAGE_GENERATING' || generating
@@ -94,10 +103,10 @@ export default function ShotImagesPage() {
       const res = await fetch(`/api/projects/${projectId}/episodes/${episodeIdFromData}/shot-images/generate`, { method: 'POST' })
       const json = await res.json()
       if (json.success) {
-        addToast({ type: 'success', title: '分镜图生成完成' })
+        addToast({ type: 'success', title: '分镜图生成任务已创建', description: 'Worker 将异步执行，SSE 自动推送状态' })
         await refreshData()
       } else {
-        addToast({ type: 'error', title: '生成失败', description: json.error })
+        addToast({ type: 'error', title: '创建任务失败', description: json.error })
       }
     } catch {
       addToast({ type: 'error', title: '请求失败' })

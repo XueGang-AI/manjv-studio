@@ -4,6 +4,8 @@
  * 布局：镜头列表(左) | 镜头详情(中) | 右侧面板(右)
  * 数据源：GET /api/projects/:id/episodes/:episodeId/storyboard
  * 操作：生成分镜、确认分镜、重新生成
+ *
+ * 实时更新：SSE 订阅任务状态变更，自动刷新数据
  */
 'use client'
 
@@ -19,6 +21,7 @@ import { StoryboardTimeline } from '@/components/storyboard/storyboard-timeline'
 import { StoryboardRightPanel } from '@/components/storyboard/storyboard-right-panel'
 import { StoryboardEmptyState, StoryboardGeneratingState } from '@/components/storyboard/storyboard-empty-state'
 import { getTotalDuration, type EpisodeData, type ProjectData } from '@/components/storyboard/storyboard-types'
+import { useTaskSSE, type TaskEventType, type TaskUpdateEvent } from '@/lib/hooks/use-task-sse'
 
 export default function StoryboardPage() {
   const params = useParams()
@@ -90,22 +93,24 @@ export default function StoryboardPage() {
   // Derived: first shot as active when data loads
   const effectiveActiveShotId = activeShotId ?? (episode?.shots?.length ? episode.shots[0].id : null)
 
-  // Auto-refresh during generation
-  useEffect(() => {
-    if (project?.status !== 'STORYBOARD_GENERATING') return
-    const interval = setInterval(async () => {
-      try {
-        const projRes = await fetch(`/api/projects/${projectId}`)
-        const projData = await projRes.json()
-        if (projData.success) setProject(projData.data)
-
-        const epsRes = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/storyboard`)
-        const epsData = await epsRes.json()
-        if (epsData.success) setEpisode(epsData.data)
-      } catch { /* silently retry */ }
-    }, 3000)
-    return () => clearInterval(interval)
-  }, [project?.status, projectId, episodeId])
+  // SSE 实时更新 — 替代 setInterval polling
+  useTaskSSE(projectId, {
+    onTaskUpdate: (type: TaskEventType, payload: TaskUpdateEvent) => {
+      if (payload.taskType === 'GENERATE_STORYBOARD') {
+        refreshData()
+        if (type === 'task.completed') {
+          addToast({ type: 'success', title: '分镜脚本生成完成' })
+          setGenerating(false)
+        } else if (type === 'task.failed') {
+          addToast({ type: 'error', title: '生成失败', description: payload.errorMessage || '请重试' })
+          setGenerating(false)
+        }
+      }
+    },
+    onSnapshot: () => {
+      refreshData()
+    },
+  })
 
   // Derived state
   const isGenerating = project?.status === 'STORYBOARD_GENERATING' || generating
@@ -120,14 +125,11 @@ export default function StoryboardPage() {
       const res = await fetch(`/api/projects/${projectId}/storyboard/generate`, { method: 'POST' })
       const data = await res.json()
       if (data.success) {
-        if (data.data?.episode?.id) {
-          router.push(`/projects/${projectId}/episodes/${data.data.episode.id}/storyboard`)
-        }
-        addToast({ type: 'success', title: '分镜脚本生成完成' })
+        addToast({ type: 'success', title: '分镜生成任务已创建', description: 'Worker 将异步执行，SSE 自动推送状态' })
         await refreshData()
       } else {
-        setError(data.error || '生成失败')
-        addToast({ type: 'error', title: '生成失败', description: data.error })
+        setError(data.error || '创建任务失败')
+        addToast({ type: 'error', title: '创建任务失败', description: data.error })
       }
     } catch {
       setError('请求失败，请重试')

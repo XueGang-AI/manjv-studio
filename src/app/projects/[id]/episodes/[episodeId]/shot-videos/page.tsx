@@ -5,14 +5,14 @@
  * 数据源：GET /api/projects/:id/episodes/:episodeId/shot-videos
  * 操作：生成视频、检查任务、选择视频、确认视频、重新生成
  *
- * 轮询策略：
- * - 项目状态 SHOT_VIDEO_GENERATING 时，每 10 秒调用 batch-check-tasks 检查远程 API
- * - 组件卸载时清理定时器
- * - 所有任务终态后自动停止
+ * 实时更新：
+ * - SSE 订阅任务状态变更，自动刷新数据
+ * - 降级到手动批量检查（batch-check-tasks）
+ * - 不再使用 setInterval 轮询
  */
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { AlertTriangle, Video, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -21,6 +21,7 @@ import { ShotVideoNavigation } from '@/components/shot-videos/shot-video-navigat
 import { ShotVideoReview } from '@/components/shot-videos/shot-video-review'
 import { ShotVideoRightPanel } from '@/components/shot-videos/shot-video-right-panel'
 import { getVideoGroupStatus, STATUS_LABELS, type ShotVideosData } from '@/components/shot-videos/shot-videos-types'
+import { useTaskSSE, type TaskEventType, type TaskUpdateEvent } from '@/lib/hooks/use-task-sse'
 
 export default function ShotVideosPage() {
   const params = useParams()
@@ -36,9 +37,6 @@ export default function ShotVideosPage() {
   const [mobileSelectorOpen, setMobileSelectorOpen] = useState(false)
 
   const { addToast } = useToast()
-
-  // Auto-poll timer ref
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Refresh data
   const refreshData = useCallback(async () => {
@@ -71,55 +69,26 @@ export default function ShotVideosPage() {
     return () => { cancelled = true }
   }, [projectId, episodeId])
 
-  // Auto-poll: batch check remote tasks when generating
-  const batchCheckTasks = useCallback(async () => {
-    try {
-      const res = await fetch(
-        `/api/projects/${projectId}/episodes/${episodeId}/shot-videos/batch-check-tasks`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }
-      )
-      const json = await res.json()
-      if (json.success) {
-        await refreshData()
-        // If all tasks are terminal, stop polling
-        if (json.data?.pending === 0 && json.data?.checked > 0) {
-          if (pollTimerRef.current) {
-            clearInterval(pollTimerRef.current)
-            pollTimerRef.current = null
-          }
+  // SSE 实时更新 — 替代 setInterval polling
+  useTaskSSE(projectId, {
+    onTaskUpdate: (type: TaskEventType, payload: TaskUpdateEvent) => {
+      // 只关心本项目本剧集的视频任务
+      if (payload.taskType === 'GENERATE_SHOT_VIDEOS' || payload.taskType === 'RENDER_FINAL_VIDEO') {
+        // 收到任务状态变更，刷新数据
+        refreshData()
+
+        if (type === 'task.completed') {
+          addToast({ type: 'success', title: '视频生成完成' })
+        } else if (type === 'task.failed') {
+          addToast({ type: 'error', title: '视频生成失败', description: payload.errorMessage || '请重试' })
         }
       }
-    } catch { /* silent */ }
-  }, [projectId, episodeId, refreshData])
-
-  // Start/stop poll based on project status
-  useEffect(() => {
-    const isGenerating = data?.projectStatus === 'SHOT_VIDEO_GENERATING'
-    const hasPendingTasks = data?.shots.some(s =>
-      s.videos.some(v => v.remoteTaskId && !['completed', 'succeeded', 'success', 'done', 'failed', 'error', 'cancelled', 'timeout'].includes((v.remoteStatus || '').toLowerCase()))
-    )
-
-    if (isGenerating || hasPendingTasks) {
-      if (!pollTimerRef.current) {
-        pollTimerRef.current = setInterval(batchCheckTasks, 10000)
-      }
-    } else {
-      if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current)
-        pollTimerRef.current = null
-      }
-    }
-  }, [data?.projectStatus, data?.shots, batchCheckTasks])
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current)
-        pollTimerRef.current = null
-      }
-    }
-  }, [])
+    },
+    onSnapshot: () => {
+      // 全量快照更新时也刷新数据
+      refreshData()
+    },
+  })
 
   // Derived
   const isGenerating = data?.projectStatus === 'SHOT_VIDEO_GENERATING' || generating
@@ -134,14 +103,10 @@ export default function ShotVideosPage() {
       const res = await fetch(`/api/projects/${projectId}/episodes/${episodeIdFromData}/shot-videos/generate`, { method: 'POST' })
       const json = await res.json()
       if (json.success) {
-        if (json.data?.isAsync) {
-          addToast({ type: 'success', title: '视频任务已创建', description: '系统将自动轮询生成状态' })
-        } else {
-          addToast({ type: 'success', title: '视频生成完成' })
-        }
+        addToast({ type: 'success', title: '视频生成任务已创建', description: 'Worker 将异步执行，SSE 自动推送状态' })
         await refreshData()
       } else {
-        addToast({ type: 'error', title: '生成失败', description: json.error })
+        addToast({ type: 'error', title: '创建任务失败', description: typeof json.error === 'string' ? json.error : json.error?.message })
       }
     } catch {
       addToast({ type: 'error', title: '请求失败' })
