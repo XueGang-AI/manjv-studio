@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { ffmpegService, sanitizeError, RenderError } from '@/server/services/ffmpeg.service'
+import { taskService } from '@/server/queues/task-queue.service'
+import { emitTaskEvent, taskToUpdateEvent } from '@/server/workers/task-events'
 
 /**
- * POST — 合成最终成片
+ * POST — 创建最终成片合成任务（Worker 异步执行）
  *
- * 安全加固：
+ * 改造点：
+ * - API 只做前置校验 + 创建 pending 任务
+ * - 不再在 API 中调用 FFmpeg
+ * - Worker 拾取任务后执行实际合成逻辑
+ *
+ * 安全约束保留：
  * - 检测已有 RENDERING 状态，防止并发重复提交
- * - FFmpeg 使用 spawn + 参数数组，不拼接 shell 命令
- * - 远程 URL 先下载再合成，防止 SSRF 和 concat 注入
- * - ffprobe 预校验输入文件
- * - 错误信息脱敏，不泄露服务器路径和 FFmpeg 详情
+ * - Worker 中 FFmpeg 仍使用安全加固的 spawn + 参数数组
  */
 export async function POST(
   request: NextRequest,
@@ -22,7 +25,7 @@ export async function POST(
     const project = await prisma.project.findUnique({ where: { id: projectId } })
     if (!project) return NextResponse.json({ success: false, error: '项目不存在' }, { status: 404 })
 
-    // Prevent concurrent renders
+    // 防止并发渲染
     if (project.status === 'RENDERING') {
       return NextResponse.json({
         success: false,
@@ -30,10 +33,26 @@ export async function POST(
       }, { status: 409 })
     }
 
+    // 检查是否有正在执行的渲染任务
+    const activeTask = await prisma.generationTask.findFirst({
+      where: {
+        projectId,
+        episodeId,
+        taskType: 'RENDER_FINAL_VIDEO',
+        status: { in: ['pending', 'running'] },
+      },
+    })
+    if (activeTask) {
+      return NextResponse.json({
+        success: false,
+        error: { code: 'RENDER_ALREADY_RUNNING', message: '已有渲染任务正在执行中' },
+      }, { status: 409 })
+    }
+
     const episode = await prisma.episode.findFirst({ where: { id: episodeId, projectId } })
     if (!episode) return NextResponse.json({ success: false, error: '剧集不存在' }, { status: 404 })
 
-    // Get all confirmed videos
+    // 验证前置数据
     const shots = await prisma.shot.findMany({
       where: { episodeId, projectId },
       orderBy: { shotNo: 'asc' },
@@ -47,113 +66,33 @@ export async function POST(
       return NextResponse.json({ success: false, error: '没有已确认的视频片段' }, { status: 400 })
     }
 
-    // Update status
-    await prisma.project.update({ where: { id: projectId }, data: { status: 'RENDERING' } })
-    const task = await prisma.generationTask.create({
-      data: {
-        projectId, episodeId, taskType: 'RENDER_FINAL_VIDEO',
-        modelName: 'FFmpeg', status: 'running',
-        input: { shot_count: confirmedVideos.length },
-      },
+    // 创建 pending 任务
+    const task = await taskService.createTask({
+      projectId,
+      episodeId,
+      taskType: 'RENDER_FINAL_VIDEO',
+      modelName: 'FFmpeg',
+      input: { episodeId, aspectRatio: project.aspectRatio || '9:16', shot_count: confirmedVideos.length },
     })
 
-    try {
-      const ffAvailable = await ffmpegService.checkAvailable()
-      const outputFileName = `${projectId}_ep${episode.episodeNo}_${Date.now()}.mp4`
-      const aspectRatio = project.aspectRatio || '9:16'
+    // 推送任务创建事件
+    const created = await prisma.generationTask.findUnique({ where: { id: task.id } })
+    if (created) emitTaskEvent('task.created', taskToUpdateEvent(created)).catch(() => {})
 
-      let result: { success: boolean; outputPath?: string; duration?: number; error?: string }
-
-      if (ffAvailable && confirmedVideos.length > 1) {
-        // FFmpeg concat (downloads URLs first, validates with ffprobe)
-        result = await ffmpegService.concatVideos({
-          shotVideos: confirmedVideos.map(v => ({
-            videoUrl: v.videoUrl || '',
-            duration: v.duration || 5,
-          })),
-          outputFileName,
-          aspectRatio,
-          fps: 25,
-          addFadeTransition: true,
-        })
-      } else if (ffAvailable) {
-        // Single video: generate placeholder
-        const outputPath = `${project.aspectRatio || '9:16'}_placeholder.mp4`
-        result = await ffmpegService.generatePlaceholder(
-          outputPath,
-          episode.duration || confirmedVideos[0]?.duration || 90,
-          aspectRatio,
-        )
-      } else {
-        // FFmpeg unavailable: use first video directly
-        result = { success: true, outputPath: confirmedVideos[0]?.videoUrl || '', duration: confirmedVideos[0]?.duration || 5 }
-      }
-
-      if (!result.success) {
-        throw new RenderError('RENDER_FAILED', result.error || '渲染失败')
-      }
-
-      // Save final video record
-      const finalVideo = await prisma.finalVideo.create({
-        data: {
-          episodeId, projectId,
-          videoUrl: result.outputPath || '',
-          duration: result.duration,
-          aspectRatio,
-          fps: 25,
-          status: 'READY',
-        },
-      })
-
-      // Update project status
-      await prisma.project.update({ where: { id: projectId }, data: { status: 'RENDERED' } })
-
-      const { versionService: vs } = await import('@/server/services/version.service')
-      await vs.createVersion({
-        projectId, entityType: 'FINAL_VIDEO', entityId: finalVideo.id,
-        snapshot: { final_video_id: finalVideo.id, duration: result.duration, project_status: 'RENDERED' },
-        changeType: 'GENERATE', description: '合成最终成片', sourceTaskId: task.id,
-      })
-      await prisma.generationTask.update({
-        where: { id: task.id },
-        data: { status: 'success', output: { final_video_id: finalVideo.id, duration: result.duration } },
-      })
-
-      return NextResponse.json({
-        success: true,
-        data: {
-          finalVideo,
-          shotsUsed: confirmedVideos.length,
-          duration: result.duration,
-        },
-      })
-    } catch (genError) {
-      const sanitized = sanitizeError(genError)
-      const internalMsg = genError instanceof RenderError ? genError.internalDetail : (genError as Error).message
-
-      // Log internal detail server-side only
-      console.error(`[render] Failed: code=${sanitized.code}, internal=${internalMsg}`)
-
-      // Restore project status to allow retry
-      await prisma.project.update({
-        where: { id: projectId },
-        data: { status: 'SHOT_VIDEO_CONFIRMED' },
-      })
-      await prisma.generationTask.update({
-        where: { id: task.id },
-        data: { status: 'failed', errorMessage: internalMsg?.substring(0, 500) },
-      })
-
-      return NextResponse.json({
-        success: false,
-        error: sanitized,
-      }, { status: 500 })
-    }
+    return NextResponse.json({
+      success: true,
+      data: {
+        taskId: task.id,
+        status: 'pending',
+        streamUrl: `/api/projects/${projectId}/tasks/stream`,
+        message: '成片合成任务已创建，Worker 将异步执行',
+      },
+    })
   } catch (error) {
-    console.error('Failed to render final video:', error)
+    console.error('Failed to create render task:', error)
     return NextResponse.json({
       success: false,
-      error: { code: 'RENDER_FAILED', message: '成片合成失败，请稍后重试' },
+      error: { code: 'RENDER_FAILED', message: '创建渲染任务失败，请稍后重试' },
     }, { status: 500 })
   }
 }

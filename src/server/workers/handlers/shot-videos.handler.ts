@@ -1,0 +1,315 @@
+// ============================================
+// Shot Videos Worker Handler — 视频片段生成
+// ============================================
+//
+// 从 API Route 迁移到 Worker 的视频生成逻辑。
+// 负责：加载镜头 → 调用视频适配器 → 保存 ShotVideo
+//
+// 支持 Mock 同步模式 和 真实异步模式（创建远端任务 + Worker 内轮询）
+
+import prisma from '@/lib/prisma'
+import { adapterFactory } from '@/server/model-adapters/adapter.factory'
+import { snapShotDuration } from '@/lib/utils'
+import { taskService } from '@/server/queues/task-queue.service'
+import { emitTaskEvent, taskToUpdateEvent } from '../task-events'
+import type { VideoGenerationRequest } from '@/server/model-adapters/types'
+
+type JsonValue = import('@prisma/client').Prisma.InputJsonValue
+
+export interface ShotVideosInput {
+  episodeId: string
+}
+
+/** 异步视频任务轮询间隔 (ms) */
+const REMOTE_POLL_INTERVAL = 10_000
+/** 异步视频任务轮询最大等待时间 (ms) — 30 分钟 */
+const REMOTE_POLL_TIMEOUT = 30 * 60 * 1000
+/** 异步视频任务终态 */
+const TERMINAL_STATUSES = ['completed', 'succeeded', 'success', 'done', 'failed', 'error', 'cancelled', 'timeout']
+
+/**
+ * 执行视频片段生成
+ */
+export async function handleShotVideos(taskId: string): Promise<void> {
+  // 幂等性检查：已完成任务不重复执行
+  const existingTask = await prisma.generationTask.findUnique({ where: { id: taskId } })
+  if (!existingTask) throw new Error('任务不存在')
+  if (existingTask.status === 'success') {
+    console.log(`[worker] Task ${taskId} already completed, skipping`)
+    return
+  }
+  if (existingTask.status !== 'pending' && existingTask.status !== 'running' && existingTask.status !== 'retrying') {
+    console.log(`[worker] Task ${taskId} in status ${existingTask.status}, skipping`)
+    return
+  }
+
+  const task = await taskService.startTask(taskId)
+
+  try {
+    const projectId = task.projectId
+    const input = (task.input || {}) as Record<string, unknown>
+    const episodeId = input.episodeId as string
+
+    if (!episodeId) throw new Error('缺少 episodeId')
+
+    const project = await prisma.project.findUnique({ where: { id: projectId } })
+    if (!project) throw new Error('项目不存在')
+
+    const episode = await prisma.episode.findFirst({ where: { id: episodeId, projectId } })
+    if (!episode || !episode.confirmed) throw new Error('请先确认分镜脚本')
+
+    const shots = await prisma.shot.findMany({
+      where: { episodeId, projectId },
+      orderBy: { shotNo: 'asc' },
+      include: {
+        videoPrompts: { take: 1, orderBy: { createdAt: 'desc' } },
+        shotImages: { where: { isConfirmed: true }, take: 1 },
+      },
+    })
+
+    if (shots.length === 0) throw new Error('没有镜头')
+
+    const missingImages = shots.filter(s => !s.shotImages[0])
+    if (missingImages.length > 0) {
+      throw new Error(`镜头 #${missingImages.map(s => s.shotNo).join(', ')} 缺少已确认的分镜图`)
+    }
+
+    // 更新项目状态
+    await prisma.project.update({ where: { id: projectId }, data: { status: 'SHOT_VIDEO_GENERATING' } })
+    await emitTaskEvent('task.running', taskToUpdateEvent(task))
+
+    const videoAdapter = adapterFactory.getVideoAdapter(project.modelProvider)
+    const aspectRatio = (project.aspectRatio || '9:16') as '9:16'
+    const isMock = process.env.USE_MOCK_MODEL === 'true'
+
+    // ─── 阶段 1：为每个镜头创建视频生成任务 ─────────────────────────
+
+    const allResults: Array<{ shotId: string; shotNo: number; videos: unknown[] }> = []
+
+    for (let i = 0; i < shots.length; i++) {
+      const shot = shots[i]
+      const vidPrompt = shot.videoPrompts[0]
+      const confirmedImage = shot.shotImages[0]
+      let prompt = vidPrompt?.prompt || ''
+
+      // 后备 prompt
+      if (!prompt.trim()) {
+        const parts: string[] = []
+        if (shot.action) parts.push(String(shot.action))
+        if (shot.visual && typeof shot.visual === 'object') {
+          const v = shot.visual as Record<string, unknown>
+          if (v.description) parts.push(String(v.description))
+          if (v.style) parts.push(String(v.style))
+        }
+        if (shot.camera && typeof shot.camera === 'object') {
+          const c = shot.camera as Record<string, unknown>
+          if (c.movement) parts.push(`Camera: ${c.movement}`)
+          if (c.angle) parts.push(`Angle: ${c.angle}`)
+        }
+        if (shot.emotion) parts.push(`Mood: ${shot.emotion}`)
+        if (shot.location) parts.push(`Location: ${shot.location}`)
+        if (parts.length === 0) {
+          parts.push('Cinematic slow push-in, gentle motion, Korean manhwa style, high quality, no text, no watermark')
+        }
+        prompt = parts.join('. ') + ', Korean manhwa style, cinematic lighting, smooth motion, no text, no watermark'
+      }
+
+      const rawDuration = (shot.endTime || 10) - (shot.startTime || 0)
+      const duration = snapShotDuration(rawDuration, project.modelProvider)
+
+      const genReq: VideoGenerationRequest = {
+        taskType: 'image_to_video',
+        prompt,
+        inputImage: confirmedImage?.imageUrl || undefined,
+        duration,
+        aspectRatio,
+        motionStrength: (vidPrompt?.motionStrength as 'low' | 'medium' | 'high') || 'medium',
+        fps: 24,
+        voiceText: (shot.dialogue as string) || undefined,
+        generateAudio: true,
+      }
+
+      if (!isMock) {
+        // 真实模式：创建异步任务
+        const createResult = await videoAdapter.createVideoTask(genReq)
+
+        const created = await prisma.shotVideo.create({
+          data: {
+            shotId: shot.id, projectId,
+            inputImageUrl: confirmedImage?.imageUrl || '',
+            videoUrl: '',
+            prompt,
+            seed: '',
+            modelName: project.modelProvider === 'ark' ? (process.env.ARK_VIDEO_MODEL || 'doubao-seedance-1-5-pro-251215') : (process.env.AGNES_VIDEO_MODEL || 'agnes-video-v2.0'),
+            referenceImages: confirmedImage ? [{ image_url: confirmedImage.imageUrl }] as unknown as JsonValue : [] as unknown as JsonValue,
+            duration,
+            params: { aspect_ratio: aspectRatio, generation_method: 'async_task' } as unknown as JsonValue,
+            remoteTaskId: createResult.taskId,
+            remoteStatus: createResult.status,
+            remoteResponseJson: createResult.createResponse as unknown as JsonValue,
+            lastPolledAt: new Date(),
+            isSelected: false, isConfirmed: false,
+          },
+        })
+
+        allResults.push({ shotId: shot.id, shotNo: shot.shotNo, videos: [created] })
+      } else {
+        // Mock 模式：同步生成
+        const response = await videoAdapter.generate(genReq)
+
+        const created = await Promise.all(response.videos.map(v =>
+          prisma.shotVideo.create({
+            data: {
+              shotId: shot.id, projectId,
+              inputImageUrl: confirmedImage?.imageUrl || '',
+              videoUrl: v.url, prompt,
+              seed: String(v.params?.seed || ''),
+              modelName: project.modelProvider === 'ark' ? (process.env.ARK_VIDEO_MODEL || 'doubao-seedance-1-5-pro-251215') : (process.env.AGNES_VIDEO_MODEL || 'agnes-video-v2.0'),
+              referenceImages: confirmedImage ? [{ image_url: confirmedImage.imageUrl }] as unknown as JsonValue : [] as unknown as JsonValue,
+              duration: v.duration || duration,
+              params: { ...v.params, aspect_ratio: aspectRatio } as unknown as JsonValue,
+              isSelected: false, isConfirmed: false,
+            },
+          })
+        ))
+
+        allResults.push({ shotId: shot.id, shotNo: shot.shotNo, videos: created })
+      }
+
+      // 更新进度
+      const progress = Math.round(((i + 1) / shots.length) * 50)
+      await taskService.updateProgress(taskId, progress)
+      const updated = await prisma.generationTask.findUnique({ where: { id: taskId } })
+      if (updated) await emitTaskEvent('task.progress', taskToUpdateEvent(updated))
+    }
+
+    // ─── 阶段 2：Mock 模式直接完成；真实模式进入轮询 ───────────────
+
+    if (isMock) {
+      // Mock 模式：已完成
+      await prisma.project.update({ where: { id: projectId }, data: { status: 'SHOT_VIDEO_PENDING_CONFIRM' } })
+
+      const { versionService: vs } = await import('@/server/services/version.service')
+      await vs.createVersion({
+        projectId, entityType: 'SHOT_VIDEO_SET', entityId: episodeId,
+        snapshot: { total_videos: allResults.reduce((s, r) => s + r.videos.length, 0), project_status: 'SHOT_VIDEO_PENDING_CONFIRM', is_async: false },
+        changeType: 'GENERATE', description: `生成 ${shots.length} 个镜头视频`, sourceTaskId: taskId,
+      })
+
+      const completed = await taskService.completeTask(taskId, {
+        total_videos: allResults.reduce((s, r) => s + r.videos.length, 0),
+        is_async: false,
+      })
+      await emitTaskEvent('task.completed', taskToUpdateEvent(completed))
+      return
+    }
+
+    // ─── 真实模式：轮询远端任务直到全部终态 ─────────────────────────
+
+    await taskService.updateProgress(taskId, 55)
+    const pollStart = Date.now()
+
+    while (Date.now() - pollStart < REMOTE_POLL_TIMEOUT) {
+      // 查找所有非终态的远端视频
+      const pendingVideos = await prisma.shotVideo.findMany({
+        where: {
+          projectId,
+          shot: { episodeId },
+          remoteTaskId: { not: null },
+          OR: [
+            { remoteStatus: null },
+            { remoteStatus: '' },
+            { NOT: { remoteStatus: { in: TERMINAL_STATUSES } } },
+          ],
+        },
+      })
+
+      if (pendingVideos.length === 0) break // 全部完成
+
+      // 批量轮询
+      for (const video of pendingVideos) {
+        try {
+          const pollResult = await videoAdapter.pollVideoTask(video.remoteTaskId!)
+
+          const updateData: Record<string, unknown> = {
+            remoteStatus: pollResult.status,
+            remoteProgress: typeof pollResult.progress === 'number' ? Math.round(pollResult.progress) : null,
+            remoteResponseJson: pollResult.response as object,
+            lastPolledAt: new Date(),
+          }
+          if (pollResult.videoUrl) updateData.videoUrl = pollResult.videoUrl
+          if (pollResult.duration) updateData.duration = pollResult.duration
+
+          await prisma.shotVideo.update({
+            where: { id: video.id },
+            data: updateData,
+          })
+        } catch (err) {
+          console.error(`[worker:shot-videos] Poll failed for ${video.remoteTaskId}:`, err)
+        }
+      }
+
+      // 计算进度
+      const allVideos = await prisma.shotVideo.findMany({
+        where: { projectId, shot: { episodeId } },
+      })
+      const doneCount = allVideos.filter(v => TERMINAL_STATUSES.includes(v.remoteStatus || '')).length
+      const progress = Math.round(55 + (doneCount / allVideos.length) * 40)
+      await taskService.updateProgress(taskId, progress)
+
+      const taskNow = await prisma.generationTask.findUnique({ where: { id: taskId } })
+      if (taskNow) await emitTaskEvent('task.progress', taskToUpdateEvent(taskNow))
+
+      // 等待下次轮询
+      await sleep(REMOTE_POLL_INTERVAL)
+    }
+
+    // 检查最终状态
+    const finalVideos = await prisma.shotVideo.findMany({
+      where: { projectId, shot: { episodeId } },
+    })
+
+    const allDone = finalVideos.every(v => TERMINAL_STATUSES.includes(v.remoteStatus || ''))
+    const hasAnySuccess = finalVideos.some(v => ['completed', 'succeeded', 'success'].includes(v.remoteStatus || ''))
+
+    if (allDone) {
+      const newStatus = hasAnySuccess ? 'SHOT_VIDEO_PENDING_CONFIRM' : 'SHOT_VIDEO_GENERATING'
+      await prisma.project.update({ where: { id: projectId }, data: { status: newStatus } })
+
+      const { versionService: vs } = await import('@/server/services/version.service')
+      await vs.createVersion({
+        projectId, entityType: 'SHOT_VIDEO_SET', entityId: episodeId,
+        snapshot: { total_videos: finalVideos.length, project_status: newStatus, is_async: true },
+        changeType: 'GENERATE', description: `视频异步任务完成 (${finalVideos.length} 个)`, sourceTaskId: taskId,
+      })
+
+      const completed = await taskService.completeTask(taskId, {
+        total_videos: finalVideos.length,
+        is_async: true,
+        all_done: allDone,
+        has_success: hasAnySuccess,
+      })
+      await emitTaskEvent('task.completed', taskToUpdateEvent(completed))
+    } else {
+      // 超时但未全部完成
+      await prisma.project.update({ where: { id: projectId }, data: { status: 'SHOT_VIDEO_GENERATING' } })
+      const failed = await taskService.failTask(taskId, '视频生成超时，部分任务未完成')
+      await emitTaskEvent('task.failed', taskToUpdateEvent(failed))
+    }
+
+  } catch (error) {
+    const errorMsg = (error as Error).message
+    console.error(`[worker:shot-videos] Task ${taskId} failed:`, errorMsg)
+
+    try {
+      await prisma.project.update({ where: { id: task.projectId }, data: { status: 'SHOT_IMAGE_CONFIRMED' } })
+    } catch { /* ignore */ }
+
+    const failed = await taskService.failTask(taskId, errorMsg)
+    await emitTaskEvent('task.failed', taskToUpdateEvent(failed))
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
