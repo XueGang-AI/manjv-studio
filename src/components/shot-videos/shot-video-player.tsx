@@ -63,6 +63,7 @@ export function ShotVideoPlayer({
       <div className="aspect-video bg-[var(--bg-panel)] rounded-[var(--radius-lg)] flex items-center justify-center relative">
         {/* Show poster if available */}
         {posterUrl && (
+          // eslint-disable-next-line @next/next/no-img-element -- 远端对象存储视频 poster，next.config 未配 remotePatterns，与既有约定一致
           <img
             src={posterUrl}
             alt="参考图"

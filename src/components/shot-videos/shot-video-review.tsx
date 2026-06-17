@@ -1,15 +1,18 @@
 'use client'
 
-import { useState } from 'react'
-import { Check, Copy, RefreshCw, Video } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Check, RefreshCw, Video, Sparkles } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useToast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
-import { getVideoGroupStatus, STATUS_LABELS, isRemotePending, type ShotVideoGroup, type ShotVideoItem } from './shot-videos-types'
+import { getVideoGroupStatus, STATUS_LABELS, isRemotePending, isRemoteTerminal, type ShotVideoGroup, type ShotVideoItem } from './shot-videos-types'
 import { ShotVideoPlayer } from './shot-video-player'
+import { AIPromptBox } from '@/components/ai/ai-prompt-box'
+import { AIConsoleSheet } from '@/components/ai/ai-console-sheet'
+import { useAIPromptBox } from '@/components/ai/use-ai-prompt-box'
 
 interface ShotVideoReviewProps {
   group: ShotVideoGroup
@@ -25,6 +28,21 @@ export function ShotVideoReview({ group, isConfirmed, isGenerating, projectId, e
   const status = getVideoGroupStatus(group, isGenerating)
   const { addToast } = useToast()
 
+  // 项目 modelProvider（只读展示，后端按此选模型）。一次获取，projectId 稳定。
+  const [modelProvider, setModelProvider] = useState<string>('agnes')
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/projects/${projectId}`)
+      .then(r => r.json())
+      .then(d => { if (!cancelled && d.success && d.data?.modelProvider) setModelProvider(d.data.modelProvider) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [projectId])
+
+  // 移动端 AI 控制台 Sheet
+  const [aiSheetOpen, setAiSheetOpen] = useState(false)
+  const aiEntryBtnRef = useRef<HTMLButtonElement>(null)
+
   // Active video tab (for multiple candidates)
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null)
 
@@ -38,9 +56,6 @@ export function ShotVideoReview({ group, isConfirmed, isGenerating, projectId, e
   // Check task
   const [checkingTaskId, setCheckingTaskId] = useState<string | null>(null)
 
-  // Prompt expand
-  const [promptExpanded, setPromptExpanded] = useState(false)
-
   // Determine current video to display
   const displayVideo = activeVideoId
     ? videos.find(v => v.id === activeVideoId) ?? null
@@ -50,6 +65,29 @@ export function ShotVideoReview({ group, isConfirmed, isGenerating, projectId, e
 
   // Has multiple candidates
   const hasMultipleVideos = videos.length > 1
+
+  // ─── AI Prompt 控制台状态（提升到 review，桌面与移动共享同一份） ───
+  // 当前尝试 = 最新 ShotVideo（API 按 createdAt desc 返回，videos[0] 为最新）。
+  // hasOutput 仅表示"已有可用结果"，不代表本次任务成功；error/running 优先于 hasOutput。
+  const aiVideoData = {
+    prompt: shot.videoPrompt?.prompt || '',
+    motionStrength: (shot.videoPrompt?.motionStrength as 'low' | 'medium' | 'high' | null) || null,
+    remoteStatus: displayVideo?.remoteStatus ?? null,
+    hasOutput: !!(displayVideo?.videoUrl && (!displayVideo?.remoteTaskId || isRemoteTerminal(displayVideo?.remoteStatus))),
+  }
+  const aiState = useAIPromptBox({
+    projectId,
+    episodeId,
+    shotId: shot.id,
+    video: aiVideoData,
+    onRefresh,
+  })
+  const aiConsoleProps = {
+    shotId: shot.id,
+    shotNo: shot.shotNo,
+    modelProvider,
+    state: aiState,
+  }
 
   const handleSelect = async (videoId: string) => {
     try {
@@ -114,11 +152,6 @@ export function ShotVideoReview({ group, isConfirmed, isGenerating, projectId, e
     } finally { setCheckingTaskId(null) }
   }
 
-  const copyPrompt = (text: string) => {
-    navigator.clipboard.writeText(text)
-    addToast({ type: 'success', title: '已复制到剪贴板' })
-  }
-
   return (
     <div className="p-4 md:p-6 space-y-5">
       {/* Header */}
@@ -177,6 +210,7 @@ export function ShotVideoReview({ group, isConfirmed, isGenerating, projectId, e
                   {hasUrl ? (
                     <video src={v.videoUrl!} className="w-full h-full object-cover" preload="none" muted />
                   ) : shot.confirmedImage?.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- 远端对象存储缩略图，next.config 未配 remotePatterns，与既有 shot-image-review 约定一致
                     <img src={shot.confirmedImage.imageUrl} alt="参考图" className="w-full h-full object-cover opacity-40" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
@@ -222,6 +256,7 @@ export function ShotVideoReview({ group, isConfirmed, isGenerating, projectId, e
         <Card className="p-3">
           <div className="text-[10px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-2">参考分镜图</div>
           <div className="flex items-start gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element -- 远端对象存储参考图，next.config 未配 remotePatterns，与既有 shot-image-review 约定一致 */}
             <img
               src={shot.confirmedImage.imageUrl}
               alt="确认的分镜图"
@@ -231,34 +266,33 @@ export function ShotVideoReview({ group, isConfirmed, isGenerating, projectId, e
         </Card>
       )}
 
-      {/* Prompt section */}
-      {shot.videoPrompt?.prompt && (
-        <Card className="p-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="text-[10px] font-semibold text-[var(--color-accent-cyan)] uppercase tracking-wider">视频 Prompt</div>
-            <div className="flex items-center gap-1">
-              <button onClick={() => copyPrompt(shot.videoPrompt!.prompt || '')} className="p-1 rounded hover:bg-[var(--bg-panel)] transition-colors cursor-pointer text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]" title="复制 Prompt" aria-label="复制 Prompt">
-                <Copy size={12} />
-              </button>
-              <button onClick={() => setPromptExpanded(!promptExpanded)} className="text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] cursor-pointer">
-                {promptExpanded ? '收起' : '展开'}
-              </button>
-            </div>
-          </div>
-          <p className={cn(
-            'text-xs text-[var(--color-text-secondary)] leading-relaxed',
-            !promptExpanded && 'max-h-16 overflow-hidden'
-          )}>
-            {shot.videoPrompt.prompt}
-          </p>
-          {(shot.videoPrompt.motionStrength || shot.videoPrompt.duration) && promptExpanded && (
-            <div className="mt-2 pt-2 border-t border-[var(--color-border-dim)] flex gap-3 text-[10px] text-[var(--color-text-muted)]">
-              {shot.videoPrompt.motionStrength && <span>运动强度：{shot.videoPrompt.motionStrength}</span>}
-              {shot.videoPrompt.duration != null && <span>目标时长：{shot.videoPrompt.duration}s</span>}
-            </div>
-          )}
-        </Card>
-      )}
+      {/* AI Prompt 创作控制台：桌面常驻（md+），移动端入口在下方 */}
+      {/* 桌面与移动共享同一 useAIPromptBox 状态（提升到 review），不各自维护副本 */}
+      <>
+        {/* 桌面常驻控制台 */}
+        <div className="hidden md:block">
+          <AIPromptBox {...aiConsoleProps} />
+        </div>
+        {/* 移动端入口 + Sheet（共享同一 state，不维护两套表单） */}
+        <div className="md:hidden">
+          <Button
+            ref={aiEntryBtnRef}
+            variant="outline"
+            size="sm"
+            className="w-full"
+            icon={<Sparkles size={14} />}
+            onClick={() => setAiSheetOpen(true)}
+          >
+            AI 视频创作
+          </Button>
+          <AIConsoleSheet
+            {...aiConsoleProps}
+            open={aiSheetOpen}
+            onClose={() => setAiSheetOpen(false)}
+            returnFocusRef={aiEntryBtnRef}
+          />
+        </div>
+      </>
 
       {/* Generation parameters */}
       {displayVideo && (displayVideo.modelName || displayVideo.seed || displayVideo.params) && (
