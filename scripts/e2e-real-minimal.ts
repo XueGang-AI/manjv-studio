@@ -88,7 +88,7 @@ async function main() {
     body: JSON.stringify({ model: IMG_MODEL, prompt: charPrompt + ', portrait, elegant, high quality', aspect_ratio: '9:16', num_outputs: 1 }),
   })
   if (!imgRes.ok) fail(`图片 API 失败 (${imgRes.status})`)
-  const imgData = await imgRes.json() as any
+  const imgData = await imgRes.json() as { data?: Array<{ url?: string }> }
   s.realCharImgUrl = imgData.data?.[0]?.url || ''
   if (!s.realCharImgUrl) fail('图片 URL 为空')
   ok(`real_character_image_url=${s.realCharImgUrl.substring(0,60)}...`)
@@ -104,7 +104,6 @@ async function main() {
   const charImgsGen = await post(`/api/projects/${s.projectId}/character-images/generate`)
   if (!charImgsGen.success) fail('角色图批量生成失败: ' + charImgsGen.error)
   const charImgsList = await gett(`/api/projects/${s.projectId}/character-images`)
-  const firstImgId = charImgsList.data.characters[0]?.images[0]?.id
   const firstImgUrl = charImgsList.data.characters[0]?.images[0]?.imageUrl
   ok(`角色图生成成功 — 第一张 URL: ${firstImgUrl?.substring(0,60)}...`)
 
@@ -159,7 +158,7 @@ async function main() {
     }),
   })
   if (!vidRes.ok) fail(`视频 API 创建失败 (${vidRes.status}): ${(await vidRes.text()).substring(0,200)}`)
-  const vidCreateData = await vidRes.json() as any
+  const vidCreateData = await vidRes.json() as { task_id?: string; id?: string }
   s.videoTaskId = vidCreateData.task_id || vidCreateData.id
   if (!s.videoTaskId) fail(`无 task_id: ${JSON.stringify(vidCreateData).substring(0,200)}`)
   ok(`video_task_id=${s.videoTaskId}`)
@@ -170,7 +169,7 @@ async function main() {
   for (let i = 0; i < 120; i++) {
     await new Promise(r => setTimeout(r, 5000))
     const pollRes = await fetch(`${VID_BASE}/videos/${s.videoTaskId}`, { headers: { 'Authorization': `Bearer ${API_KEY}` } })
-    const pollData = await pollRes.json() as any
+    const pollData = await pollRes.json() as { status?: string; progress?: number; video_url?: string; url?: string; output_url?: string }
     const st = pollData.status
     process.stdout.write(`\r   poll #${i+1}: status=${st} progress=${pollData.progress || '?'}%`)
     if (st === 'completed' || st === 'succeeded' || st === 'success') {
@@ -223,7 +222,7 @@ async function main() {
   log('Step 16: ffprobe 验证')
   const probeOut = execSync(`ffprobe -v quiet -print_format json -show_format -show_streams "${s.finalVideoPath}"`, { encoding:'utf-8' })
   const probe = JSON.parse(probeOut)
-  const vStream = probe.streams.find((st:any) => st.codec_type === 'video')
+  const vStream = probe.streams.find((st: { codec_type: string }) => st.codec_type === 'video')
   ok(`duration=${probe.format.duration}s | ${vStream?.width}x${vStream?.height} | ${vStream?.r_frame_rate} | ${vStream?.codec_name}`)
 
   // 17. Final report

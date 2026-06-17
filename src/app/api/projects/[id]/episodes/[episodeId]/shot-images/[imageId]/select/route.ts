@@ -10,7 +10,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string; episodeId: string; imageId: string }> }
 ) {
   try {
-    const { id: projectId, episodeId, imageId } = await params
+    const { id: projectId, imageId } = await params
 
     const image = await prisma.shotImage.findFirst({ where: { id: imageId, projectId } })
     if (!image) return NextResponse.json({ success: false, error: '图片不存在' }, { status: 404 })

@@ -30,12 +30,8 @@ interface Props {
   project: ProjectData
 }
 
-export function ProjectDetail({ project }: Props) {
-  const characters: string[] = Array.isArray(project.mainCharacters)
-    ? project.mainCharacters.filter(Boolean)
-    : []
-
-  const Field = ({ label, value, mono }: { label: string; value?: string | null; mono?: boolean }) => (
+function Field({ label, value, mono }: { label: string; value?: string | null; mono?: boolean }) {
+  return (
     <div>
       <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">{label}</dt>
       <dd className={`text-sm text-gray-900 ${mono ? 'font-mono text-xs' : ''}`}>
@@ -43,6 +39,12 @@ export function ProjectDetail({ project }: Props) {
       </dd>
     </div>
   )
+}
+
+export function ProjectDetail({ project }: Props) {
+  const characters: string[] = Array.isArray(project.mainCharacters)
+    ? project.mainCharacters.filter(Boolean)
+    : []
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">

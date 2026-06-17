@@ -138,9 +138,6 @@ export async function POST(
         ['completed', 'succeeded', 'success', 'failed', 'error', 'cancelled'].includes(v.remoteStatus || '')
       )
       if (allDone) {
-        const hasAnySuccess = allVideos.some(v =>
-          ['completed', 'succeeded', 'success'].includes(v.remoteStatus || '')
-        )
         // 只要有成功的就推进到 PENDING_CONFIRM；全部失败也推进，用户可重新生成
         await prisma.project.update({
           where: { id: projectId },

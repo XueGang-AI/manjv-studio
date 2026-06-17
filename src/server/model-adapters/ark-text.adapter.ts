@@ -4,7 +4,7 @@
 // Endpoint: POST {baseUrl}/chat/completions (OpenAI 兼容)
 // JSON 策略: prompt_only (schema 嵌入 prompt, 不使用 response_format)
 // ============================================
-import { BaseTextAdapter } from './base.adapter'
+import { BaseTextAdapter, createAdapterError } from './base.adapter'
 import { TextGenerationRequest, TextGenerationResponse } from './types'
 
 export interface ArkTextAdapterOptions {
@@ -30,10 +30,10 @@ export class ArkTextAdapter extends BaseTextAdapter {
 
   async generate<T = unknown>(request: TextGenerationRequest): Promise<TextGenerationResponse<T>> {
     if (!this.apiKey) {
-      throw new Error('ArkTextAdapter: apiKey is required')
+      throw createAdapterError({ code: 'AUTH_ERROR', message: 'ArkTextAdapter: apiKey is required' })
     }
     if (!this.baseUrl) {
-      throw new Error('ArkTextAdapter: baseUrl is required')
+      throw createAdapterError({ code: 'CONFIG_ERROR', message: 'ArkTextAdapter: baseUrl is required' })
     }
 
     const messages: Array<{ role: 'system' | 'user'; content: string }> = [
@@ -70,9 +70,12 @@ export class ArkTextAdapter extends BaseTextAdapter {
 
     if (!response.ok) {
       const errorText = await response.text()
-      throw new Error(
-        `Ark API error (${response.status}): ${errorText.substring(0, 300)}`
-      )
+      throw createAdapterError({
+        code: 'API_ERROR',
+        message: `Ark API error (${response.status}): ${errorText.substring(0, 300)}`,
+        retryable: response.status >= 500 || response.status === 429,
+        statusCode: response.status,
+      })
     }
 
     const data = await response.json()

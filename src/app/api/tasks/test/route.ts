@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
         message: '测试任务已创建，Worker 将异步执行',
       },
     })
-  } catch (error) {
+  } catch {
     return NextResponse.json({
       success: false,
       error: { code: 'CREATE_FAILED', message: '创建测试任务失败' },

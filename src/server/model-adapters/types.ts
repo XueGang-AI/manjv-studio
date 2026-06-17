@@ -77,6 +77,18 @@ export interface VideoGenerationResponse {
   }>
 }
 
+// ---- 统一错误结构 ----
+export interface AdapterError extends Error {
+  /** 机器可读错误码，如 API_ERROR / AUTH_ERROR / TIMEOUT / NO_RESULT */
+  code: string
+  /** 人类可读错误消息 */
+  message: string
+  /** 该错误是否可重试 */
+  retryable: boolean
+  /** 原始 HTTP 状态码（如有） */
+  statusCode?: number
+}
+
 // ---- 视频异步任务（新增） ----
 export type RemoteVideoTaskStatus = 'queued' | 'processing' | 'running' | 'completed' | 'succeeded' | 'success' | 'failed' | 'error' | 'timeout' | 'unknown'
 
@@ -93,6 +105,8 @@ export interface VideoTaskPollResult {
   videoUrl?: string
   duration?: number
   error?: string
+  errorCode?: string
+  retryable?: boolean
   response: Record<string, unknown>
   polledAt: string // ISO date
 }
@@ -105,6 +119,8 @@ export interface VideoTaskWaitResult {
   videoUrl?: string
   duration?: number
   error?: string
+  errorCode?: string
+  retryable?: boolean
   lastResponse: Record<string, unknown>
   pollAttempts: number
   totalSeconds: number

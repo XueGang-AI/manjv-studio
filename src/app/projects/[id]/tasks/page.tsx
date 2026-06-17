@@ -9,7 +9,7 @@ import {
   RefreshCw, XCircle, RotateCcw, FileText, Loader2,
   ChevronDown, ChevronUp, Clock, Trash2, AlertTriangle, X,
 } from 'lucide-react'
-import { useTaskSSE, type TaskUpdateEvent } from '@/lib/hooks/use-task-sse'
+import { useTaskSSE } from '@/lib/hooks/use-task-sse'
 
 const STATUS_CONFIG: Record<string, { variant: 'default'|'success'|'warning'|'danger'|'info'; label: string }> = {
   pending: { variant: 'default', label: '等待中' },
@@ -64,7 +64,7 @@ export default function TasksPage() {
     } catch {} finally { setLoading(false) }
   }, [projectId])
 
-  useEffect(() => { fetchTasks() }, [fetchTasks])
+  useEffect(() => { queueMicrotask(() => fetchTasks()) }, [fetchTasks])
 
   // SSE 实时连接 — 使用统一 Hook
   useTaskSSE(projectId, {

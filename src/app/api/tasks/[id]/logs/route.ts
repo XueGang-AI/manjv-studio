@@ -5,7 +5,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const logs = await taskService.getTaskLogs((await params).id, 100)
     return NextResponse.json({ success: true, data: logs })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ success: false, error: '获取日志失败' }, { status: 500 })
   }
 }

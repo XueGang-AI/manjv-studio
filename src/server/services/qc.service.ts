@@ -4,8 +4,6 @@
 import prisma from '@/lib/prisma'
 
 type JsonValue = import('@prisma/client').Prisma.InputJsonValue
-import { promptTemplateService } from './prompt-template.service'
-import { adapterFactory } from '@/server/model-adapters/adapter.factory'
 
 export interface QCIssue {
   level: 'high' | 'medium' | 'low'
@@ -90,7 +88,7 @@ export class QCService {
     const episodes = (content.episode_outline as unknown[]) || []
     if (episodes.length === 0) issues.push({ level: 'high', field: 'episode_outline', problem: '缺少分集大纲', suggestion: '生成完整的分集大纲' })
     else {
-      let hasHook = false, hasCliff = false
+      let hasHook = false
       for (const ep of episodes) {
         const e = ep as Record<string,unknown>
         if (e.hook) hasHook = true

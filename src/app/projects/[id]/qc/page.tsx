@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Play, RefreshCw, AlertTriangle, CheckCircle2, XCircle, AlertCircle, Loader2 } from 'lucide-react'
+import { Play, AlertTriangle, CheckCircle2, XCircle, AlertCircle, Loader2 } from 'lucide-react'
 
 interface QCIssue { level: string; field: string; problem: string; suggestion: string }
 interface QCResult { score: number; passed: boolean; level: string; issues: QCIssue[]; summary: string; rewrite_required: boolean }
@@ -30,7 +30,9 @@ export default function QCProjectPage() {
     setLoading(false)
   }
 
-  useEffect(() => { fetchReports() }, [projectId])
+  // 仅在 projectId 变化时拉取，fetchReports 内部依赖 projectId
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { queueMicrotask(() => fetchReports()) }, [projectId])
 
   const runQC = async () => {
     setRunning(true); setError(null); setResults([])
@@ -132,7 +134,7 @@ export default function QCProjectPage() {
       {!running && results.length === 0 && reports.length === 0 && !loading && (
         <Card className="border-dashed"><CardContent className="flex flex-col items-center py-16">
           <AlertCircle size={48} className="text-gray-300 mb-4" />
-          <p className="text-gray-400">点击"运行 QC"检查项目质量</p>
+          <p className="text-gray-400">点击&quot;运行 QC&quot;检查项目质量</p>
         </CardContent></Card>
       )}
     </div>

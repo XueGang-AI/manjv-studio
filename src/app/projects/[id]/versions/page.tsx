@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { RefreshCw, RotateCcw, GitBranch, CheckCircle2, Clock, ArrowLeft } from 'lucide-react'
+import { RotateCcw, GitBranch, CheckCircle2, Clock, RefreshCw } from 'lucide-react'
 
 const TYPE_LABELS: Record<string, string> = {
   STORY_PACKAGE: '故事方案', CHARACTER_SET: '角色设定', CHARACTER_IMAGE_SET: '角色图',
@@ -22,7 +22,7 @@ interface Version {
 }
 
 export default function VersionsPage() {
-  const params = useParams(); const searchParams = useSearchParams(); const router = useRouter()
+  const params = useParams(); const searchParams = useSearchParams()
   const projectId = params.id as string
   const filterType = searchParams.get('entity_type') || ''
 
@@ -41,7 +41,7 @@ export default function VersionsPage() {
     setLoading(false)
   }, [projectId, filterType])
 
-  useEffect(() => { fetchVersions() }, [fetchVersions])
+  useEffect(() => { queueMicrotask(() => fetchVersions()) }, [fetchVersions])
 
   const handleRollback = async (verId: string) => {
     if (!confirm('确认回退到此版本？这将恢复当时的项目状态。')) return

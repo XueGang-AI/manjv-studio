@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
-  Wand2, RefreshCw, CheckCircle2, AlertTriangle,
+  RefreshCw, CheckCircle2, AlertTriangle,
   ArrowLeft, ArrowRight, ImageIcon, Loader2, X,
   User, Zap, Shield,
 } from 'lucide-react'
@@ -57,7 +57,7 @@ export default function CharacterImagesPage() {
     finally { setLoading(false) }
   }, [projectId])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  useEffect(() => { queueMicrotask(() => fetchData()) }, [fetchData])
   useEffect(() => {
     if (state?.projectStatus === 'CHARACTER_IMAGE_GENERATING') {
       const interval = setInterval(fetchData, 3000); return () => clearInterval(interval)
@@ -127,7 +127,7 @@ export default function CharacterImagesPage() {
     finally { setActionLoading(null) }
   }
 
-  const handleRegenerateSingle = async (imageId: string, charId: string) => {
+  const handleRegenerateSingle = async (imageId: string, _charId: string) => {
     setActionLoading(`single-${imageId}`)
     try {
       const res = await fetch(`/api/projects/${projectId}/character-images/${imageId}/regenerate`, { method: 'POST' })

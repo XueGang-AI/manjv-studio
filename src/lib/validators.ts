@@ -12,9 +12,6 @@ export interface ValidationResult {
   errors: ValidationError[]
 }
 
-const STORY_TYPES = ['霸总', '古风', '现代', '悬疑', '玄幻', '甜宠', '都市', '职场', '虐恋', '复仇', '重生', '权谋', '校园', '家庭']
-const ART_STYLES = ['韩漫', '日漫', '国风', '写实', '电影感', '赛博朋克', '水彩', '厚涂', '3D', '黑白漫画', '高对比光影', '都市雨夜']
-const PLATFORMS = ['抖音', '快手', '视频号', '小红书', 'B站', '自定义']
 const ASPECT_RATIOS = ['9:16', '16:9', '1:1']
 
 export function validateProjectForm(data: Record<string, unknown>): ValidationResult {

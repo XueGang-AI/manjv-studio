@@ -26,11 +26,11 @@ export default function EpisodeLayout({ children }: { children: React.ReactNode 
               return
             }
           }
-          setResolved(true)
+          queueMicrotask(() => setResolved(true))
         })
-        .catch(() => setResolved(true))
+        .catch(() => queueMicrotask(() => setResolved(true)))
     } else {
-      setResolved(true)
+      queueMicrotask(() => setResolved(true))
     }
   }, [episodeId, projectId, router])
 

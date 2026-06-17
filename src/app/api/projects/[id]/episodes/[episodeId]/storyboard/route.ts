@@ -58,7 +58,6 @@ export async function PATCH(
     }
 
     const updateData: Record<string, unknown> = {}
-    const allowed = ['title', 'duration', 'coreTask', 'emotionCurve', 'openingHook', 'endingHook']
     const bodyMap: Record<string, string> = {
       title: 'title', duration: 'duration', core_task: 'coreTask',
       emotion_curve: 'emotionCurve', opening_hook: 'openingHook', ending_hook: 'endingHook',

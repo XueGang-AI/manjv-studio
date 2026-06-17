@@ -5,7 +5,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const reports = await qcService.getReports((await params).id)
     return NextResponse.json({ success: true, data: reports })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ success: false, error: '获取报告失败' }, { status: 500 })
   }
 }

@@ -104,7 +104,7 @@ function MultiTagGroup({
   return (
     <div>
       <label className="block text-sm font-medium mb-1">{label}</label>
-      {subtitle && <p className="text-xs text-gray-400 mb-1.5">{subtitle}</p>}
+      {subtitle && <p className="text-xs text-[var(--text-tertiary)] mb-1.5">{subtitle}</p>}
       <div className="flex flex-wrap gap-2 mb-2">
         {options.map(opt => {
           const isSelected = selected.includes(opt)
@@ -115,8 +115,8 @@ function MultiTagGroup({
               onClick={() => toggleTag(opt)}
               className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
                 isSelected
-                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                  : 'border-gray-200 text-gray-600 hover:border-indigo-300 hover:text-indigo-600'
+                  ? 'bg-[var(--accent-primary)] text-[var(--text-inverse)] border-[var(--accent-primary)] shadow-sm'
+                  : 'border-[var(--border-default)] text-[var(--text-secondary)] hover:border-[var(--accent-border)] hover:text-[var(--accent-primary)]'
               }`}
             >
               {opt}
@@ -130,8 +130,8 @@ function MultiTagGroup({
             onClick={() => toggleTag(CUSTOM_TAG)}
             className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
               showCustom
-                ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
-                : 'border-dashed border-gray-300 text-gray-500 hover:border-purple-300 hover:text-purple-600'
+                ? 'bg-[var(--accent-primary)] text-[var(--text-inverse)] border-[var(--accent-primary)] shadow-sm'
+                : 'border-dashed border-[var(--border-default)] text-[var(--text-tertiary)] hover:border-[var(--accent-border)] hover:text-[var(--accent-primary)]'
             }`}
           >
             {CUSTOM_TAG}
@@ -161,10 +161,10 @@ function MultiTagGroup({
           {selected.map(tag => (
             <span
               key={tag}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-indigo-50 text-indigo-700 border border-indigo-200"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-[var(--accent-soft)] text-[var(--accent-primary)] border border-[var(--accent-border)]"
             >
               {tag}
-              <button type="button" onClick={() => removeTag(tag)} className="text-indigo-400 hover:text-indigo-600">
+              <button type="button" onClick={() => removeTag(tag)} className="text-[var(--accent-primary)] hover:text-[var(--accent-active)]">
                 <X size={12} />
               </button>
             </span>
@@ -265,8 +265,8 @@ export function ProjectForm({
     <form onSubmit={handleSubmit} className="max-w-2xl mx-auto space-y-6">
       {/* 错误提示 */}
       {displayErrors.length > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-          <ul className="list-disc list-inside text-sm text-red-600 space-y-0.5">
+        <div className="bg-[var(--error-soft)] border border-[var(--border-strong)] rounded-lg p-3">
+          <ul className="list-disc list-inside text-sm text-[var(--status-error)] space-y-0.5">
             {displayErrors.map((msg, i) => (
               <li key={i}>{msg}</li>
             ))}
@@ -279,13 +279,13 @@ export function ProjectForm({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             基本信息
-            <span className="text-xs text-red-500 font-normal">* 必填</span>
+            <span className="text-xs text-[var(--status-error)] font-normal">* 必填</span>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">
-              项目名称 <span className="text-red-500">*</span>
+              项目名称 <span className="text-[var(--status-error)]">*</span>
             </label>
             <Input
               required
@@ -294,7 +294,7 @@ export function ProjectForm({
               placeholder="例如：雨夜重生"
               maxLength={50}
             />
-            <p className="text-xs text-gray-400 mt-0.5">{form.project_name.length}/50</p>
+            <p className="text-xs text-[var(--text-tertiary)] mt-0.5">{form.project_name.length}/50</p>
           </div>
 
           <MultiTagGroup
@@ -307,7 +307,7 @@ export function ProjectForm({
 
           <div>
             <label className="block text-sm font-medium mb-1">
-              故事背景 <span className="text-red-500">*</span>
+              故事背景 <span className="text-[var(--status-error)]">*</span>
             </label>
             <Input
               required
@@ -320,7 +320,7 @@ export function ProjectForm({
           {/* 主要角色 */}
           <div>
             <label className="block text-sm font-medium mb-1">
-              主要角色 <span className="text-red-500">*</span>
+              主要角色 <span className="text-[var(--status-error)]">*</span>
             </label>
             <div className="space-y-2">
               {form.main_characters.map((char, i) => (
@@ -334,7 +334,7 @@ export function ProjectForm({
                     <button
                       type="button"
                       onClick={() => removeCharacter(i)}
-                      className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                      className="p-2 text-[var(--text-tertiary)] hover:text-[var(--status-error)] transition-colors"
                     >
                       <X size={18} />
                     </button>
@@ -345,7 +345,7 @@ export function ProjectForm({
             <button
               type="button"
               onClick={addCharacter}
-              className="mt-2 inline-flex items-center gap-1 text-sm text-indigo-600 hover:text-indigo-700"
+              className="mt-2 inline-flex items-center gap-1 text-sm text-[var(--accent-primary)] hover:text-[var(--accent-active)]"
             >
               <Plus size={14} /> 添加角色
             </button>
@@ -353,7 +353,7 @@ export function ProjectForm({
 
           <div>
             <label className="block text-sm font-medium mb-1">
-              核心冲突 / 情绪张力 <span className="text-xs text-gray-400 ml-1">选填</span>
+              核心冲突 / 情绪张力 <span className="text-xs text-[var(--text-tertiary)] ml-1">选填</span>
             </label>
             <Input
               value={form.core_conflict}
@@ -361,35 +361,35 @@ export function ProjectForm({
               placeholder="如果暂时不确定，可以留空，系统会根据故事梗概自动提炼。"
               maxLength={300}
             />
-            <p className="text-xs text-gray-400 mt-0.5">{form.core_conflict.length}/300</p>
+            <p className="text-xs text-[var(--text-tertiary)] mt-0.5">{form.core_conflict.length}/300</p>
           </div>
 
           <div>
             <label className="block text-sm font-medium mb-1">
-              故事梗概 <span className="text-red-500">*</span>
-              <span className="text-xs text-gray-400 ml-1">至少 20 字</span>
+              故事梗概 <span className="text-[var(--status-error)]">*</span>
+              <span className="text-xs text-[var(--text-tertiary)] ml-1">至少 20 字</span>
             </label>
             <textarea
               required
               rows={5}
               value={form.story_summary}
               onChange={e => updateField('story_summary', e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-y"
+              className="w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-input)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)] focus:border-transparent resize-y"
               placeholder="简要描述你的故事脉络和主要情节..."
               maxLength={2000}
             />
-            <p className="text-xs text-gray-400 mt-0.5">{form.story_summary.length}/2000</p>
+            <p className="text-xs text-[var(--text-tertiary)] mt-0.5">{form.story_summary.length}/2000</p>
           </div>
 
           <div>
             <label className="block text-sm font-medium mb-1">
-              完整故事 <span className="text-xs text-gray-400 ml-1">可选</span>
+              完整故事 <span className="text-xs text-[var(--text-tertiary)] ml-1">可选</span>
             </label>
             <textarea
               rows={8}
               value={form.full_story}
               onChange={e => updateField('full_story', e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-y"
+              className="w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-input)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)] focus:border-transparent resize-y"
               placeholder="如果有完整故事文本，可以粘贴到这里..."
             />
           </div>
@@ -421,8 +421,8 @@ export function ProjectForm({
                   onClick={() => updateField('target_platform', p)}
                   className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
                     form.target_platform === p
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                      : 'border-gray-200 text-gray-600 hover:border-indigo-300 hover:text-indigo-600'
+                      ? 'bg-[var(--accent-primary)] text-[var(--text-inverse)] border-[var(--accent-primary)] shadow-sm'
+                      : 'border-[var(--border-default)] text-[var(--text-secondary)] hover:border-[var(--accent-border)] hover:text-[var(--accent-primary)]'
                   }`}
                 >
                   {p}
@@ -441,8 +441,8 @@ export function ProjectForm({
                   onClick={() => updateField('aspect_ratio', r)}
                   className={`px-4 py-2 rounded-lg text-sm border transition-colors ${
                     form.aspect_ratio === r
-                      ? 'bg-indigo-600 text-white border-indigo-600'
-                      : 'border-gray-200 hover:border-indigo-300'
+                      ? 'bg-[var(--accent-primary)] text-[var(--text-inverse)] border-[var(--accent-primary)]'
+                      : 'border-[var(--border-default)] text-[var(--text-secondary)] hover:border-[var(--accent-border)]'
                   }`}
                 >
                   {r}
@@ -453,7 +453,7 @@ export function ProjectForm({
 
           <div>
             <label className="block text-sm font-medium mb-1.5">模型选择 *</label>
-            <p className="text-xs text-gray-400 mb-1.5">免费模式使用 Agnes AI，付费模式使用豆包 Ark</p>
+            <p className="text-xs text-[var(--text-tertiary)] mb-1.5">免费模式使用 Agnes AI，付费模式使用豆包 Ark</p>
             <div className="flex gap-2">
               {[
                 { value: 'agnes', label: '免费模式 Agnes' },
@@ -465,8 +465,8 @@ export function ProjectForm({
                   onClick={() => updateField('model_provider', opt.value)}
                   className={`px-4 py-2 rounded-lg text-sm border transition-colors ${
                     form.model_provider === opt.value
-                      ? 'bg-indigo-600 text-white border-indigo-600'
-                      : 'border-gray-200 hover:border-indigo-300'
+                      ? 'bg-[var(--accent-primary)] text-[var(--text-inverse)] border-[var(--accent-primary)]'
+                      : 'border-[var(--border-default)] text-[var(--text-secondary)] hover:border-[var(--accent-border)]'
                   }`}
                 >
                   {opt.label}
@@ -489,7 +489,7 @@ export function ProjectForm({
             <div>
               <label className="block text-sm font-medium mb-1">
                 单集时长（秒） *
-                <span className="text-xs text-gray-400 ml-1">15-300</span>
+                <span className="text-xs text-[var(--text-tertiary)] ml-1">15-300</span>
               </label>
               <div className="flex flex-wrap gap-2 mb-2">
                 {DURATION_QUICK.map(d => (
@@ -499,8 +499,8 @@ export function ProjectForm({
                     onClick={() => updateField('episode_duration', d)}
                     className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
                       form.episode_duration === d
-                        ? 'bg-indigo-600 text-white border-indigo-600'
-                        : 'border-gray-200 hover:border-indigo-300'
+                        ? 'bg-[var(--accent-primary)] text-[var(--text-inverse)] border-[var(--accent-primary)]'
+                        : 'border-[var(--border-default)] text-[var(--text-secondary)] hover:border-[var(--accent-border)]'
                     }`}
                   >
                     {d}s
@@ -521,7 +521,7 @@ export function ProjectForm({
                 placeholder="自定义时长（15-300）"
               />
               {!isValidDuration(form.episode_duration) && (
-                <p className="text-xs text-red-500 mt-0.5">时长需在 15-300 秒之间，且为整数</p>
+                <p className="text-xs text-[var(--status-error)] mt-0.5">时长需在 15-300 秒之间，且为整数</p>
               )}
             </div>
           </div>

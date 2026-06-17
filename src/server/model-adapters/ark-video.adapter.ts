@@ -6,7 +6,7 @@
 // Format: content_array
 // Audio: generate_audio supported
 // ============================================
-import { BaseVideoAdapter } from './base.adapter'
+import { BaseVideoAdapter, normalizeStatus, createAdapterError } from './base.adapter'
 import {
   VideoGenerationRequest,
   VideoGenerationResponse,
@@ -44,7 +44,7 @@ export class ArkVideoAdapter extends BaseVideoAdapter {
   // ============================================================
   async generate(request: VideoGenerationRequest): Promise<VideoGenerationResponse> {
     if (!this.apiKey) {
-      throw new Error('ArkVideoAdapter: apiKey is required')
+      throw createAdapterError({ code: 'AUTH_ERROR', message: 'ArkVideoAdapter: apiKey is required' })
     }
 
     const create = await this.createVideoTask(request)
@@ -61,13 +61,18 @@ export class ArkVideoAdapter extends BaseVideoAdapter {
     }
 
     if (wait.timedOut) {
-      throw new Error(
-        `Ark 视频任务 ${wait.taskId} 轮询超时 (${wait.pollAttempts} 次, ${wait.totalSeconds}s)。` +
-        `任务仍在远端，task_id 已保存，可稍后继续检查。`
-      )
+      throw createAdapterError({
+        code: 'TIMEOUT',
+        message: `Ark 视频任务 ${wait.taskId} 轮询超时 (${wait.pollAttempts} 次, ${wait.totalSeconds}s)。任务仍在远端，task_id 已保存，可稍后继续检查。`,
+        retryable: true,
+      })
     }
 
-    throw new Error(`Ark 视频生成失败: ${wait.error || JSON.stringify(wait.lastResponse).substring(0, 200)}`)
+    throw createAdapterError({
+      code: 'GENERATION_FAILED',
+      message: `Ark 视频生成失败: ${wait.error || JSON.stringify(wait.lastResponse).substring(0, 200)}`,
+      retryable: true,
+    })
   }
 
   // ============================================================
@@ -76,10 +81,10 @@ export class ArkVideoAdapter extends BaseVideoAdapter {
   // ============================================================
   async createVideoTask(request: VideoGenerationRequest): Promise<VideoTaskCreationResult> {
     if (!this.apiKey) {
-      throw new Error('ArkVideoAdapter: apiKey is required')
+      throw createAdapterError({ code: 'AUTH_ERROR', message: 'ArkVideoAdapter: apiKey is required' })
     }
     if (!this.baseUrl) {
-      throw new Error('ArkVideoAdapter: baseUrl is required')
+      throw createAdapterError({ code: 'CONFIG_ERROR', message: 'ArkVideoAdapter: baseUrl is required' })
     }
 
     // Build content array (confirmed working format from probe)
@@ -137,7 +142,12 @@ export class ArkVideoAdapter extends BaseVideoAdapter {
 
     if (!res.ok) {
       const errText = await res.text()
-      throw new Error(`Ark Video create error (${res.status}): ${errText.substring(0, 300)}`)
+      throw createAdapterError({
+        code: 'API_ERROR',
+        message: `Ark Video create error (${res.status}): ${errText.substring(0, 300)}`,
+        retryable: res.status >= 500 || res.status === 429,
+        statusCode: res.status,
+      })
     }
 
     const data = (await res.json()) as Record<string, unknown>
@@ -151,7 +161,11 @@ export class ArkVideoAdapter extends BaseVideoAdapter {
       || '') as string
 
     if (!taskId) {
-      throw new Error(`No task_id in Ark video response: ${JSON.stringify(data).substring(0, 200)}`)
+      throw createAdapterError({
+        code: 'NO_TASK_ID',
+        message: `No task_id in Ark video response: ${JSON.stringify(data).substring(0, 200)}`,
+        retryable: false,
+      })
     }
 
     return {
@@ -167,7 +181,7 @@ export class ArkVideoAdapter extends BaseVideoAdapter {
   // ============================================================
   async pollVideoTask(taskId: string): Promise<VideoTaskPollResult> {
     if (!this.apiKey) {
-      throw new Error('ArkVideoAdapter: apiKey is required')
+      throw createAdapterError({ code: 'AUTH_ERROR', message: 'ArkVideoAdapter: apiKey is required' })
     }
 
     const res = await fetch(`${this.baseUrl}/contents/generations/tasks/${taskId}`, {
@@ -182,13 +196,15 @@ export class ArkVideoAdapter extends BaseVideoAdapter {
         taskId,
         status: 'failed',
         error: `HTTP ${res.status}: ${JSON.stringify(data).substring(0, 200)}`,
+        errorCode: 'API_ERROR',
+        retryable: res.status >= 500 || res.status === 429,
         response: data,
         polledAt: new Date().toISOString(),
       }
     }
 
     const rawStatus = (data.status as string) || 'unknown'
-    const status = this.normalizeStatus(rawStatus)
+    const status = normalizeStatus(rawStatus)
 
     const result: VideoTaskPollResult = {
       taskId,
@@ -215,6 +231,8 @@ export class ArkVideoAdapter extends BaseVideoAdapter {
 
     if (status === 'failed' || status === 'error') {
       result.error = (data.error || data.message || JSON.stringify(data)) as string
+      result.errorCode = 'REMOTE_FAILED'
+      result.retryable = false
     }
 
     return result
@@ -311,7 +329,12 @@ export class ArkVideoAdapter extends BaseVideoAdapter {
     })
 
     if (!res.ok) {
-      throw new Error(`Ark download failed (${res.status}): ${videoUrl.substring(0, 80)}`)
+      throw createAdapterError({
+        code: 'DOWNLOAD_FAILED',
+        message: `Ark download failed (${res.status}): ${videoUrl.substring(0, 80)}`,
+        retryable: res.status >= 500 || res.status === 429,
+        statusCode: res.status,
+      })
     }
 
     const buffer = Buffer.from(await res.arrayBuffer())
@@ -319,17 +342,6 @@ export class ArkVideoAdapter extends BaseVideoAdapter {
     return localPath
   }
 
-  // ============================================================
-  // 标准化远端状态
-  // ============================================================
-  private normalizeStatus(raw: string): RemoteVideoTaskStatus {
-    const s = raw.toLowerCase()
-    if (s === 'completed' || s === 'succeeded' || s === 'success' || s === 'done') return 'completed'
-    if (s === 'failed' || s === 'error' || s === 'cancelled') return 'failed'
-    if (s === 'processing' || s === 'running' || s === 'in_progress' || s === 'generating') return 'processing'
-    if (s === 'queued' || s === 'pending' || s === 'waiting') return 'queued'
-    return 'unknown'
-  }
 }
 
 /**

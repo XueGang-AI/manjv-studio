@@ -2,7 +2,7 @@
 // Ark Seedream 5.0 Image Adapter (doubao-seedream-5-0-260128)
 // POST {baseUrl}/images/generations
 // ============================================
-import { BaseImageAdapter } from '../base.adapter'
+import { BaseImageAdapter, createAdapterError } from '../base.adapter'
 import { ImageGenerationRequest, ImageGenerationResponse } from '../types'
 
 export interface ArkImageAdapterConfig {
@@ -25,7 +25,7 @@ export class ArkImageAdapter extends BaseImageAdapter {
 
   async generate(request: ImageGenerationRequest): Promise<ImageGenerationResponse> {
     if (!this.apiKey) {
-      throw new Error('Ark API key not configured')
+      throw createAdapterError({ code: 'AUTH_ERROR', message: 'Ark API key not configured' })
     }
 
     // Build prompt: prepend style as a directive if provided
@@ -83,7 +83,12 @@ export class ArkImageAdapter extends BaseImageAdapter {
 
     if (!response.ok) {
       const errorText = await response.text()
-      throw new Error(`Ark Image API error (${response.status}): ${errorText.substring(0, 300)}`)
+      throw createAdapterError({
+        code: 'API_ERROR',
+        message: `Ark Image API error (${response.status}): ${errorText.substring(0, 300)}`,
+        retryable: response.status >= 500 || response.status === 429,
+        statusCode: response.status,
+      })
     }
 
     const data = await response.json()
@@ -105,7 +110,7 @@ export class ArkImageAdapter extends BaseImageAdapter {
     }
 
     if (images.length === 0) {
-      throw new Error('No images in Ark response')
+      throw createAdapterError({ code: 'NO_RESULT', message: 'No images in Ark response', retryable: true })
     }
 
     return { images }

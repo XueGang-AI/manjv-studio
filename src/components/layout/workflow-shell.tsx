@@ -66,7 +66,7 @@ function WorkflowShellMain({ children, className }: WorkflowShellMainProps) {
 }
 
 function WorkflowShellRightPanel({ children, className, defaultCollapsed, width = 320 }: WorkflowShellRightPanelProps) {
-  const { rightPanelCollapsed, setRightPanelCollapsed } = React.useContext(WorkflowShellContext)
+  const { rightPanelCollapsed } = React.useContext(WorkflowShellContext)
   const [internalCollapsed, setInternalCollapsed] = React.useState(defaultCollapsed ?? false)
   const collapsed = rightPanelCollapsed || internalCollapsed
 

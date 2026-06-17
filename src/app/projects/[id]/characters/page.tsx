@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { CharacterCard } from '@/components/project/CharacterCard'
 import {
   Wand2, RefreshCw, CheckCircle2, AlertTriangle,
@@ -61,7 +60,7 @@ export default function CharactersPage() {
     }
   }, [projectId])
 
-  useEffect(() => { fetchCharacters() }, [fetchCharacters])
+  useEffect(() => { queueMicrotask(() => fetchCharacters()) }, [fetchCharacters])
 
   // 轮询生成中状态
   useEffect(() => {

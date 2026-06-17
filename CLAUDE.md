@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code when working with code in this repository.
+本文件为 AI Agent（Claude Code 等）在本仓库协作时的指引，描述真实架构与不可破坏的约束。
 
 ## 项目概述
 
@@ -14,12 +14,68 @@ AI 漫剧全流程生产平台。8 步工作流已全部实现：
 
 ## 技术栈
 
-- **Next.js 16** + TypeScript + TailwindCSS v4 (Turbopack)
+- **Next.js 16** + TypeScript + TailwindCSS v4（Turbopack）
 - **Prisma 7** + PostgreSQL 16 — `datasource.url` 在 `prisma.config.ts`，不在 schema 里
-- **Zustand** (状态管理) + **@tanstack/react-query** (数据请求)
-- **FFmpeg 8** (视频合成)
-- **Vitest** (单元测试)
-- AI: Agnes 系列 / Ark 豆包系列
+- **FFmpeg 8**（视频合成，libx264 + aac）
+- **Vitest**（单元测试）
+- AI: Agnes 系列 / Ark 豆包系列，通过 AdapterFactory 统一调用
+
+## 进程架构（核心）
+
+系统由两个独立进程组成，**修改任一进程的运行链路前必须理解整体**：
+
+```
+浏览器 ──SSE──> Next.js Web 进程 ──> PostgreSQL（任务状态真相源）
+                                  └──> Redis Pub/Sub（事件通知）
+Worker 进程（独立）──> AI Adapters + FFmpeg
+```
+
+- **Web 进程**：API Routes + Pages。持有 Redis Subscriber（SSE 需要）和 Heartbeat（Health API），Publisher 按需初始化。
+- **Worker 进程**：入口 `src/server/workers/task.worker.ts`，独立运行，不经过 Next.js，**不会自动加载 `.env`**（入口已 `dotenv.config()`）。持有 Publisher + Heartbeat，无 Subscriber。
+- **PostgreSQL**：任务与业务数据唯一真相源。
+- **Redis**：低延迟事件通知层，可选。不可用时 SSE 自动降级到 DB 轮询（3 秒间隔）。
+
+## 任务系统（Task System）
+
+### 状态流转
+
+```
+pending → running → success
+                  → failed → (手动 retry) retrying → running → ...
+        → cancelled
+```
+
+- `pending` / `retrying`：等待领取（`pollOnce` / `claimTask` 同时领取两者）
+- `running`：Worker 已领取执行中
+- `success` / `failed` / `cancelled`：终态
+
+### 任务类型（注册在 `TASK_TYPE_REGISTRY`）
+
+| 类型 | Handler | 并发 | 超时 |
+|------|---------|------|------|
+| `GENERATE_STORYBOARD` | storyboard.handler | 2 | 10min |
+| `GENERATE_SHOT_IMAGES` | shot-images.handler | 1 | 15min |
+| `GENERATE_SHOT_VIDEOS` | shot-videos.handler | 1 | 35min |
+| `RENDER_FINAL_VIDEO` | final-render.handler | 1 | 10min |
+| `TEST_NOOP` | test-noop.handler | 5 | 1min（仅测试环境注册） |
+
+### 关键机制（不可破坏）
+
+1. **原子领取防重复执行**：`claimTask` 用 `updateMany WHERE status IN ('pending','retrying')`，PostgreSQL 行级锁保证同一任务同一时刻只被一个 Worker 领取。**不得改为非原子领取。**
+2. **崩溃恢复**：`recoverStaleTasks` 在 Worker 启动时 + 主循环每 30 秒执行，扫描超时的 `running`/`retrying` 任务。`retrying` 任务不递增 `retryCount`（从未被领取执行），`running` 任务递增（执行失败）。**不得移除定期恢复或改变 retryCount 语义。**
+3. **幂等保护**：每个 Handler 入口检查任务状态 + 已有产物跳过。`SHOT_VIDEOS` 通过 `remoteTaskId` 持久化避免重复提交远端视频任务。**崩溃恢复后不得重复提交远端任务。**
+4. **Redis 自动重连**：Publisher / Subscriber / Heartbeat 三连接均无限重试。Subscriber `ready` 后自动重新订阅 `refCount > 0` 的频道。Publisher `end` 事件重置缓存以便重建。**不得改回有限重试（会导致 Redis 重启后永久死亡）。**
+5. **优雅关闭**：SIGTERM/SIGINT 后停止领取新任务，等待运行中任务完成（最多 30s），写 `shutting_down` heartbeat，删除 heartbeat key，关闭连接。未完成任务保持 `running`，下次启动由崩溃恢复回收。
+6. **SSE 频道引用计数**：每个 SSE 客户端订阅项目频道 +1，断开 -1，归零时 `unsubscribe` Redis 频道，防止频道集合增长。
+
+### 任务相关文件
+
+- `src/server/workers/task.worker.ts` — Worker 主循环、原子领取、崩溃恢复、优雅关闭
+- `src/server/workers/task-events.ts` — Redis Pub/Sub + 共享 Subscriber + 引用计数频道管理
+- `src/server/workers/worker-heartbeat.ts` — Worker 心跳（Redis key，10s 写入，30s TTL）
+- `src/server/workers/handlers/*.handler.ts` — 各任务类型 Handler
+- `src/server/queues/task-queue.service.ts` — TaskService（创建/开始/完成/失败/重试/取消/删除）
+- `src/app/api/projects/[id]/tasks/stream/route.ts` — SSE 端点
 
 ## 关键架构原则
 
@@ -36,11 +92,14 @@ adapterFactory.getVideoAdapter(provider)  // IVideoAdapter
 优先级：`USE_MOCK_MODEL=true` → Mock → `provider="ark"` → Ark → 默认 → Agnes。**禁止绕过 AdapterFactory 直接调用 AI API。**
 
 适配器文件位于 `src/server/model-adapters/`：
-- `types.ts` — 接口定义 (ITextAdapter / IImageAdapter / IVideoAdapter)
+- `types.ts` — 接口定义（ITextAdapter / IImageAdapter / IVideoAdapter）+ `AdapterError` 结构化错误
+- `base.adapter.ts` — 共享 `normalizeStatus()` / `createAdapterError()`
 - `adapter.factory.ts` — AdapterFactory 单例
 - `mock/` — Mock 适配器（1s 延迟 + 硬编码数据）
 - `agnes/` — Agnes 适配器（OpenAI 兼容协议）
 - `ark/` + 根目录 `ark-*.adapter.ts` — Ark 适配器
+
+所有适配器错误统一为 `AdapterError`（`code` / `message` / `retryable` / `statusCode`），`retryable` 按 HTTP 状态判断（5xx / 429 可重试）。
 
 ### 2. 双 Provider 架构
 
@@ -55,7 +114,7 @@ adapterFactory.getVideoAdapter(provider)  // IVideoAdapter
 
 ### 4. 任务记录
 
-所有生成操作写入 `generation_tasks` + `task_logs` 表。TaskService 管理完整生命周期：pending → running → success/failed/cancelled。
+所有生成操作写入 `generation_tasks` + `task_logs` 表。TaskService 管理完整生命周期。
 
 ### 5. 版本管理
 
@@ -67,68 +126,29 @@ adapterFactory.getVideoAdapter(provider)  // IVideoAdapter
 
 ### 7. Duration 一致性
 
-`snapShotDuration()`（`src/lib/utils.ts`）确保 DB 存储时长与实际视频匹配：
-- Agnes: 8n+1 frames / 24fps
-- Ark i2v: 4~12s 整数
-- Ark t2v: 5 或 10s
-
-分镜生成时 `getMaxShotDuration()` + `splitOversizedShots()` 从源头约束镜头时长。
+`snapShotDuration()`（`src/lib/utils.ts`）确保 DB 存储时长与实际视频匹配。分镜生成时 `getMaxShotDuration()` + `splitOversizedShots()` 从源头约束镜头时长。
 
 ### 8. 角色一致性系统
 
-- 多角度参考图：front_full_body / front_half_body / left_side / right_side / back_view
-- 锚点图先行，后续角度以锚点图为参考确保一致性
-- 去重（已有角度跳过）、失败重试（指数退避 ×3）、先成后删（regenerate 全部成功再替换旧图）
-- 分镜图 prompt 嵌入角色完整外貌描述（hair/eyes/skin/face/clothing/signatureFeatures），根据 shot_size 自动匹配参考角度
+多角度参考图（front_full_body / front_half_body / left_side / right_side / back_view），锚点图先行，去重、失败重试（指数退避 ×3）、先成后删。
 
-## 项目状态
+### 9. FFmpeg 成片
 
-| 模块 | 状态 |
-|------|------|
-| Mock 全流程 | ✅ `npm run test:e2e` 20/20 |
-| Agnes 文本 API | ✅ 故事/角色/分镜均通过 |
-| Agnes 图片 API | ✅ 角色图 + 分镜图均生成 |
-| Agnes 视频 API | ✅ 创建→轮询→下载→ffprobe 全流程 |
-| Ark 文本 API | ✅ 适配器已实现 |
-| Ark 图片 API | ✅ 适配器已实现 |
-| Ark 视频 API | ✅ 适配器已实现 |
-| 版本管理 | ✅ 快照/回滚/对比 |
-| QC 质检 | ✅ 6 维度评分 |
+`src/server/services/ffmpeg.service.ts` 使用两阶段法：先 `normalizeInput()` 将每个输入标准化到统一规格（letterbox padding 居中填充，不裁切人物；统一 H.264 / AAC 44100Hz / yuv420p / 固定帧率；无音频输入补静音音轨），再 concat（`-c copy`，失败回退 re-encode）。解决异构分辨率（如 496×864 + 1280×768）concat `exit=254` 问题。`ffmpeg-utils.ts` 提供 ffprobe 校验与安全 spawn。
 
-### 已知问题
+## 不可破坏的约束
 
-- ⚠️ Agnes 视频队列延迟：非高峰 ~2min，高峰可能数小时
-- ⚠️ Agnes 视频分辨率：1280×768（非 1080×1920）
-- ⚠️ Agnes Image + `reference_images`：忽略 `num_outputs`，只返回 1 张
-- ⚠️ Agnes Video 输入限制：仅 1 张 inputImage
-- ⚠️ `npm run build` 可能因 Google Fonts 网络不可达而失败
+修改以下任一处前必须完整理解其上下文，**禁止为优化而破坏既有正确逻辑**：
 
-## 快速命令
-
-```bash
-npm run dev                          # 开发服务器（需要 DATABASE_URL）
-npm test                             # 单元测试（18 cases）
-npm run test:e2e                     # Mock 全流程 E2E
-npm run test:e2e:real                # 真实 API 最小闭环
-npm run db:push                      # 推送 Prisma schema
-npm run db:seed                      # 种子数据 + Prompt 模板同步
-npm run db:studio                    # Prisma Studio
-
-# API 探针
-npm run probe:agnes:text             # Agnes 文本
-npm run probe:agnes:image            # Agnes 图片
-npm run probe:agnes:video            # Agnes 视频（创建+轮询）
-npm run probe:agnes:video:poll       # Agnes 视频轮询（需 --task-id <id>）
-npm run probe:ark:text               # Ark 文本
-npm run probe:ark:image              # Ark 图片
-npm run probe:ark:video              # Ark 视频
-npm run probe:ark:video:poll         # Ark 视频轮询（需 --task-id <id>）
-
-# 全流程原型
-npx tsx scripts/e2e-real-15s-prototype.ts
-```
-
-**npm 缓存**：本地有权限问题，使用 `npm install --cache ~/.npm-cache-new`。
+- ❌ Worker 主循环、原子领取、崩溃恢复、retryCount 语义
+- ❌ Redis Pub/Sub 三连接的无限重试与自动重订阅
+- ❌ SSE 频道引用计数与事件去重（eventId）
+- ❌ FFmpeg 两阶段规范化法（不得改回裸 concat）
+- ❌ 各 Handler 的幂等保护与远端任务去重
+- ❌ AdapterFactory 调用入口（不得绕过直接调 AI API）
+- ❌ Prompt 模板化（不得硬编码 Prompt）
+- ❌ 数据库 schema（Prisma migration 需可回滚，先说明风险）
+- ❌ `.env` / API Key（不读取、不显示、不提交、不记录）
 
 ## 开发注意事项
 
@@ -148,11 +168,9 @@ npx tsx scripts/e2e-real-15s-prototype.ts
 
 - 创建：`POST /v1/videos`，参数 `model` + `prompt` + `num_frames` + `frame_rate`
 - 推荐轮询：`/agnesapi?video_id=<VIDEO_ID>`（优先用 `video_id`）
-- 兼容轮询：`/v1/videos/<task_id>`
-- 时长控制：`num_frames`(≤441, 8n+1) + `frame_rate`(1-60)，`seconds = num_frames / frame_rate`
-- 视频 URL 字段：`remixed_from_video_id`（旧版兼容）
-- TTS 配音：`voice_text` + `generate_audio: true`（始终开启）→ AAC 2ch 48kHz
-- 输入限制：仅 1 张 `image`（URL 或 data URI）
+- 时长控制：`num_frames`(≤441, 8n+1) + `frame_rate`(1-60)
+- TTS 配音：`voice_text` + `generate_audio: true` → AAC 2ch 48kHz
+- 输入限制：仅 1 张 `image`
 
 ### Agnes Image API
 
@@ -160,22 +178,42 @@ npx tsx scripts/e2e-real-15s-prototype.ts
 - 分镜图一致性策略：prompt 嵌入角色完整外貌描述 + `numOutputs: 4`（不传 reference_images）
 - 角色图一致性策略：锚点图先行 + reference_images 传 1 张
 
-### Ark (火山引擎/豆包)
+### Ark（火山引擎/豆包）
 
-- 文本模型 `doubao-seed-character-251128`：OpenAI 兼容 `/chat/completions`，JSON 策略 `prompt_only`
-- 图片模型 `doubao-seedream-5-0-260128`：Ark 图片 API
-- 视频模型 `doubao-seedance-1-5-pro-251215`：异步任务（创建 → 轮询 → 下载）
-  - t2v 支持 5/10s，i2v 支持 4~12s 整数（`snapArkSeedanceDuration` 自动 clamp）
+- 文本模型 `doubao-seed-character-251128`：OpenAI 兼容 `/chat/completions`
+- 图片模型 `doubao-seedream-5-0-260128`
+- 视频模型 `doubao-seedance-1-5-pro-251215`：异步任务（创建 → 轮询 → 下载），t2v 5/10s，i2v 4~12s 整数
 - 环境变量：`ARK_API_KEY` + `ARK_API_BASE_URL`（默认 `https://ark.cn-beijing.volces.com/api/v3`）
+- Ark 视频 URL 位于轮询响应 `content.video_url` 路径
 
-### 项目表单
+## 快速命令
 
-- `story_type` / `art_style`：多选 + 自定义，逗号分隔存储
-- `episode_duration`：15-300s，整数
-- `core_conflict`：选填，空值时 AI 自动提炼
+```bash
+npm run dev:all                # Web + Worker（开发）
+npm run dev                    # 仅 Web
+npm run worker                 # 仅 Worker
+npm test                       # 单元测试
+npm run test:e2e               # Mock 全流程 E2E
+npm run test:e2e:real          # 真实 API 最小闭环
+npm run db:push                # 推送 Prisma schema
+npm run db:seed                # 种子数据 + Prompt 模板
+npm run db:studio              # Prisma Studio
+npm run lint                   # ESLint
+# AI 探针：npm run probe:agnes:text / probe:ark:video 等，见 package.json
+```
 
-### 禁止提交
+**npm 缓存**：本地有权限问题，使用 `npm install --cache ~/.npm-cache-new`。
 
-- `.env` / `uploads/` / `scripts/output/`（已 .gitignore）
+## 已知问题
+
+- ⚠️ Agnes 视频队列延迟：非高峰 ~2min，高峰可能数小时
+- ⚠️ Agnes 视频分辨率：1280×768（非 1080×1920），FFmpeg 两阶段法已处理异构分辨率合成
+- ⚠️ Agnes Image + `reference_images`：忽略 `num_outputs`，只返回 1 张
+- ⚠️ Agnes Video 输入限制：仅 1 张 inputImage
+- ⚠️ `npm run build` 可能因 Google Fonts 网络不可达而失败
+
+## 禁止提交
+
+- `.env` / `uploads/` / `scripts/output/` / `screenshots/` / `public/` / `.claude/`（已 .gitignore）
 - 任何包含 API Key（`sk-` 等）的文件
 - 视频/图片产物

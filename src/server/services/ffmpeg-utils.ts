@@ -18,14 +18,10 @@ export const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads'
 
 /** 单个输入视频最大体积 (500 MB) */
 const MAX_INPUT_FILE_SIZE = 500 * 1024 * 1024
-/** 单任务输入总大小上限 (2 GB) — enforced in concatVideos */
-const _MAX_TOTAL_INPUT_SIZE = 2 * 1024 * 1024 * 1024
 /** 单个输入视频数量上限 */
 const MAX_INPUT_COUNT = 100
 /** 下载超时 (30s) */
 const DOWNLOAD_TIMEOUT = 30_000
-/** 下载最大重定向次数 */
-const MAX_REDIRECTS = 5
 /** spawn 最大 stderr 缓存 (64 KB) */
 const MAX_STDERR_BYTES = 64 * 1024
 /** spawn 最大 stdout 缓存 (16 KB) */
@@ -84,7 +80,6 @@ function isPrivateIP(hostname: string): boolean {
 
 /** 检查 URL 是否包含控制字符 */
 function hasControlChars(str: string): boolean {
-  // eslint-disable-next-line no-control-regex
   return /[\x00-\x1f\x7f\r\n]/.test(str)
 }
 
@@ -523,7 +518,7 @@ export async function probeVideo(localPath: string): Promise<ProbeResult> {
       hasVideoStream: true,
       hasAudioStream: !!audioStream,
     }
-  } catch (e) {
+  } catch {
     return {
       valid: false, duration: null, width: null, height: null, format: null,
       hasVideoStream: false, hasAudioStream: false,

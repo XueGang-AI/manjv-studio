@@ -94,14 +94,6 @@ function parsePromptFile(filePath: string): PromptFileInfo {
   const sourceMatch = content.match(/来源文件:\s*(.+)/)
   const sourceFile = sourceMatch ? sourceMatch[1].trim() : 'unknown'
 
-  // 提取 JSON Schema (简化版 - 从 Output JSON Schema 块提取)
-  const schemaMatch = content.match(/## Output JSON Schema\n([\s\S]*?)(?=\n##|\n---|\n*$)/)
-  let outputSchema: Record<string, unknown> | null = null
-  if (schemaMatch) {
-    // 将文档化的 schema 转为简化 JSON schema
-    outputSchema = { _schema_defined: true, _raw: schemaMatch[1].trim().substring(0, 500) }
-  }
-
   return {
     name: fileName,
     category,

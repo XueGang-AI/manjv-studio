@@ -4,7 +4,7 @@
 // 轮询推荐: /agnesapi?video_id=<VIDEO_ID>
 // 兼容旧版: /v1/videos/<task_id>
 // ============================================
-import { BaseVideoAdapter } from '../base.adapter'
+import { BaseVideoAdapter, normalizeStatus, createAdapterError } from '../base.adapter'
 import {
   VideoGenerationRequest,
   VideoGenerationResponse,
@@ -43,7 +43,7 @@ export class AgnesVideoAdapter extends BaseVideoAdapter {
   // ============================================================
   async generate(request: VideoGenerationRequest): Promise<VideoGenerationResponse> {
     if (!this.apiKey) {
-      throw new Error('AGNES_VIDEO_API_KEY not configured')
+      throw createAdapterError({ code: 'AUTH_ERROR', message: 'AGNES_VIDEO_API_KEY not configured' })
     }
 
     const create = await this.createVideoTask(request)
@@ -60,13 +60,18 @@ export class AgnesVideoAdapter extends BaseVideoAdapter {
     }
 
     if (wait.timedOut) {
-      throw new Error(
-        `视频任务 ${wait.taskId} 轮询超时 (${wait.pollAttempts} 次, ${wait.totalSeconds}s)。` +
-        `任务仍在远端，task_id 已保存，可稍后继续检查。`
-      )
+      throw createAdapterError({
+        code: 'TIMEOUT',
+        message: `视频任务 ${wait.taskId} 轮询超时 (${wait.pollAttempts} 次, ${wait.totalSeconds}s)。任务仍在远端，task_id 已保存，可稍后继续检查。`,
+        retryable: true,
+      })
     }
 
-    throw new Error(`视频生成失败: ${wait.error || JSON.stringify(wait.lastResponse).substring(0, 200)}`)
+    throw createAdapterError({
+      code: 'GENERATION_FAILED',
+      message: `视频生成失败: ${wait.error || JSON.stringify(wait.lastResponse).substring(0, 200)}`,
+      retryable: true,
+    })
   }
 
   // ============================================================
@@ -74,7 +79,7 @@ export class AgnesVideoAdapter extends BaseVideoAdapter {
   // ============================================================
   async createVideoTask(request: VideoGenerationRequest): Promise<VideoTaskCreationResult> {
     if (!this.apiKey) {
-      throw new Error('AGNES_VIDEO_API_KEY not configured')
+      throw createAdapterError({ code: 'AUTH_ERROR', message: 'AGNES_VIDEO_API_KEY not configured' })
     }
 
     const frameRate = request.fps || DEFAULT_FRAME_RATE
@@ -126,7 +131,12 @@ export class AgnesVideoAdapter extends BaseVideoAdapter {
 
     if (!res.ok) {
       const errText = await res.text()
-      throw new Error(`Agnes Video create error (${res.status}): ${errText.substring(0, 300)}`)
+      throw createAdapterError({
+        code: 'API_ERROR',
+        message: `Agnes Video create error (${res.status}): ${errText.substring(0, 300)}`,
+        retryable: res.status >= 500 || res.status === 429,
+        statusCode: res.status,
+      })
     }
 
     const data = (await res.json()) as Record<string, unknown>
@@ -137,7 +147,11 @@ export class AgnesVideoAdapter extends BaseVideoAdapter {
     const pollId = videoId || taskId
 
     if (!pollId) {
-      throw new Error(`No task_id/video_id in video response: ${JSON.stringify(data).substring(0, 200)}`)
+      throw createAdapterError({
+        code: 'NO_TASK_ID',
+        message: `No task_id/video_id in video response: ${JSON.stringify(data).substring(0, 200)}`,
+        retryable: false,
+      })
     }
 
     return {
@@ -154,7 +168,7 @@ export class AgnesVideoAdapter extends BaseVideoAdapter {
   // ============================================================
   async pollVideoTask(taskId: string): Promise<VideoTaskPollResult> {
     if (!this.apiKey) {
-      throw new Error('AGNES_VIDEO_API_KEY not configured')
+      throw createAdapterError({ code: 'AUTH_ERROR', message: 'AGNES_VIDEO_API_KEY not configured' })
     }
 
     // 根据 ID 前缀选择轮询端点
@@ -175,13 +189,15 @@ export class AgnesVideoAdapter extends BaseVideoAdapter {
         taskId,
         status: 'failed',
         error: `HTTP ${res.status}: ${JSON.stringify(data).substring(0, 200)}`,
+        errorCode: 'API_ERROR',
+        retryable: res.status >= 500 || res.status === 429,
         response: data,
         polledAt: new Date().toISOString(),
       }
     }
 
     const rawStatus = (data.status as string) || 'unknown'
-    const status = this.normalizeStatus(rawStatus)
+    const status = normalizeStatus(rawStatus)
 
     const result: VideoTaskPollResult = {
       taskId,
@@ -204,6 +220,8 @@ export class AgnesVideoAdapter extends BaseVideoAdapter {
 
     if (status === 'failed' || status === 'error') {
       result.error = (data.error || data.message || JSON.stringify(data)) as string
+      result.errorCode = 'REMOTE_FAILED'
+      result.retryable = false
     }
 
     return result
@@ -296,7 +314,12 @@ export class AgnesVideoAdapter extends BaseVideoAdapter {
     })
 
     if (!res.ok) {
-      throw new Error(`Download failed (${res.status}): ${videoUrl.substring(0, 80)}`)
+      throw createAdapterError({
+        code: 'DOWNLOAD_FAILED',
+        message: `Download failed (${res.status}): ${videoUrl.substring(0, 80)}`,
+        retryable: res.status >= 500 || res.status === 429,
+        statusCode: res.status,
+      })
     }
 
     const buffer = Buffer.from(await res.arrayBuffer())
@@ -304,17 +327,6 @@ export class AgnesVideoAdapter extends BaseVideoAdapter {
     return localPath
   }
 
-  // ============================================================
-  // 标准化远端状态
-  // ============================================================
-  private normalizeStatus(raw: string): RemoteVideoTaskStatus {
-    const s = raw.toLowerCase()
-    if (s === 'completed' || s === 'succeeded' || s === 'success' || s === 'done') return 'completed'
-    if (s === 'failed' || s === 'error' || s === 'cancelled') return 'failed'
-    if (s === 'processing' || s === 'running' || s === 'in_progress' || s === 'generating') return 'processing'
-    if (s === 'queued' || s === 'pending' || s === 'waiting') return 'queued'
-    return 'unknown'
-  }
 }
 
 /**

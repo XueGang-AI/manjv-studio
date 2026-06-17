@@ -43,6 +43,15 @@ yarn-error.log*
 # scripts output (parsed files)
 /scripts/output/
 
+# screenshots (local UI snapshots, not source)
+/screenshots/
+
+# local static test assets (experimental preview assets)
+/public/
+
+# local Claude Code workspace config
+/.claude/
+
 # logs
 *.log
 

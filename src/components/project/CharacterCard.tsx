@@ -44,7 +44,6 @@ export function CharacterCard({ character, confirmed, onConfirm }: Props) {
   const clothing: Record<string, unknown> = (character.clothing as Record<string, unknown>) || {}
   const signatureFeatures = (character.signatureFeatures as string[]) || []
   const languageStyle = character.languageStyle as Record<string, unknown> || {}
-  const actionHabits = (character.actionHabits as string[]) || []
   const personalityTags = (personality.tags as string[]) || []
 
   return (

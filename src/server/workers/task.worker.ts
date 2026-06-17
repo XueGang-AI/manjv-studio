@@ -142,14 +142,17 @@ function markDone(taskType: string, taskId: string) {
 /**
  * 原子领取任务
  *
- * 使用条件更新：只更新 status='pending' 的行。
- * 检查 affected rows（Prisma update 返回更新后的记录），
- * 如果记录不存在或 status 不为 pending，则领取失败。
+ * 使用条件更新：只更新 status in ('pending','retrying') 的行。
+ * 检查 affected rows（Prisma updateMany 返回更新计数），
+ * 如果记录不存在或状态已变，则领取失败。
+ *
+ * 同时接受 'retrying' 是因为 retryTask() 将手动重试任务置为 'retrying'，
+ * 若不在此处领取，这些任务会卡在 'retrying' 成为孤儿。
  */
 async function claimTask(taskId: string): Promise<boolean> {
   try {
     const updated = await prisma.generationTask.updateMany({
-      where: { id: taskId, status: 'pending' },
+      where: { id: taskId, status: { in: ['pending', 'retrying'] } },
       data: { status: 'running', startedAt: new Date() },
     })
     return updated.count > 0
@@ -194,7 +197,11 @@ async function recoverStaleTasks(): Promise<number> {
       // 避免回收当前 Worker 仍在执行的任务
       if (runningTaskIds.has(task.id)) continue
 
-      const newRetryCount = task.retryCount + 1
+      // retrying 任务（手动重试，retryTask 已 increment retryCount）从未被领取执行，
+      // 超时是因为长时间未被领取（如 Worker 离线），不应再次 increment，否则会过早达到 maxRetries。
+      // running 任务（已领取执行）超时表示执行失败，需要 increment。
+      const isRetrying = task.status === 'retrying'
+      const newRetryCount = isRetrying ? task.retryCount : task.retryCount + 1
       const exceededRetries = newRetryCount >= task.maxRetries
 
       if (exceededRetries) {
@@ -322,10 +329,11 @@ async function dispatchTask(taskId: string, taskType: string): Promise<void> {
 
 async function pollOnce(): Promise<number> {
   try {
-    // 只查询 allowlist 中的 pending 任务
+    // 查询 allowlist 中的 pending 和 retrying 任务
+    // retrying 任务由 retryTask() 创建（手动重试），需被领取才能执行
     const pendingTasks = await prisma.generationTask.findMany({
       where: {
-        status: 'pending',
+        status: { in: ['pending', 'retrying'] },
         taskType: { in: [...ALLOWED_TASK_TYPES] },
       },
       orderBy: { createdAt: 'asc' },
@@ -399,6 +407,8 @@ async function main(): Promise<void> {
   })
 
   // 主循环
+  const RECOVERY_INTERVAL_MS = 30_000 // 每 30 秒执行一次崩溃恢复
+  let lastRecoveryAt = Date.now()
   while (!shuttingDown) {
     const claimed = await pollOnce()
 
@@ -413,8 +423,19 @@ async function main(): Promise<void> {
       await sleep(500)
     }
 
-    // 定期崩溃恢复（每 30 秒）
-    // 简化：每次循环都检查，但只在间隔足够时执行
+    // 定期崩溃恢复：扫描超时的 running/retrying 任务。
+    // 处理 Worker 未崩溃但 handler 挂起（如远端 API 无响应）导致的 stuck running 任务。
+    if (Date.now() - lastRecoveryAt >= RECOVERY_INTERVAL_MS) {
+      lastRecoveryAt = Date.now()
+      try {
+        const recovered = await recoverStaleTasks()
+        if (recovered > 0) {
+          console.log(`[worker] Periodic recovery: ${recovered} stale task(s)`)
+        }
+      } catch (err) {
+        console.error('[worker] Periodic recovery error:', (err as Error).message)
+      }
+    }
   }
 
   // 等待运行中的任务完成（最多 30 秒）

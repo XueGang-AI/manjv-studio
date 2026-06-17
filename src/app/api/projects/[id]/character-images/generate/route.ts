@@ -3,7 +3,8 @@ import prisma from '@/lib/prisma'
 import { adapterFactory } from '@/server/model-adapters/adapter.factory'
 import type { ImageGenerationRequest } from '@/server/model-adapters/types'
 
-/** 角色参考图类型定义 */
+/** 角色参考图类型定义（值用于类型推导，运行时通过 RefType 约束） */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const REF_TYPES = {
   front_full_body:  '正面全身',
   front_half_body:  '正面半身/正脸',
@@ -120,13 +121,10 @@ export async function POST(
 
         // 全部角度已有，跳过
         if (missingTypes.length === 0) {
-          console.log(`[Dedup] 角色 ${char.name || char.id} 所有角度已存在，跳过`)
           // 把已有图片加入结果，前端可以正常展示
           allResults.push({ characterId: char.id, characterName: char.name || '', images: [] })
           continue
         }
-
-        console.log(`[Dedup] 角色 ${char.name || char.id}: 已有 ${existingTypes.size} 个角度，需生成 ${missingTypes.length} 个: ${missingTypes.join(', ')}`)
 
         // 角色核心描述（所有角度共享）
         const corePrompt = char.enFixedPrompt || char.zhFixedPrompt || `${char.name}, character design, ${style} style`
@@ -140,8 +138,6 @@ export async function POST(
           const refType = missingTypes[i]
           const angleSuffix = ANGLE_PROMPTS[refType] || ''
           const prompt = `${corePrompt}, ${angleSuffix}`
-          // 只有当 anchor 不存在且当前是第一个类型，才是主图
-          const isFirst = i === 0 && !existingAnchor
 
           const genReq: ImageGenerationRequest = {
             taskType: 'character_image',

@@ -6,7 +6,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string; episodeId: string; videoId: string }> }
 ) {
   try {
-    const { id: projectId, episodeId, videoId } = await params
+    const { id: projectId, videoId } = await params
     const video = await prisma.shotVideo.findFirst({ where: { id: videoId, projectId } })
     if (!video) return NextResponse.json({ success: false, error: '视频不存在' }, { status: 404 })
 

@@ -30,6 +30,7 @@ import {
   RenderError,
   sanitizeError,
   type RenderErrorCode,
+  type ProbeResult,
 } from './ffmpeg-utils'
 
 // Re-export for external consumers
@@ -120,17 +121,24 @@ export class FFmpegService {
   }
 
   /**
-   * 拼接视频片段 → 单个 MP4（安全加固版）
+   * 拼接视频片段 → 单个 MP4（安全加固版 — 两阶段法）
    *
    * 流程：
    * 1. 校验输入参数
    * 2. 创建任务临时目录
    * 3. 远程 URL → 下载到临时目录
    * 4. ffprobe 预校验每个输入
-   * 5. 生成 concat 列表（只有本地受控路径）
-   * 6. FFmpeg spawn 合成
-   * 7. 输出移到正式目录
+   * 5. 逐个标准化输入到统一中间格式（解决异构分辨率/音频/帧率）
+   * 6. 生成 concat 列表（只有标准化后的本地受控路径）
+   * 7. FFmpeg concat 合成
    * 8. 清理临时目录
+   *
+   * 为什么需要两阶段：
+   * - concat demuxer 在 demux 层拼接流，要求所有输入编码参数一致
+   * - 非标准分辨率（如 496×864）与标准分辨率（1280×768）混搭时，
+   *   demuxer 在切换文件时解码器无法处理格式跳变，导致 exit=254
+   * - 标准化阶段统一分辨率、音频格式、帧率、像素格式，
+   *   确保 concat demuxer 可以正确工作
    */
   async concatVideos(input: RenderInput): Promise<RenderResult> {
     // Concurrency guard
@@ -148,6 +156,9 @@ export class FFmpegService {
       const [w, h] = (input.aspectRatio || '9:16') === '16:9' ? [1920, 1080] : [1080, 1920]
       const fps = input.fps || 25
       const outputPath = path.join(this.outputDir, input.outputFileName)
+      const safeW = Math.max(1, Math.round(w))
+      const safeH = Math.max(1, Math.round(h))
+      const safeFps = Math.max(1, Math.min(120, fps))
 
       // 2. Create task temp dir
       taskDir = createTaskTempDir(this.tempRoot)
@@ -192,35 +203,72 @@ export class FFmpegService {
       }
 
       // 4. ffprobe pre-check each input
+      const probeResults: ProbeResult[] = []
       for (let i = 0; i < localPaths.length; i++) {
         const probe = await probeVideo(localPaths[i])
         if (!probe.valid) {
           throw new RenderError('VIDEO_VALIDATION_FAILED', `视频片段 #${i + 1} 校验失败: ${probe.error || '格式无效'}`)
         }
         console.log(`[ffmpeg] Input #${i + 1}: ${probe.duration?.toFixed(1)}s, ${probe.width}x${probe.height}, format=${probe.format}`)
+        probeResults.push(probe)
       }
 
-      // 5. Write concat list (only local controlled paths)
-      const listPath = writeConcatList(taskDir, localPaths)
+      // 5. Normalize each input to a uniform intermediate format
+      //
+      // 所有输入统一为：目标分辨率（letterbox padding）、H.264、AAC、44100Hz 立体声、
+      // 固定帧率、yuv420p。无音频的输入会添加静音音轨，确保 concat demuxer 兼容。
+      // 这是解决非标准分辨率（如 496x864）和异构输入格式导致 concat 失败的关键步骤。
+      const normalizedPaths: string[] = []
+      for (let i = 0; i < localPaths.length; i++) {
+        const probe = probeResults[i]
+        const normalizedPath = path.join(taskDir, `norm-${i}.mp4`)
 
-      // 6. FFmpeg concat
-      const safeW = Math.max(1, Math.round(w))
-      const safeH = Math.max(1, Math.round(h))
-      const safeFps = Math.max(1, Math.min(120, fps))
+        console.log(
+          `[ffmpeg] Normalizing input #${i + 1}: ${probe.width}x${probe.height} → ${safeW}x${safeH}` +
+          `${probe.hasAudioStream ? '' : ' (adding silent audio)'}`
+        )
 
-      const result = await spawnSafe(FFMPEG_PATH, [
+        await this.normalizeInput(
+          localPaths[i],
+          normalizedPath,
+          safeW, safeH, safeFps,
+          probe.hasAudioStream,
+        )
+
+        normalizedPaths.push(normalizedPath)
+      }
+
+      // 6. Write concat list with normalized file paths
+      const listPath = writeConcatList(taskDir, normalizedPaths)
+
+      // 7. FFmpeg concat — inputs are already normalized, try -c copy first (fast, no quality loss)
+      let result = await spawnSafe(FFMPEG_PATH, [
         '-f', 'concat',
         '-safe', '0',
         '-i', listPath,
-        '-vf', `scale=${safeW}:${safeH}:force_original_aspect_ratio=decrease,pad=${safeW}:${safeH}:(ow-iw)/2:(oh-ih)/2,fps=${safeFps},format=yuv420p`,
-        '-c:v', 'libx264',
-        '-preset', 'fast',
-        '-crf', '23',
-        '-c:a', 'aac',
-        '-b:a', '128k',
+        '-c', 'copy',
+        '-movflags', '+faststart',
         '-y',
         outputPath,
       ], { timeout: 300_000 })
+
+      // Fallback: if -c copy fails (e.g., minor parameter mismatch), re-encode
+      if (result.exitCode !== 0 && !result.timedOut) {
+        console.log(`[ffmpeg] concat -c copy failed (exit=${result.exitCode}), falling back to re-encode`)
+        result = await spawnSafe(FFMPEG_PATH, [
+          '-f', 'concat',
+          '-safe', '0',
+          '-i', listPath,
+          '-c:v', 'libx264',
+          '-preset', 'fast',
+          '-crf', '23',
+          '-c:a', 'aac',
+          '-b:a', '128k',
+          '-movflags', '+faststart',
+          '-y',
+          outputPath,
+        ], { timeout: 300_000 })
+      }
 
       if (result.timedOut) {
         throw new RenderError('RENDER_TIMEOUT', '视频合成超时，请减少镜头数量或缩短视频时长后重试')
@@ -244,6 +292,64 @@ export class FFmpegService {
         safeCleanupDir(taskDir, this.tempRoot)
       }
       this.rendering = false
+    }
+  }
+
+  /**
+   * 标准化单个输入视频到统一中间格式
+   *
+   * 解决问题：
+   * - 非标准分辨率（如 496x864）→ letterbox padding 到目标分辨率
+   * - 异构音频格式（mono/stereo, 不同采样率）→ 统一 AAC 44100Hz 立体声
+   * - 无音频输入 → 添加静音音轨
+   * - 可变帧率 → 固定帧率
+   * - 不同像素格式 → yuv420p
+   *
+   * 不改变画面内容，不裁切人物，使用 letterbox padding 居中填充。
+   */
+  private async normalizeInput(
+    inputPath: string,
+    outputPath: string,
+    targetWidth: number,
+    targetHeight: number,
+    fps: number,
+    hasAudio: boolean,
+  ): Promise<void> {
+    const args: string[] = []
+
+    if (hasAudio) {
+      args.push('-i', inputPath)
+    } else {
+      // 无音频输入：添加静音音轨，确保后续 concat 兼容
+      args.push('-i', inputPath, '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo')
+    }
+
+    // 视频滤镜：缩放 + letterbox padding + 统一 SAR + 固定帧率 + 像素格式
+    args.push(
+      '-vf', `scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease,pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fps},format=yuv420p`,
+    )
+
+    // 视频编码 — CRF 18 保证中间文件高质量
+    args.push('-c:v', 'libx264', '-preset', 'fast', '-crf', '18')
+
+    // 音频编码 — 统一格式
+    args.push('-c:a', 'aac', '-b:a', '128k', '-ar', '44100', '-ac', '2')
+
+    if (!hasAudio) {
+      args.push('-shortest')
+    }
+
+    args.push('-y', outputPath)
+
+    const result = await spawnSafe(FFMPEG_PATH, args, { timeout: 120_000 })
+
+    if (result.exitCode !== 0) {
+      const stderrPreview = result.stderr.substring(0, 300)
+      throw new RenderError(
+        'VIDEO_VALIDATION_FAILED',
+        '视频片段标准化失败，请检查视频片段格式后重试',
+        `exit=${result.exitCode}, stderr=${stderrPreview}`,
+      )
     }
   }
 

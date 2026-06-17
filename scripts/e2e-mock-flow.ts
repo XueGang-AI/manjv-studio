@@ -3,13 +3,10 @@
 // 从创建项目到最终 MP4 的完整自动流程
 // 使用 USE_MOCK_MODEL=true
 // ============================================
-import { PrismaClient } from '@prisma/client'
-import { PrismaPg } from '@prisma/adapter-pg'
 import { execSync } from 'child_process'
 import fs from 'fs'
 
 const BASE = 'http://localhost:3000'
-const DB_URL = process.env.DATABASE_URL || 'postgresql://xuegang@localhost:5432/manjv_studio?schema=public'
 
 const log = (msg: string) => console.log(`\x1b[36m[E2E]\x1b[0m ${msg}`)
 const ok = (msg: string) => console.log(`\x1b[32m✅ ${msg}\x1b[0m`)

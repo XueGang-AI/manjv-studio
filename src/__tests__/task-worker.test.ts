@@ -11,7 +11,8 @@
 //
 // 不依赖真实 AI/FFmpeg 环境，使用 mock
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { EventEmitter } from 'events'
 
 // ─── Mock prisma ───────────────────────────────────────────────────
 
@@ -90,14 +91,14 @@ describe('Atomic task claiming', () => {
     // 模拟原子领取逻辑（直接使用 mock 函数）
     const taskId = 'task-1'
     const result = await mockTaskUpdateMany({
-      where: { id: taskId, status: 'pending' },
+      where: { id: taskId, status: { in: ['pending', 'retrying'] } },
       data: { status: 'running', startedAt: new Date() },
     })
 
     expect(result.count).toBe(1)
     expect(mockTaskUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: taskId, status: 'pending' },
+        where: { id: taskId, status: { in: ['pending', 'retrying'] } },
       }),
     )
   })
@@ -108,13 +109,32 @@ describe('Atomic task claiming', () => {
 
     const taskId = 'task-1'
     const result = await mockTaskUpdateMany({
-      where: { id: taskId, status: 'pending' },
+      where: { id: taskId, status: { in: ['pending', 'retrying'] } },
       data: { status: 'running', startedAt: new Date() },
     })
 
     expect(result.count).toBe(0)
     // 领取失败，不应执行 handler
     expect(mockHandleStoryboard).not.toHaveBeenCalled()
+  })
+
+  it('should claim a retrying task (manual retry) atomically', async () => {
+    // retryTask() 将手动重试任务置为 'retrying'，Worker 必须能领取它，
+    // 否则手动重试任务会成为孤儿（永远不被执行）。
+    mockTaskUpdateMany.mockResolvedValue({ count: 1 })
+
+    const taskId = 'task-retry-1'
+    const result = await mockTaskUpdateMany({
+      where: { id: taskId, status: { in: ['pending', 'retrying'] } },
+      data: { status: 'running', startedAt: new Date() },
+    })
+
+    expect(result.count).toBe(1)
+    expect(mockTaskUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: taskId, status: { in: ['pending', 'retrying'] } },
+      }),
+    )
   })
 
   it('should not claim tasks of unregistered types', async () => {
@@ -562,6 +582,63 @@ describe('Crash recovery scenarios', () => {
     // After timeout + Worker restart, it will be recovered
     // This prevents immediate duplicate execution
   })
+
+  it('Scenario 5: stale retrying task should NOT increment retryCount on recovery', () => {
+    // retryTask() 已经 increment 过 retryCount，且任务从未被领取执行。
+    // recoverStaleTasks 不应再次 increment，否则会过早达到 maxRetries。
+    const task = {
+      status: 'retrying', // 手动重试，从未被领取
+      startedAt: null,    // retryTask 设置为 null
+      updatedAt: new Date(Date.now() - 11 * 60 * 1000), // 超时
+      retryCount: 1,      // retryTask 已 increment
+      maxRetries: 3,
+    }
+
+    const isRetrying = task.status === 'retrying'
+    const newRetryCount = isRetrying ? task.retryCount : task.retryCount + 1
+    const exceeded = newRetryCount >= task.maxRetries
+
+    // retrying 任务不应 increment，retryCount 保持 1
+    expect(newRetryCount).toBe(1)
+    expect(exceeded).toBe(false)
+  })
+
+  it('Scenario 6: stale running task SHOULD increment retryCount on recovery', () => {
+    // running 任务已领取执行但超时（执行失败），应 increment。
+    const task = {
+      status: 'running',
+      startedAt: new Date(Date.now() - 11 * 60 * 1000),
+      retryCount: 1,
+      maxRetries: 3,
+    }
+
+    const isRetrying = task.status === 'retrying'
+    const newRetryCount = isRetrying ? task.retryCount : task.retryCount + 1
+
+    expect(newRetryCount).toBe(2)
+  })
+})
+
+// ─── Test: 定期崩溃恢复 ──────────────────────────────────────────────
+
+describe('Periodic crash recovery', () => {
+  it('should run recoverStaleTasks periodically (every 30s), not only at startup', () => {
+    // 主循环每 30 秒调用 recoverStaleTasks，处理 handler 挂起（非崩溃）导致的 stuck running 任务。
+    const RECOVERY_INTERVAL_MS = 30_000
+    const now = Date.now()
+
+    // 启动时执行一次
+    let lastRecoveryAt = now - 35_000 // 35 秒前执行过
+
+    // 当前时间已超过间隔，应触发恢复
+    const shouldRecover = Date.now() - lastRecoveryAt >= RECOVERY_INTERVAL_MS
+    expect(shouldRecover).toBe(true)
+
+    // 刚执行完，不应再次触发
+    lastRecoveryAt = Date.now()
+    const shouldRecoverAgain = Date.now() - lastRecoveryAt >= RECOVERY_INTERVAL_MS
+    expect(shouldRecoverAgain).toBe(false)
+  })
 })
 
 // ─── Test: 幂等性深入 ──────────────────────────────────────────────
@@ -699,7 +776,7 @@ describe('Redis connection management', () => {
 
   it('should unsubscribe properly on client disconnect', () => {
     const listeners: Array<() => void> = []
-    const TASK_EVENT_BUS = new (require('events').EventEmitter)()
+    const TASK_EVENT_BUS = new EventEmitter()
 
     // 注册 listener
     const handler = () => {}
@@ -798,7 +875,7 @@ describe('Redis Subscriber auto-reconnect', () => {
     projectRefCounts.set('proj-2', 1) // 1 个 SSE 客户端
     projectRefCounts.set('proj-3', 0) // 引用已归零，不应重新订阅
 
-    let globalRefCount = 1
+    const globalRefCount = 1
 
     const channels: string[] = []
 
@@ -822,7 +899,7 @@ describe('Redis Subscriber auto-reconnect', () => {
 
   it('should not resubscribe when no active channels', () => {
     const projectRefCounts = new Map<string, number>()
-    let globalRefCount = 0
+    const globalRefCount = 0
 
     const channels: string[] = []
 
@@ -936,8 +1013,8 @@ describe('Worker Heartbeat', () => {
   it('heartbeat failure should not crash Worker', () => {
     // Worker 主循环和 heartbeat 是解耦的
     // heartbeat 写入失败不影响任务执行
-    let workerRunning = true
-    let heartbeatFailed = true
+    const workerRunning = true
+    const heartbeatFailed = true
 
     // 即使 heartbeat 失败，Worker 仍继续运行
     expect(workerRunning && heartbeatFailed).toBe(true)

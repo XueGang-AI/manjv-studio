@@ -76,9 +76,12 @@ export class TaskService {
     if (task.status !== 'failed') throw new Error('只能重试失败的任务')
     if (task.retryCount >= task.maxRetries) throw new Error('已达到最大重试次数')
 
+    // status='retrying' 让前端显示"重试中"，Worker 的 pollOnce/claimTask 会领取它。
+    // startedAt 必须为 null：claimTask 领取时才会设置 startedAt，
+    // 若在此设为 now，recoverStaleTasks 会误判任务已运行超时。
     return prisma.generationTask.update({
       where: { id: taskId },
-      data: { status: 'retrying', retryCount: { increment: 1 }, errorMessage: null, startedAt: new Date(), finishedAt: null },
+      data: { status: 'retrying', retryCount: { increment: 1 }, errorMessage: null, startedAt: null, finishedAt: null },
     })
   }
 

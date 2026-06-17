@@ -4,7 +4,7 @@
  * 不依赖真实 FFmpeg 或网络请求。
  * 进程执行相关测试使用 mock。
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import path from 'path'
 import fs from 'fs'
 import os from 'os'

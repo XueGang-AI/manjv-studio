@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect, useState, useCallback, useMemo } from 'react'
+import { useRef, useEffect, useState, useCallback } from 'react'
 import { AlertCircle, Video, Loader2, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { remoteStatusLabel, isRemotePending, isRemoteTerminal, type ShotVideoItem } from './shot-videos-types'

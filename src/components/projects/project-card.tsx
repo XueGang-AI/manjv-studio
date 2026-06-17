@@ -50,11 +50,12 @@ function getStepInfo(status: string): { step: number; total: number } {
  * Generate a stable cover gradient from project name
  */
 function getCoverGradient(name: string): string {
+  // 暖炭黑色阶 + 极弱琥珀点缀，避免蓝紫装饰色
   const colors = [
-    ['#0E1424', '#141C2E', '#1B2540'],
-    ['#141C2E', '#1B2540', '#0E1424'],
-    ['#090D18', '#141C2E', '#1B2540'],
-    ['#0E1424', '#1B2540', '#141C2E'],
+    ['#1a1917', '#211f1c', '#292623'],
+    ['#211f1c', '#292623', '#1a1917'],
+    ['#151412', '#211f1c', '#292623'],
+    ['#1a1917', '#292623', '#211f1c'],
   ]
   let hash = 0
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)

@@ -53,8 +53,6 @@ export async function handleTestNoop(taskId: string): Promise<void> {
   const task = await taskService.startTask(taskId)
 
   try {
-    const projectId = task.projectId
-
     await emitTaskEvent('task.running', taskToUpdateEvent(task))
 
     // 模拟进度推进

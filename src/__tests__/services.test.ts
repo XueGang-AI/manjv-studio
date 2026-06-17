@@ -30,7 +30,7 @@ describe('PromptTemplateService', () => {
   })
 })
 
-describe('JsonSchemaValidator', () => {
+describe('JSON 解析与校验', () => {
   it('should validate required fields', () => {
     const data = { name: 'test' }
     const schema = { required: ['name', 'age'] }

@@ -344,7 +344,6 @@ function generateReport(): string {
   const test4B = results.find(r => r.test === '4B: size="1080x1920"')
   const test4C = results.find(r => r.test === '4C: aspect_ratio="9:16"')
   const test5 = results.find(r => r.test === '5: negative_prompt field')
-  const test5b = results.find(r => r.test === '5b: Baseline (no negative_prompt) for comparison')
   const test6A = results.find(r => r.test === '6A: response_format=b64_json (check url + b64_json)')
   const test6B = results.find(r => r.test === '6B: response_format=url (default)')
 

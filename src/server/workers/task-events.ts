@@ -103,7 +103,9 @@ async function initPublisher(): Promise<import('ioredis').Redis | null> {
     const client = new Redis(process.env.REDIS_URL!, {
       maxRetriesPerRequest: 1,
       retryStrategy(times) {
-        if (times > 5) return null
+        // 无限重试，与 Subscriber/Heartbeat 保持一致。
+        // 之前 times>5 返回 null 会导致 ioredis 触发 'end' 永久停止重连，
+        // Redis 重启 >15s 后 Publisher 永久死亡，跨进程事件通知中断。
         return Math.min(times * 500, 3000)
       },
       lazyConnect: true,
@@ -116,6 +118,18 @@ async function initPublisher(): Promise<import('ioredis').Redis | null> {
         console.error('[task-events] Redis publisher error:', err.message?.substring(0, 100))
       }
       redisAvailable = false
+    })
+
+    client.on('close', () => {
+      redisAvailable = false
+    })
+
+    client.on('end', () => {
+      // ioredis 彻底放弃重连时触发（理论上无限重试不会到 end，
+      // 但保留兜底：重置缓存以便下次 getPublisher 重新创建连接）
+      redisAvailable = false
+      publisher = null
+      publisherInitPromise = null
     })
 
     client.on('ready', () => {

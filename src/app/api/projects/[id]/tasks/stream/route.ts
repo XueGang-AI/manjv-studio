@@ -2,7 +2,6 @@ import { NextRequest } from 'next/server'
 import { taskService } from '@/server/queues/task-queue.service'
 import {
   subscribeToProjectEvents,
-  isRedisAvailable,
   type TaskEventType,
   type TaskUpdateEvent,
 } from '@/server/workers/task-events'

@@ -1,3 +1,5 @@
+import Link from 'next/link'
+
 export default function HomePage() {
   return (
     <div className="flex h-screen items-center justify-center bg-[var(--bg-base)]">
@@ -7,13 +9,13 @@ export default function HomePage() {
         </div>
         <h1 className="text-3xl font-bold text-[var(--color-text-primary)] mb-3">Manjv Studio</h1>
         <p className="text-[var(--color-text-muted)] mb-8 text-base">AI 漫剧创作平台 — 从故事到成片，全流程自动化</p>
-        <a
+        <Link
           href="/projects"
           className="inline-flex items-center px-6 py-3 rounded-[var(--radius-md)] text-white font-medium no-underline transition-all hover:scale-[1.02] active:scale-[0.98]"
           style={{ background: 'var(--gradient-aurora)', boxShadow: 'var(--glow-aurora)' }}
         >
           进入工作台
-        </a>
+        </Link>
       </div>
     </div>
   )

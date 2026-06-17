@@ -8,7 +8,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const entityType = searchParams.get('entity_type') || undefined
     const versions = await versionService.getVersions(projectId, entityType)
     return NextResponse.json({ success: true, data: versions })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ success: false, error: '获取版本失败' }, { status: 500 })
   }
 }

@@ -264,7 +264,7 @@ Worker 日志输出到 stdout/stderr，格式：
 
 ## 崩溃恢复
 
-Worker 启动时自动扫描超时的 `running` 任务：
+Worker 在**启动时**和**运行期间每 30 秒**自动扫描超时的 `running`/`retrying` 任务：
 
 | 任务类型 | 超时时间 | 说明 |
 |---------|---------|------|
@@ -277,6 +277,20 @@ Worker 启动时自动扫描超时的 `running` 任务：
 - `retryCount < maxRetries` → 重置为 `pending`，等待重新领取
 - `retryCount >= maxRetries` → 标记为 `failed`
 - 自动恢复项目业务状态（避免用户卡在 GENERATING）
+
+### 定期恢复（Phase 4.6 新增）
+
+`recoverStaleTasks` 不仅在启动时执行，主循环每 30 秒调用一次。这解决了 **handler 挂起但 Worker 未崩溃**（如远端 API 无响应、网络阻塞）导致的 stuck `running` 任务——这类任务不会触发进程重启，必须靠定期扫描回收。
+
+### retrying 任务的处理
+
+手动重试（`retryTask`）将任务置为 `retrying` 状态，`pollOnce` 和 `claimTask` 同时领取 `pending` 和 `retrying`。这避免了之前手动重试任务成为孤儿的问题。
+
+`recoverStaleTasks` 对 `retrying` 任务**不递增 retryCount**（因为从未被领取执行，超时只是因为 Worker 离线），而对 `running` 任务递增（执行失败）。这避免了 retryCount 双重计算导致过早达到 maxRetries。
+
+### 原子领取防止重复执行
+
+`claimTask` 使用条件更新 `WHERE status IN ('pending','retrying')`，PostgreSQL 行级锁保证同一任务在同一时刻只被一个 Worker 领取成功。多个 Worker 并发领取同一任务时，只有一个返回 `count > 0`。
 
 ## 生产环境 TEST_NOOP 清理
 

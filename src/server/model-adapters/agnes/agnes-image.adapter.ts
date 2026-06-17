@@ -1,7 +1,7 @@
 // ============================================
 // Agnes-Image-2.0-Flash 图片适配器（真实 API）
 // ============================================
-import { BaseImageAdapter } from '../base.adapter'
+import { BaseImageAdapter, createAdapterError } from '../base.adapter'
 import { ImageGenerationRequest, ImageGenerationResponse } from '../types'
 
 export interface AgnesImageAdapterConfig {
@@ -27,7 +27,7 @@ export class AgnesImageAdapter extends BaseImageAdapter {
 
   async generate(request: ImageGenerationRequest): Promise<ImageGenerationResponse> {
     if (!this.apiKey) {
-      throw new Error('AGNES_IMAGE_API_KEY not configured')
+      throw createAdapterError({ code: 'AUTH_ERROR', message: 'AGNES_IMAGE_API_KEY not configured' })
     }
 
     const body: Record<string, unknown> = {
@@ -51,7 +51,12 @@ export class AgnesImageAdapter extends BaseImageAdapter {
 
     if (!response.ok) {
       const errorText = await response.text()
-      throw new Error(`Agnes Image API error (${response.status}): ${errorText.substring(0, 300)}`)
+      throw createAdapterError({
+        code: 'API_ERROR',
+        message: `Agnes Image API error (${response.status}): ${errorText.substring(0, 300)}`,
+        retryable: response.status >= 500 || response.status === 429,
+        statusCode: response.status,
+      })
     }
 
     const data = await response.json()
@@ -68,7 +73,7 @@ export class AgnesImageAdapter extends BaseImageAdapter {
     }
 
     if (images.length === 0) {
-      throw new Error('No images in response')
+      throw createAdapterError({ code: 'NO_RESULT', message: 'No images in response', retryable: true })
     }
 
     return { images }

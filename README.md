@@ -1,208 +1,174 @@
-# 🎬 Manjv Studio — AI 漫剧可视化生产工作台
+# Manjv Studio
 
-> AI 驱动的短剧漫剧全流程生产平台：从故事分析到成片输出，覆盖角色设计、分镜生成、图像/视频生成、FFmpeg 合片全链路。
+AI 漫剧全流程生产平台 —— 从故事方案到成片 MP4，面向中国短视频平台（抖音/快手）的自动化创作流水线。
 
-## ✨ 核心特性
+支持 Agnes（免费）和 Ark / 豆包（付费）两套 AI Provider，8 步工作流全部实现：
 
-- **全流程自动化** — 8 步工作流：创建项目 → 故事方案 → 角色设定 → 角色图 → 分镜脚本 → 分镜图 → 视频片段 → 成片 MP4
-- **双 AI Provider** — 免费 Agnes + 付费 Ark/豆包，项目级切换
-- **角色一致性系统** — 多角度参考图（5 视角）+ 锚点先行策略，确保跨镜头角色外貌统一
-- **模板驱动 Prompt** — 25 个 `.prompt` 模板 + 23 个 `.json` 素材库，禁止硬编码
-- **版本管理** — 关键确认节点自动快照，支持回滚与对比
-- **QC 质检** — 6 维度评分（故事 / 角色 / 分镜 / 图像 / 视频 / 成片）
+```
+创建项目 → 故事方案 → 角色设定 → 角色图 → 分镜脚本 → 分镜图 → 视频片段 → FFmpeg 成片 MP4
+```
 
 ## 技术栈
 
-| 层级 | 技术 | 版本 |
-|------|------|------|
-| 框架 | Next.js (App Router + Turbopack) | 16 |
-| 语言 | TypeScript | 5+ |
-| UI | React + TailwindCSS v4 | 19 |
-| 数据库 | PostgreSQL + Prisma | 16+ / 7 |
-| 状态管理 | Zustand | 5 |
-| 数据请求 | @tanstack/react-query | 5 |
-| 视频合成 | FFmpeg | 8.x |
-| 测试 | Vitest | 4 |
+- **Next.js 16**（App Router + Turbopack）+ TypeScript + TailwindCSS v4
+- **Prisma 7** + PostgreSQL 16（任务状态唯一真相源）
+- **Redis**（ioredis，Pub/Sub 事件通知层，可选，不可用时降级 DB 轮询）
+- **FFmpeg 8**（视频合成，libx264 + aac）
+- **Vitest**（单元测试）
 
-**AI 模型**
+## 系统架构
 
-| 用途 | Agnes（免费） | Ark/豆包（付费） |
-|------|---------------|------------------|
-| 文本 | Agnes-2.0-Flash | doubao-seed-character-251128 |
-| 图片 | Agnes-Image-2.0-Flash | doubao-seedream-5-0-260128 |
-| 视频 | Agnes-Video-V2.0 | doubao-seedance-1-5-pro-251215 |
+系统由两个独立进程组成，通过 PostgreSQL 共享任务状态，通过 Redis 推送事件：
+
+```
+浏览器
+  ↕ SSE（text/event-stream）
+Next.js Web 进程（API Routes + Pages）
+  ↕ PostgreSQL（任务状态 / 业务数据）
+  ↕ Redis Pub/Sub（跨进程事件通知）
+Worker 进程（独立，task.worker.ts）
+  ↕ AI Adapters（Agnes / Ark / Mock）
+  ↕ FFmpeg（视频合成）
+```
+
+### 关键设计
+
+- **数据库是任务状态的唯一真相源**：所有任务记录在 `generation_tasks` 表，Worker 领取并更新状态。
+- **Redis 是低延迟事件通知层**：Worker 完成任务后 `PUBLISH` 事件，Web 进程通过共享 Subscriber 推送到 SSE。Redis 不可用时自动降级到 DB 轮询（3 秒间隔）。
+- **Worker 独立进程**：不经过 Next.js，入口 `src/server/workers/task.worker.ts`，独立加载 `.env`。
+- **原子任务领取**：`claimTask` 使用条件更新 `WHERE status IN ('pending','retrying')`，PostgreSQL 行级锁防止多 Worker 重复执行同一任务。
+- **崩溃恢复**：Worker 启动时及运行期间每 30 秒扫描超时的 `running`/`retrying` 任务，重置为 `pending` 重试或标记 `failed`。
+
+## 任务链路
+
+所有生成操作创建 `generation_tasks` 记录，状态流转：
+
+```
+pending → running → success
+                  → failed → (手动 retry) retrying → running → ...
+        → cancelled
+```
+
+- `pending`：待领取
+- `running`：Worker 已领取执行中
+- `retrying`：失败后手动重试，等待领取（与 `pending` 一起被领取）
+- `success` / `failed` / `cancelled`：终态
+
+任务类型：`GENERATE_STORYBOARD`、`GENERATE_SHOT_IMAGES`、`GENERATE_SHOT_VIDEOS`、`RENDER_FINAL_VIDEO`（生产）；`TEST_NOOP`（仅测试环境）。
+
+每个 Handler 具备幂等保护：原子领取 + 状态检查 + 已有产物跳过，Worker 重启后崩溃恢复的任务不会重复提交远端 AI 任务。
 
 ## 快速开始
 
-### 环境要求
-
-- Node.js 20+
-- PostgreSQL 16+
-- FFmpeg 8.x（视频合成）
-
-> ⚠️ 本地 npm 缓存有权限问题，安装时请使用 `--cache ~/.npm-cache-new`。
-
-### 安装
+### 前置依赖
 
 ```bash
-# 1. 安装依赖
-npm install --cache ~/.npm-cache-new
-
-# 2. 配置环境变量
-cp .env.example .env
-# 编辑 .env，至少填写 DATABASE_URL
-
-# 3. 创建数据库
+brew install postgresql@16 redis ffmpeg
+brew services start postgresql@16
+brew services start redis
 createdb manjv_studio
-
-# 4. 推送 Schema + 种子数据
-npm run db:push
-npm run db:seed
 ```
 
-### 开发
+### 安装与初始化
 
 ```bash
-npm run dev    # 启动开发服务器 → http://localhost:3000
+npm install --cache ~/.npm-cache-new
+cp .env.example .env          # 填写 DATABASE_URL 等
+npm run db:push               # 推送 Prisma schema
+npm run db:seed               # 种子数据 + Prompt 模板同步
 ```
 
-### 测试
+### 运行
 
 ```bash
-npm test                       # 单元测试（18 cases）
-npm run test:e2e               # Mock 全流程 E2E（20 steps → MP4）
-npm run test:e2e:real          # 真实 API 最小闭环
-npx tsx scripts/e2e-real-15s-prototype.ts  # 30s 原型全流程
+npm run dev:all               # 同时启动 Web + Worker（推荐开发）
+# 或分别启动：
+npm run dev                   # 仅 Web
+npm run worker                # 仅 Worker
 ```
 
-### API 探针
+生产构建：
 
 ```bash
-# Agnes
-npm run probe:agnes:text           # 文本生成
-npm run probe:agnes:image          # 图片生成
-npm run probe:agnes:video          # 视频生成（创建 + 短轮询）
-npm run probe:agnes:video:poll     # 轮询已有任务（需 --task-id <id>）
-npm run probe:agnes:video:t2v      # 文生视频
-npm run probe:agnes:video:i2v-url  # 图生视频（URL）
-npm run probe:agnes:video:i2v-b64  # 图生视频（Base64）
-npm run probe:agnes:video:audio    # 音频/口型
-
-# Ark/豆包
-npm run probe:ark:text             # 文本生成
-npm run probe:ark:image            # 图片生成
-npm run probe:ark:video            # 视频生成
-npm run probe:ark:video:poll       # 视频任务轮询（需 --task-id <id>）
+npm run build
+npm start                     # Web
+npm run worker                # Worker（需单独进程）
 ```
+
+### 环境变量
+
+见 [docs/ENV.md](docs/ENV.md)。必需 `DATABASE_URL`，推荐 `REDIS_URL`。Mock 模式（`USE_MOCK_MODEL=true`）无需任何 AI API Key 即可跑通全流程。
+
+## 测试
+
+```bash
+npm test                      # 单元测试（Vitest）
+npm run test:e2e              # Mock 全流程 E2E（20 步）
+npm run test:e2e:real         # 真实 AI API 最小闭环
+```
+
+AI Provider 连通性探针：
+
+```bash
+npm run probe:agnes:text      # Agnes 文本
+npm run probe:agnes:image     # Agnes 图片
+npm run probe:agnes:video     # Agnes 视频（创建+轮询）
+npm run probe:ark:text        # Ark 文本
+npm run probe:ark:image       # Ark 图片
+npm run probe:ark:video       # Ark 视频
+```
+
+完整探针列表见 `package.json` 的 `probe:*` 脚本。
+
+## 模型适配层
+
+所有 AI 调用必须通过 `adapterFactory`，禁止直接调用 AI API：
+
+```ts
+adapterFactory.getTextAdapter(provider)   // ITextAdapter
+adapterFactory.getImageAdapter(provider)  // IImageAdapter
+adapterFactory.getVideoAdapter(provider)  // IVideoAdapter
+```
+
+优先级：`USE_MOCK_MODEL=true` → Mock → `provider="ark"` → Ark → 默认 Agnes。
+
+所有 Prompt 从 `prompt_templates` 数据库表读取，通过 `PromptTemplateService.render()` 填充 `{{variables}}`，禁止硬编码。模板通过 `npm run db:seed` 从 `prompts/` 目录同步。
 
 ## 项目结构
 
 ```
-manjv-studio/
-├── src/
-│   ├── app/                        # Next.js App Router
-│   │   ├── (pages)/                # 页面路由（项目、设置、Prompt 浏览等）
-│   │   └── api/                    # API 路由（60+ endpoints）
-│   ├── components/                 # React 组件
-│   │   ├── layout/                 # Sidebar, TopBar
-│   │   ├── project/                # 项目相关（Form, Card, StepNavigator…）
-│   │   └── ui/                     # 基础 UI（Button, Card, Input, Badge）
-│   ├── lib/                        # 工具库（utils, prisma, validators, types）
-│   ├── server/
-│   │   ├── model-adapters/         # 🎯 AI 模型统一适配层
-│   │   │   ├── types.ts            # ITextAdapter / IImageAdapter / IVideoAdapter
-│   │   │   ├── adapter.factory.ts  # AdapterFactory 单例
-│   │   │   ├── mock/               # Mock 适配器
-│   │   │   ├── agnes/              # Agnes 适配器
-│   │   │   └── ark/                # Ark 适配器
-│   │   ├── services/               # 业务服务（Prompt, FFmpeg, Version, QC）
-│   │   ├── storage/                # 文件存储（Phase 1: 本地）
-│   │   ├── queues/                 # 任务队列（Prisma TaskService）
-│   │   └── workflows/              # 工作流类型定义（Phase 2 预留）
-│   └── __tests__/                  # 单元测试
-├── prisma/                         # Prisma Schema + Seed
-├── prompts/                        # Prompt 模板库（25 .prompt + 23 .json）
-│   ├── story/                      # 故事分析、创作、改编、优化
-│   ├── character/                  # 角色设计、关系网络
-│   ├── storyboard/                 # 分镜、开头钩子、结尾钩子
-│   ├── image/                      # 图片 Prompt、角色视觉、场景、表情、风格、光照、镜头
-│   ├── video/                      # 视频 Prompt、三幕运动、Seedance 分镜网格
-│   ├── camera/                     # 镜头知识库、运动分类、经典/特效运镜
-│   ├── audio/                      # 配音脚本
-│   ├── platform/                   # 标题文案、平台优化
-│   ├── qc/                         # 文本/图片/视频质检
-│   └── style/                      # 电影风格库
-├── scripts/                        # E2E + 探针脚本
-├── uploads/                        # 文件上传 + 视频输出（gitignored）
-└── docs/                           # 项目文档
+src/
+├── app/                      # Next.js App Router
+│   ├── api/                  # API Routes
+│   ├── projects/             # 项目工作台页面（8 步工作流）
+│   └── preview/              # 视觉实验页面（非生产路由）
+├── components/               # UI 组件（layout / project / ui / shot-* / storyboard / final-preview）
+├── hooks/                    # React Hooks
+├── lib/                      # utils / prisma client / validators
+└── server/
+    ├── model-adapters/       # AI 适配器（types → base → mock / agnes / ark → factory）
+    ├── queues/               # task-queue.service（任务生命周期）
+    ├── services/             # prompt-template / ffmpeg / ffmpeg-utils / version / qc
+    └── workers/              # task.worker（主循环）+ handlers + task-events（Redis Pub/Sub）+ worker-heartbeat
+prisma/                       # schema.prisma + seed
+prompts/                      # Prompt 模板源文件 + 素材库 JSON
+scripts/                      # E2E 脚本 + AI 探针
+docs/                         # 部署与 API 文档
 ```
 
-## 核心流程
+## 文档
 
+- [docs/task-worker-deployment.md](docs/task-worker-deployment.md) — Worker 部署、Redis 重连、崩溃恢复、健康检查
+- [docs/API.md](docs/API.md) — API 端点参考
+- [docs/ENV.md](docs/ENV.md) — 环境变量说明
+- [docs/E2E_TEST.md](docs/E2E_TEST.md) — E2E 测试指南
+- [CLAUDE.md](CLAUDE.md) — AI Agent 协作指引与架构约束
+
+## API 返回格式
+
+所有 API 统一返回：
+
+```json
+{ "success": true, "data": {} }
+{ "success": false, "error": "错误信息" }
 ```
-创建项目 → 故事方案 → 角色设定 → 角色图 → 分镜脚本 → 分镜图 → 视频片段 → 成片 MP4
-   ↓          ↓         ↓        ↓         ↓         ↓         ↓         ↓
- Phase 3   Phase 4   Phase 5  Phase 6   Phase 7   Phase 8   Phase 9  Phase 10
-```
-
-每个阶段必须确认后才能推进到下一步，`StepNavigator` 组件强制执行锁定/解锁/完成状态。
-
-### 数据库
-
-21 张表，核心实体：`Project` → `StoryPackage` → `Character` → `CharacterImage` → `Episode` → `Shot` → `ShotImage` → `ShotVideo` → `FinalVideo`
-
-辅助表：`GenerationTask`（任务追踪）、`TaskLog`（执行日志）、`PromptTemplate`/`PromptTemplateVersion`（模板管理）、`ProjectVersion`（版本快照）、`QCReport`（质检报告）、`AssetFile`（文件资产）
-
-## AI Provider 配置
-
-### Agnes（免费）
-
-`.env` 默认配置即可：
-
-```env
-AGNES_API_KEY=your_key
-AGNES_API_BASE_URL=https://api.agnes.ai/v1
-USE_MOCK_MODEL=false
-```
-
-### Ark/豆包（付费）
-
-```env
-ARK_API_KEY=your_key
-ARK_API_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
-MODEL_PROVIDER=ark
-USE_MOCK_MODEL=false
-```
-
-创建项目时选择 Provider，或通过 `modelProvider` 字段在已有项目中切换。
-
-## 已知限制
-
-| 问题 | 说明 |
-|------|------|
-| Agnes 视频队列延迟 | 非高峰 ~2min，高峰期可能数小时 |
-| Agnes 视频分辨率 | 输出 1280×768，需 FFmpeg 后处理 |
-| Agnes Image + reference_images | 传 `reference_images` 时忽略 `num_outputs`，只返回 1 张 |
-| Agnes Video 输入限制 | 仅支持 1 张 `inputImage`，不支持多张 reference_images |
-| 视频内容质量 | 需人工确认，AI 生成不可控 |
-| 批量并发 | 可能存在 QPS 限制 |
-
-## 文档索引
-
-| 文档 | 内容 |
-|------|------|
-| [CLAUDE.md](CLAUDE.md) | Claude Code 项目上下文 |
-| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 开发指南 |
-| [docs/E2E_TEST.md](docs/E2E_TEST.md) | E2E 测试指南 |
-| [docs/API.md](docs/API.md) | API 文档（60+ endpoints） |
-| [docs/ENV.md](docs/ENV.md) | 环境变量说明 |
-| [docs/PHASE_1_13_SUMMARY.md](docs/PHASE_1_13_SUMMARY.md) | Phase 1-13 开发总结 |
-| [docs/REAL_AGNES_API_PROBE_REPORT.md](docs/REAL_AGNES_API_PROBE_REPORT.md) | Agnes API 探针报告 |
-| [docs/REAL_AGNES_API_TODO.md](docs/REAL_AGNES_API_TODO.md) | API 接入待办 |
-| [docs/REAL_SAMPLE_ACCEPTANCE_REPORT.md](docs/REAL_SAMPLE_ACCEPTANCE_REPORT.md) | 30s 原型验收报告 |
-| [docs/AGNES_VIDEO_AUDIO_LIPSYNC_PROBE_REPORT.md](docs/AGNES_VIDEO_AUDIO_LIPSYNC_PROBE_REPORT.md) | 视频/音频/口型探针 |
-| [docs/AGNES_VIDEO_AUDIO_LIPSYNC_COMPLETED_REPORT.md](docs/AGNES_VIDEO_AUDIO_LIPSYNC_COMPLETED_REPORT.md) | 音频 completed 验证 |
-
-## License
-
-Private — 内部项目

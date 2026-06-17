@@ -5,7 +5,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const tasks = await taskService.getProjectTasks((await params).id, 50)
     return NextResponse.json({ success: true, data: tasks })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ success: false, error: '获取失败' }, { status: 500 })
   }
 }
@@ -18,7 +18,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   try {
     const result = await taskService.deleteFinishedTasks((await params).id)
     return NextResponse.json({ success: true, data: result })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ success: false, error: '批量删除失败' }, { status: 500 })
   }
 }

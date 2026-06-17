@@ -77,7 +77,7 @@ export async function handleStoryboard(taskId: string): Promise<void> {
     const nextVersion = (existingEpisode?.version || 0) + 1
 
     // 读取素材库
-    const materialRefs = loadMaterialRefs(project)
+    const materialRefs = loadMaterialRefs()
 
     // 计算视频模型单镜头时长上限
     const maxShotDuration = getMaxShotDuration(project.modelProvider)
@@ -265,7 +265,7 @@ export async function handleStoryboard(taskId: string): Promise<void> {
 }
 
 /** 从素材库加载相关参考并格式化为 prompt 片段 */
-function loadMaterialRefs(_project: { artStyle?: string | null; targetPlatform?: string | null }): string {
+function loadMaterialRefs(): string {
   const fs = require('fs') // eslint-disable-line @typescript-eslint/no-require-imports
   const path = require('path') // eslint-disable-line @typescript-eslint/no-require-imports
   const promptsDir = path.resolve(process.cwd(), 'prompts')

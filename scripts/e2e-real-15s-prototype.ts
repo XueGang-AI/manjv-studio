@@ -1,4 +1,3 @@
-// @ts-nocheck — E2E script, skip strict type-checking
 // ============================================
 // REAL API: 30s 短视频原型 (3-4 镜头, 1 集)
 // 注：episode_duration 最小校验值为 30s
