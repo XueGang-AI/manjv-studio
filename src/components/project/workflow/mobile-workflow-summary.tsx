@@ -108,6 +108,7 @@ export function MobileWorkflowSummary({ steps }: MobileWorkflowSummaryProps) {
         steps={steps}
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}
+        returnFocusRef={expandBtnRef}
       />
     </>
   )

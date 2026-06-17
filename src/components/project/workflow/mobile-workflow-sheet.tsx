@@ -38,15 +38,17 @@ export interface MobileWorkflowSheetProps {
   steps: WorkflowStepView[]
   open: boolean
   onClose: () => void
+  /** 关闭后焦点恢复目标（通常是触发按钮）。由父组件传入 ref。 */
+  returnFocusRef?: React.RefObject<HTMLElement | null>
 }
 
 /**
  * 移动端全流程 Sheet（自实现，不引入新依赖）。
- * - Escape 关闭、背景点击关闭
- * - 打开时锁定 body 滚动
- * - 焦点：打开聚焦关闭按钮，关闭恢复触发元素（由父组件管理 ref 传递）
+ * - Escape / 遮罩 / 关闭按钮 / 步骤跳转 均触发 onClose
+ * - 打开时锁定 body 滚动并聚焦关闭按钮
+ * - 关闭（含卸载、路由跳转）后恢复 body 滚动，并把焦点还给触发按钮
  */
-export function MobileWorkflowSheet({ steps, open, onClose }: MobileWorkflowSheetProps) {
+export function MobileWorkflowSheet({ steps, open, onClose, returnFocusRef }: MobileWorkflowSheetProps) {
   const panelRef = React.useRef<HTMLDivElement>(null)
   const closeBtnRef = React.useRef<HTMLButtonElement>(null)
 
@@ -60,18 +62,25 @@ export function MobileWorkflowSheet({ steps, open, onClose }: MobileWorkflowShee
     return () => document.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
-  // body 滚动锁定 + 焦点
+  // body 滚动锁定 + 焦点进入/恢复
   React.useEffect(() => {
     if (!open) return
     const prevOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    // 聚焦面板
+    // 打开：延迟聚焦关闭按钮（等面板挂载）
     const t = window.setTimeout(() => closeBtnRef.current?.focus(), 30)
+    // 在 effect body 读取触发按钮（此时它仍挂载），cleanup 用捕获的稳定引用。
+    // 这样 cleanup 不再读取 ref.current，避免 ref 在卸载后变更导致焦点错位。
+    const triggerEl = returnFocusRef?.current ?? null
+    // 关闭（含卸载、路由跳转）：恢复滚动 + 焦点还给触发按钮
     return () => {
       window.clearTimeout(t)
       document.body.style.overflow = prevOverflow
+      // 微延迟确保关闭按钮已卸载，避免焦点落回 body
+      const r = window.requestAnimationFrame(() => triggerEl?.focus())
+      void r
     }
-  }, [open])
+  }, [open, returnFocusRef])
 
   if (!open) return null
 

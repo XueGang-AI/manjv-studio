@@ -169,27 +169,41 @@ export interface WorkflowStepView extends WorkflowStepDef {
   index: number
 }
 
+export interface MapWorkflowOptions {
+  /**
+   * 强制将指定步骤标记为 error。
+   *
+   * 项目级 `FAILED` 状态在当前业务中无阶段信息（无法判断失败发生在哪一步），
+   * 且无业务路径写入该状态。因此 error 不由 project.status 自动推导，
+   * 而由调用方在确知某步存在失败任务时显式传入。
+   *
+   * 传入的 stepId 必须存在于步骤定义中，否则忽略。
+   */
+  errorStepId?: string
+}
+
 /**
  * 将步骤定义映射为带状态的视图。
  *
- * 映射规则（每步独立判定，工作步 = 首个非 completed 非 locked 步）：
- * 1. locked  → 业务前置未满足
- * 2. completed → 已越过该步确认阈值
- * 3. error   → status === 'FAILED' 且为工作步
+ * 映射规则（每步独立判定）：
+ * 1. completed → 已越过该步确认阈值
+ * 2. error   → 调用方显式指定的失败步（errorStepId），优先于 locked
+ * 3. locked  → 业务前置未满足
  * 4. generating → 项目状态恰为该步的 generatingStatus
- * 5. active   → 工作步（非上述）
+ * 5. active   → 工作步（首个非 completed 非 locked 步，非上述）
  *
  * completed 步骤可回退查看（locked 永远为 false）。
+ * error 优先于 locked：failed 任务证明该步曾被触达，需用户处理。
+ * 不依赖任务状态/SSE；error 来源由调用方决定，不伪造状态。
  */
 export function mapWorkflowSteps(
   steps: WorkflowStepDef[],
   currentStatus: string,
   pathname: string,
+  options: MapWorkflowOptions = {},
 ): WorkflowStepView[] {
-  const isFailed = currentStatus === 'FAILED'
-
-  // 第一遍：基础 locked / completed
-  const base = steps.map((step) => {
+  // 工作步 = 首个非 completed 非 locked
+  const preliminary = steps.map((step) => {
     const completed =
       step.id === 'info'
         ? isStatusAfter(currentStatus, 'DRAFT')
@@ -201,20 +215,19 @@ export function mapWorkflowSteps(
     return { step, completed, locked }
   })
 
-  // 工作步 = 首个非 completed 非 locked
-  const workingIndex = base.findIndex((b) => !b.completed && !b.locked)
-
-  return base.map((b, i) => {
+  return preliminary.map((b, i) => {
     const { step, completed, locked } = b
     const isCurrent = step.matchPath(pathname)
 
     let status: WorkflowStatus
-    if (locked) {
-      status = 'locked'
-    } else if (completed) {
+    if (completed) {
       status = 'completed'
-    } else if (isFailed && i === workingIndex) {
+    } else if (options.errorStepId && step.id === options.errorStepId) {
+      // error 优先于 locked/generating/active：
+      // failed 任务证明该步曾被触达，需用户处理，即使"逻辑上"尚未解锁。
       status = 'error'
+    } else if (locked) {
+      status = 'locked'
     } else if (step.generatingStatus && currentStatus === step.generatingStatus) {
       status = 'generating'
     } else {

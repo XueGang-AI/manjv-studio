@@ -144,14 +144,14 @@ export default function CharacterImagesPage() {
   const allConfirmed = state?.allConfirmed || false
   const totalConfirmedTypes = characters.reduce((s, c) => s + c.confirmedTypeCount, 0)
 
-  if (loading) return <div className="flex justify-center py-16"><Loader2 size={32} className="animate-spin text-gray-300" /></div>
+  if (loading) return <div className="flex justify-center py-16"><Loader2 size={32} className="animate-spin text-[var(--text-tertiary)]" /></div>
 
   return (
     <div className="max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">角色参考图</h1>
-          <p className="text-gray-500 mt-1">
+          <h1 className="text-2xl font-bold text-[var(--text-primary)]">角色参考图</h1>
+          <p className="text-[var(--text-secondary)] mt-1">
             {allConfirmed ? '所有角色参考图已确认 ✓' :
              hasImages ? `已确认 ${totalConfirmedTypes} 种参考图` :
              'AI 将为每个角色生成多角度参考图'}
@@ -167,7 +167,7 @@ export default function CharacterImagesPage() {
           {!hasImages && !isGenerating && (
             <>
               <Button variant="outline" onClick={() => handleGenerate('quick')} disabled={isGenerating}>
-                <Zap size={16} className="mr-1 text-amber-500" /> 快速模式
+                <Zap size={16} className="mr-1 text-[var(--accent-primary)]" /> 快速模式
               </Button>
               <Button onClick={() => handleGenerate('consistency')} disabled={isGenerating}>
                 <Shield size={16} className="mr-1" /> 生成基础参考图组 (5张)
@@ -188,20 +188,20 @@ export default function CharacterImagesPage() {
       </div>
 
       {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
-          <AlertTriangle size={18} className="text-red-500 mt-0.5 flex-shrink-0" />
-          <p className="text-sm text-red-600 flex-1">{error}</p>
-          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600"><X size={16} /></button>
+        <div className="mb-4 bg-[var(--error-soft)] border border-[var(--border-strong)] rounded-lg p-3 flex items-start gap-2">
+          <AlertTriangle size={18} className="text-[var(--status-error)] mt-0.5 flex-shrink-0" />
+          <p className="text-sm text-[var(--status-error)] flex-1">{error}</p>
+          <button onClick={() => setError(null)} className="text-[var(--status-error)] hover:opacity-70"><X size={16} /></button>
         </div>
       )}
 
       {isGenerating && (
         <Card><CardContent className="flex flex-col items-center py-16">
-          <Loader2 size={48} className="animate-spin text-indigo-500 mb-4" />
-          <h3 className="text-lg font-medium text-gray-700 mb-1">
+          <Loader2 size={48} className="animate-spin text-[var(--accent-primary)] mb-4" />
+          <h3 className="text-lg font-medium text-[var(--text-primary)] mb-1">
             {genMode === 'consistency' ? 'AI 正在生成 5 角度参考图...' : 'AI 正在生成角色参考图...'}
           </h3>
-          <p className="text-gray-400 text-sm">
+          <p className="text-[var(--text-tertiary)] text-sm">
             {genMode === 'consistency' ? `${characters.length} 角色 × 5 角度 = ${characters.length * 5} 张` : `${characters.length} 角色 × 1 张`}
           </p>
         </CardContent></Card>
@@ -209,11 +209,11 @@ export default function CharacterImagesPage() {
 
       {!hasImages && !isGenerating && characters.length === 0 && (
         <Card className="border-dashed"><CardContent className="flex flex-col items-center py-16">
-          <ImageIcon size={56} className="text-gray-300 mb-4" />
-          <h3 className="text-lg font-medium text-gray-500 mb-2">尚未生成角色参考图</h3>
-          <p className="text-gray-400 mb-6 text-center max-w-md">选择快速模式生成 1 张主参考图，或一致性模式生成 5 个角度</p>
+          <ImageIcon size={56} className="text-[var(--text-tertiary)] mb-4" />
+          <h3 className="text-lg font-medium text-[var(--text-secondary)] mb-2">尚未生成角色参考图</h3>
+          <p className="text-[var(--text-tertiary)] mb-6 text-center max-w-md">选择快速模式生成 1 张主参考图，或一致性模式生成 5 个角度</p>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => handleGenerate('quick')}><Zap size={16} className="mr-1 text-amber-500" /> 快速模式 (1张)</Button>
+            <Button variant="outline" onClick={() => handleGenerate('quick')}><Zap size={16} className="mr-1 text-[var(--accent-primary)]" /> 快速模式 (1张)</Button>
             <Button onClick={() => handleGenerate('consistency')}><Shield size={16} className="mr-1" /> 一致性模式 (5张)</Button>
           </div>
         </CardContent></Card>
@@ -227,14 +227,14 @@ export default function CharacterImagesPage() {
         <div key={charGroup.character.id} className="mb-8">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center">
-                <User size={20} className="text-indigo-600" />
+              <div className="w-10 h-10 rounded-full bg-[var(--accent-soft)] flex items-center justify-center">
+                <User size={20} className="text-[var(--accent-primary)]" />
               </div>
               <div>
-                <h3 className="font-semibold text-gray-900">{charGroup.character.name}</h3>
-                <div className="flex items-center gap-2 text-xs text-gray-500">
+                <h3 className="font-semibold text-[var(--text-primary)]">{charGroup.character.name}</h3>
+                <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
                   <Badge variant="info" className="text-xs">{charGroup.character.roleType}</Badge>
-                  <span className={confirmedCount >= 5 ? 'text-green-600' : 'text-amber-600'}>
+                  <span className={confirmedCount >= 5 ? 'text-[var(--status-success)]' : 'text-[var(--status-warning)]'}>
                     参考图: {confirmedCount}/5{hasConsistency ? ' ✅' : ''}
                   </span>
                 </div>
@@ -261,20 +261,21 @@ export default function CharacterImagesPage() {
                 const refLabel = img.referenceType ? (REF_TYPE_LABELS[img.referenceType] || img.referenceType) : '标准图'
                 return (
                   <div key={img.id}
-                    className={`relative border rounded-lg overflow-hidden ${
-                      isConfirmed ? 'ring-2 ring-green-500' :
-                      isSelected ? 'ring-2 ring-indigo-500' : 'border-gray-200'
+                    className={`relative border rounded-lg overflow-hidden transition-colors ${
+                      isConfirmed ? 'border-[var(--status-success)]/60' :
+                      isSelected ? 'border-[var(--accent-primary)]/60' : 'border-[var(--border-default)]'
                     }`}
                   >
-                    <div className="aspect-[9/16] bg-gray-100 relative">
+                    <div className="aspect-[9/16] bg-[var(--bg-panel)] relative">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- 动态远端对象存储 URL（agnes/ark），next.config 未配置 images.remotePatterns，且需原生 onError 做失效占位，与 shot-image-review 既有约定一致 */}
                       <img src={img.imageUrl} alt={refLabel} className="w-full h-full object-cover"
-                        onError={(e) => { (e.target as HTMLImageElement).src = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="270" height="480" fill="%23f3f4f6"><rect width="270" height="480"/><text x="135" y="240" text-anchor="middle" fill="%239ca3af" font-size="14">Image</text></svg>` }}
+                        onError={(e) => { (e.target as HTMLImageElement).src = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="270" height="480" fill="%23211f1c"><rect width="270" height="480"/><text x="135" y="240" text-anchor="middle" fill="%237f7870" font-size="14">Image</text></svg>` }}
                       />
-                      {isConfirmed && <div className="absolute top-1 right-1 bg-green-500 text-white rounded-full p-0.5"><CheckCircle2 size={12} /></div>}
-                      {isSelected && !isConfirmed && <div className="absolute top-1 right-1 bg-indigo-500 text-white rounded-full p-0.5"><CheckCircle2 size={12} /></div>}
+                      {isConfirmed && <div className="absolute top-1 right-1 bg-[var(--status-success)] text-white rounded-full p-0.5" aria-label="已确认"><CheckCircle2 size={12} /></div>}
+                      {isSelected && !isConfirmed && <div className="absolute top-1 right-1 bg-[var(--accent-primary)] text-[var(--text-inverse)] rounded-full p-0.5" aria-label="已选择"><CheckCircle2 size={12} /></div>}
                     </div>
                     <div className="p-1.5 space-y-0.5">
-                      <div className="text-[10px] font-medium text-gray-600 truncate" title={refLabel}>{refLabel}</div>
+                      <div className="text-[10px] font-medium text-[var(--text-secondary)] truncate" title={refLabel}>{refLabel}</div>
                       {!isConfirmed ? (
                         <div className="flex gap-0.5">
                           <Button size="sm" className="flex-1 text-[10px] h-6 px-1"
@@ -309,12 +310,12 @@ export default function CharacterImagesPage() {
               })}
             </div>
           ) : (
-            <div className="text-center py-6 text-gray-400 text-sm border rounded-lg border-dashed">尚未生成参考图</div>
+            <div className="text-center py-6 text-[var(--text-tertiary)] text-sm border rounded-lg border-dashed border-[var(--border-subtle)]">尚未生成参考图</div>
           )}
         </div>
       )})}
 
-      <div className="flex justify-between mt-8 pt-6 border-t border-gray-200">
+      <div className="flex justify-between mt-8 pt-6 border-t border-[var(--border-subtle)]">
         <Button variant="outline" onClick={() => router.push(`/projects/${projectId}/characters`)}>
           <ArrowLeft size={16} className="mr-1" /> 返回角色设定
         </Button>
