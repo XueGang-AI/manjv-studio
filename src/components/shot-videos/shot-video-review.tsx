@@ -68,12 +68,19 @@ export function ShotVideoReview({ group, isConfirmed, isGenerating, projectId, e
 
   // ─── AI Prompt 控制台状态（提升到 review，桌面与移动共享同一份） ───
   // 当前尝试 = 最新 ShotVideo（API 按 createdAt desc 返回，videos[0] 为最新）。
-  // hasOutput 仅表示"已有可用结果"，不代表本次任务成功；error/running 优先于 hasOutput。
+  // 候选版本模式：新尝试作为候选追加，旧视频保留。
+  // 状态绑定当前尝试（videos[0]）的 remoteStatus；hasOutput = 是否有可用历史视频
+  // （选中或任意有 videoUrl 的终态视频），与当前尝试独立。
+  // error/running 优先于历史 hasOutput：当前尝试失败时显示失败，但旧视频仍可播放。
+  const currentAttempt = videos[0] ?? null
+  const hasUsableOutput = videos.some(
+    v => v.videoUrl && (!v.remoteTaskId || isRemoteTerminal(v.remoteStatus))
+  )
   const aiVideoData = {
     prompt: shot.videoPrompt?.prompt || '',
     motionStrength: (shot.videoPrompt?.motionStrength as 'low' | 'medium' | 'high' | null) || null,
-    remoteStatus: displayVideo?.remoteStatus ?? null,
-    hasOutput: !!(displayVideo?.videoUrl && (!displayVideo?.remoteTaskId || isRemoteTerminal(displayVideo?.remoteStatus))),
+    remoteStatus: currentAttempt?.remoteStatus ?? null,
+    hasOutput: hasUsableOutput,
   }
   const aiState = useAIPromptBox({
     projectId,
