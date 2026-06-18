@@ -173,11 +173,36 @@ export async function POST(
             anchorImageUrl = response.images[0].url
           }
 
-          const created = await Promise.all(response.images.map(img =>
-            prisma.characterImage.create({
+          const created = await Promise.all(response.images.map(async (img) => {
+            // Phase 6: 转存供应商短期签名 URL 到自有存储。
+            // 转存失败时 imageUrl 保留原签名 URL（短期可用），不阻塞生成流程，
+            // 但 storageObjectKey 为空，后续需迁移脚本补转存。
+            let storageObjectKey: string | null = null
+            let storageProvider: string | null = null
+            let sourceUrl: string | null = null
+            let persistedUrl: string | null = null
+            if (img.url) {
+              try {
+                const { persistImageFromUrl } = await import('@/server/services/media-persist')
+                const persisted = await persistImageFromUrl(img.url, projectId)
+                storageObjectKey = persisted.storageObjectKey
+                storageProvider = persisted.storageProvider
+                sourceUrl = persisted.sourceUrl
+                persistedUrl = persisted.readUrl
+              } catch (persistErr) {
+                // 转存失败：记录脱敏错误，imageUrl 保留原签名 URL
+                const errCategory = persistErr instanceof Error ? persistErr.constructor.name : 'UnknownError'
+                console.error(`[Generate] image persist failed (${refType}): ${errCategory}`)
+              }
+            }
+            return prisma.characterImage.create({
               data: {
                 characterId: char.id, projectId,
-                imageUrl: img.url, prompt,
+                imageUrl: persistedUrl || img.url,
+                storageObjectKey,
+                storageProvider,
+                sourceUrl,
+                prompt,
                 negativePrompt,
                 seed: String(img.seed || ''),
                 modelName: project.modelProvider === 'ark' ? (process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5-0-260128') : (process.env.AGNES_IMAGE_MODEL || 'agnes-image-2.0-flash'),
@@ -192,7 +217,7 @@ export async function POST(
                 isConfirmed: false,
               },
             })
-          ))
+          }))
           charImages.push(...created)
         }
 
