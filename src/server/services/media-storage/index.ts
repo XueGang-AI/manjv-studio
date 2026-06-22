@@ -9,6 +9,8 @@ export { getMediaStorage, validateS3Config, __resetMediaStorageCache } from './f
 export type { StorageProviderName } from './factory'
 export { localStorageProvider } from './local-storage'
 export { createS3StorageProvider, type S3ProviderConfig } from './s3-storage'
+export { createAliyunOssStorageProvider } from './aliyun-oss-storage'
+export { readAliyunOssConfig, OSS_PROVIDER_NAME, type AliyunOssConfig } from './aliyun-oss-config'
 export { validateSourceUrl, isSsrfBlockedHost, isPrivateIp } from './security'
 export { generateObjectKey, extFromContentType } from './object-key'
 export { getPersistPolicy, isProduction, type MediaPersistencePolicy } from './persist-policy'
