@@ -75,9 +75,15 @@ export async function POST(
       imageUrl: string; prompt: string; seed: string
       referenceType: string; isPrimary: boolean; isSelected: boolean
       referenceImage: string | null; imgParams: Record<string, unknown>
+      storageObjectKey: string | null; storageProvider: string | null; sourceUrl: string | null
     }> = []
 
     let anchorImageUrl: string | null = null
+    // Phase 7.1: 追踪转存失败的角度，返回给用户以便重试
+    const failedTypes: Array<{ referenceType: string; reason: string }> = []
+
+    // Phase 7.1：统一持久化 + policy（动态导入）
+    const { persistImageWithPolicy } = await import('@/server/services/media-persist')
 
     for (let i = 0; i < types.length; i++) {
       const refType = types[i]
@@ -116,8 +122,15 @@ export async function POST(
       }
 
       for (const img of response.images) {
+        // Phase 7.1：统一持久化 + policy（prod 禁止 fallback）
+        const outcome = await persistImageWithPolicy(img.url, projectId, 'image')
+        if (!outcome.persisted && outcome.imageUrl === '') {
+          // production 转存失败：记录失败角度，跳过该图，不保存供应商 URL
+          failedTypes.push({ referenceType: refType, reason: outcome.error || '转存失败' })
+          continue
+        }
         newImageData.push({
-          imageUrl: img.url,
+          imageUrl: outcome.imageUrl,
           prompt,
           seed: String(img.seed || ''),
           referenceType: refType,
@@ -125,6 +138,9 @@ export async function POST(
           isSelected: refType === 'front_full_body',
           referenceImage: anchorImageUrl,
           imgParams: (img.params || {}) as Record<string, unknown>,
+          storageObjectKey: outcome.storageObjectKey,
+          storageProvider: outcome.storageProvider,
+          sourceUrl: outcome.sourceUrl,
         })
       }
     }
@@ -153,6 +169,9 @@ export async function POST(
             characterId: charId,
             projectId,
             imageUrl: img.imageUrl,
+            storageObjectKey: img.storageObjectKey,
+            storageProvider: img.storageProvider,
+            sourceUrl: img.sourceUrl,
             prompt: img.prompt,
             negativePrompt,
             seed: img.seed,
@@ -183,6 +202,8 @@ export async function POST(
         count: createdImages.length,
         mode,
         generatedTypes: newImageData.map(i => i.referenceType),
+        // Phase 7.1: 部分成功时报告失败角度，用户可重试
+        failedTypes: failedTypes.length > 0 ? failedTypes : undefined,
       },
     })
   } catch (error) {

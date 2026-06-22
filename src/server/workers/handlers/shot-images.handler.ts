@@ -314,19 +314,33 @@ export async function handleShotImages(taskId: string): Promise<void> {
 
       const response = await imageAdapter.generate(genReq)
 
-      const createdImages = await Promise.all(response.images.map(img =>
-        prisma.shotImage.create({
-          data: {
-            shotId: shot.id, projectId,
-            imageUrl: img.url, prompt, negativePrompt: negative,
-            seed: String(img.seed || ''), style, aspectRatio,
-            modelName: project.modelProvider === 'ark' ? (process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5-0-260128') : (process.env.AGNES_IMAGE_MODEL || 'agnes-image-2.0-flash'),
-            referenceImages: references,
-            params: { ...img.params, num_outputs: numOutputs },
-            isSelected: false, isConfirmed: false,
-          },
+      // Phase 7.1：统一持久化 + policy。Worker 通过 dotenv 加载 env，factory 可用。
+      const { persistImageWithPolicy } = await import('@/server/services/media-persist')
+      const createdImages = (await Promise.all(
+        response.images.map(async (img) => {
+          const outcome = await persistImageWithPolicy(img.url, projectId, 'image')
+          if (!outcome.persisted && outcome.imageUrl === '') {
+            // production 转存失败：不创建该 ShotImage，记录错误
+            console.error(`[worker:shot-images] Shot #${shot.shotNo}: persist failed (prod, skipped): ${outcome.error}`)
+            return null
+          }
+          return prisma.shotImage.create({
+            data: {
+              shotId: shot.id, projectId,
+              imageUrl: outcome.imageUrl,
+              storageObjectKey: outcome.storageObjectKey,
+              storageProvider: outcome.storageProvider,
+              sourceUrl: outcome.sourceUrl,
+              prompt, negativePrompt: negative,
+              seed: String(img.seed || ''), style, aspectRatio,
+              modelName: project.modelProvider === 'ark' ? (process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5-0-260128') : (process.env.AGNES_IMAGE_MODEL || 'agnes-image-2.0-flash'),
+              referenceImages: references,
+              params: { ...img.params, num_outputs: numOutputs },
+              isSelected: false, isConfirmed: false,
+            },
+          })
         })
-      ))
+      )).filter((x): x is NonNullable<typeof x> => x !== null)
 
       allResults.push({ shotId: shot.id, shotNo: shot.shotNo, images: createdImages })
 
@@ -337,6 +351,13 @@ export async function handleShotImages(taskId: string): Promise<void> {
       if (updated) await emitTaskEvent('task.progress', taskToUpdateEvent(updated))
     }
 
+    // Phase 7.1: 持久化完整性校验。若所有图片转存失败（生产环境禁止 fallback），
+    // 不得推进项目状态或标记任务成功。任务 failed，项目状态回退。
+    const totalPersistedImages = allResults.reduce((s, r) => s + r.images.length, 0)
+    if (totalPersistedImages === 0) {
+      throw new Error('所有分镜图转存失败，未推进项目状态')
+    }
+
     // 更新项目状态
     await prisma.project.update({ where: { id: projectId }, data: { status: 'SHOT_IMAGE_PENDING_CONFIRM' } })
 
@@ -344,12 +365,12 @@ export async function handleShotImages(taskId: string): Promise<void> {
     const { versionService: vs } = await import('@/server/services/version.service')
     await vs.createVersion({
       projectId, entityType: 'SHOT_IMAGE_SET', entityId: episodeId,
-      snapshot: { total_images: allResults.reduce((s, r) => s + r.images.length, 0), project_status: 'SHOT_IMAGE_PENDING_CONFIRM' },
+      snapshot: { total_images: totalPersistedImages, project_status: 'SHOT_IMAGE_PENDING_CONFIRM' },
       changeType: 'GENERATE', description: `生成 ${shots.length} 个镜头分镜图`, sourceTaskId: taskId,
     })
 
     const completed = await taskService.completeTask(taskId, {
-      total_images: allResults.reduce((s, r) => s + r.images.length, 0),
+      total_images: totalPersistedImages,
     })
     await emitTaskEvent('task.completed', taskToUpdateEvent(completed))
 

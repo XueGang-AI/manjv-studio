@@ -180,14 +180,37 @@ export async function POST(
       return NextResponse.json({ success: false, error: '生成失败，旧图已保留' }, { status: 500 })
     }
 
+    // ─── Phase 7.1：统一持久化 + policy（事务前，不进事务）───
+    const { persistImageWithPolicy } = await import('@/server/services/media-persist')
+    const persistedImages = (await Promise.all(
+      response.images.map(async (img) => {
+        const outcome = await persistImageWithPolicy(img.url, projectId, 'image')
+        if (!outcome.persisted && outcome.imageUrl === '') {
+          // production 转存失败：跳过该图，不保存供应商 URL
+          console.error(`[shot-images/regenerate] persist failed (prod, skipped): ${outcome.error}`)
+          return null
+        }
+        return { img, storageObjectKey: outcome.storageObjectKey, storageProvider: outcome.storageProvider, imageUrlForDb: outcome.imageUrl, sourceUrlForAudit: outcome.sourceUrl }
+      })
+    )).filter((x): x is NonNullable<typeof x> => x !== null)
+
+    if (persistedImages.length === 0) {
+      return NextResponse.json({ success: false, error: '图片转存失败，旧图已保留' }, { status: 500 })
+    }
+
     // ─── 生成成功，事务内替换旧图 ───
     const created = await prisma.$transaction(async (tx) => {
       await tx.shotImage.deleteMany({ where: { shotId, projectId } })
 
-      return Promise.all(response.images.map(img =>
+      return Promise.all(persistedImages.map(({ img, storageObjectKey, storageProvider, imageUrlForDb, sourceUrlForAudit }) =>
         tx.shotImage.create({
           data: {
-            shotId, projectId, imageUrl: img.url, prompt,
+            shotId, projectId,
+            imageUrl: imageUrlForDb,
+            storageObjectKey,
+            storageProvider,
+            sourceUrl: sourceUrlForAudit,
+            prompt,
             negativePrompt: negative, seed: String(img.seed || ''),
             style, aspectRatio,
             modelName: project?.modelProvider === 'ark' ? (process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5-0-260128') : (process.env.AGNES_IMAGE_MODEL || 'agnes-image-2.0-flash'),

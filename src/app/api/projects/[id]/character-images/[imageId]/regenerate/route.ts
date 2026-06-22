@@ -112,6 +112,17 @@ export async function POST(
 
     // 先成后删：新图生成成功后，删除旧图并创建新图
     const newImg = response.images[0]
+    // Phase 7.1：统一持久化 + policy 决策（prod 禁止 fallback）
+    const { persistImageWithPolicy } = await import('@/server/services/media-persist')
+    const outcome = await persistImageWithPolicy(newImg.url, projectId, 'image')
+    if (!outcome.persisted && outcome.imageUrl === '') {
+      // production 转存失败：不保存供应商 URL，不推进业务，返回错误
+      return NextResponse.json({ success: false, error: '图片转存失败，请重试' }, { status: 500 })
+    }
+    const storageObjectKey = outcome.storageObjectKey
+    const storageProvider = outcome.storageProvider
+    const imageUrlForDb = outcome.imageUrl
+    const sourceUrlForAudit = outcome.sourceUrl
     const createdImage = await prisma.$transaction(async (tx) => {
       // 删除同一 referenceType 的旧图（可能有多张候选）
       await tx.characterImage.deleteMany({
@@ -127,7 +138,10 @@ export async function POST(
         data: {
           characterId: character.id,
           projectId,
-          imageUrl: newImg.url,
+          imageUrl: imageUrlForDb,
+          storageObjectKey,
+          storageProvider,
+          sourceUrl: sourceUrlForAudit,
           prompt,
           negativePrompt,
           seed: String(newImg.seed || ''),

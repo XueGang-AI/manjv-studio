@@ -173,35 +173,23 @@ export async function POST(
             anchorImageUrl = response.images[0].url
           }
 
-          const created = await Promise.all(response.images.map(async (img) => {
-            // Phase 6: 转存供应商短期签名 URL 到自有存储。
-            // 转存失败时 imageUrl 保留原签名 URL（短期可用），不阻塞生成流程，
-            // 但 storageObjectKey 为空，后续需迁移脚本补转存。
-            let storageObjectKey: string | null = null
-            let storageProvider: string | null = null
-            let sourceUrl: string | null = null
-            let persistedUrl: string | null = null
-            if (img.url) {
-              try {
-                const { persistImageFromUrl } = await import('@/server/services/media-persist')
-                const persisted = await persistImageFromUrl(img.url, projectId)
-                storageObjectKey = persisted.storageObjectKey
-                storageProvider = persisted.storageProvider
-                sourceUrl = persisted.sourceUrl
-                persistedUrl = persisted.readUrl
-              } catch (persistErr) {
-                // 转存失败：记录脱敏错误，imageUrl 保留原签名 URL
-                const errCategory = persistErr instanceof Error ? persistErr.constructor.name : 'UnknownError'
-                console.error(`[Generate] image persist failed (${refType}): ${errCategory}`)
-              }
+          const { persistImageWithPolicy } = await import('@/server/services/media-persist')
+          const created = (await Promise.all(response.images.map(async (img) => {
+            // Phase 7.1: 统一持久化 + policy（prod 禁止 fallback）
+            if (!img.url) return null
+            const outcome = await persistImageWithPolicy(img.url, projectId, 'image')
+            if (!outcome.persisted && outcome.imageUrl === '') {
+              // production 转存失败：跳过该图，不保存供应商 URL
+              console.error(`[Generate] image persist failed (${refType}, prod skipped): ${outcome.error}`)
+              return null
             }
             return prisma.characterImage.create({
               data: {
                 characterId: char.id, projectId,
-                imageUrl: persistedUrl || img.url,
-                storageObjectKey,
-                storageProvider,
-                sourceUrl,
+                imageUrl: outcome.imageUrl,
+                storageObjectKey: outcome.storageObjectKey,
+                storageProvider: outcome.storageProvider,
+                sourceUrl: outcome.sourceUrl,
                 prompt,
                 negativePrompt,
                 seed: String(img.seed || ''),
@@ -217,11 +205,26 @@ export async function POST(
                 isConfirmed: false,
               },
             })
-          }))
+          }))).filter((x): x is NonNullable<typeof x> => x !== null)
           charImages.push(...created)
         }
 
         allResults.push({ characterId: char.id, characterName: char.name || '', images: charImages })
+      }
+
+      // Phase 7.1: 持久化完整性校验。若所有图片转存失败（生产环境禁止 fallback），
+      // 不得推进项目状态或标记任务成功。任务 failed，项目状态回退。
+      const totalPersisted = allResults.reduce((s, r) => s + r.images.length, 0)
+      if (totalPersisted === 0) {
+        await prisma.project.update({ where: { id: projectId }, data: { status: 'CHARACTER_CONFIRMED' } })
+        await prisma.generationTask.update({
+          where: { id: task.id },
+          data: { status: 'failed', errorMessage: '图片转存全部失败，未推进项目状态' },
+        })
+        return NextResponse.json({
+          success: false,
+          error: '图片转存失败，请稍后重试',
+        }, { status: 500 })
       }
 
       await prisma.project.update({
@@ -233,7 +236,7 @@ export async function POST(
       await vs.createVersion({
         projectId, entityType: 'CHARACTER_IMAGE_SET', entityId: projectId,
         snapshot: {
-          total_images: allResults.reduce((s, r) => s + r.images.length, 0),
+          total_images: totalPersisted,
           project_status: 'CHARACTER_IMAGE_PENDING_CONFIRM',
           mode, reference_types: types,
         },
@@ -244,7 +247,7 @@ export async function POST(
 
       await prisma.generationTask.update({
         where: { id: task.id },
-        data: { status: 'success', output: { total_images: allResults.reduce((s, r) => s + r.images.length, 0), mode } },
+        data: { status: 'success', output: { total_images: totalPersisted, mode } },
       })
 
       return NextResponse.json({ success: true, data: { characters: allResults, mode, referenceTypes: types } })
