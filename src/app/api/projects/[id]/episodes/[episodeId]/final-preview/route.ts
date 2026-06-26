@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
+import { toLocalMediaReadUrl } from '@/server/services/local-media-read-url'
 
 export async function GET(
   request: NextRequest,
@@ -23,13 +24,17 @@ export async function GET(
     })
 
     const allVideosConfirmed = shots.every(s => s.shotVideos.length > 0)
+    const readableFinalVideos = finalVideos.map(video => ({
+      ...video,
+      videoUrl: toLocalMediaReadUrl(video.videoUrl),
+    }))
 
     return NextResponse.json({
       success: true,
       data: {
         projectId, episodeId, projectStatus: project?.status || '',
-        finalVideos,
-        latest: finalVideos[0] || null,
+        finalVideos: readableFinalVideos,
+        latest: readableFinalVideos[0] || null,
         shotsWithVideos: shots.map(s => ({
           shotNo: s.shotNo, shotName: s.shotName,
           videoCount: s.shotVideos.length,

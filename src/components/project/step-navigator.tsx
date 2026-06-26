@@ -8,6 +8,7 @@ import { MobileWorkflowSummary } from './workflow/mobile-workflow-summary'
 interface StepNavigatorProps {
   projectId: string
   currentStatus: string
+  episodeId?: string
   /**
    * 当前需用户处理的失败步骤 id。
    * 由调用方从 generation_tasks 派生（见 workflow-error-deriver）。
@@ -27,10 +28,10 @@ interface StepNavigatorProps {
  * 状态推导与路由完全由 workflow-status-mapper 提供，沿用原业务逻辑。
  * 已移除原右侧静态假数据（硬编码 ModelSelector + "队列中" Badge）。
  */
-export function StepNavigator({ projectId, currentStatus, errorStepId }: StepNavigatorProps) {
+export function StepNavigator({ projectId, currentStatus, episodeId, errorStepId }: StepNavigatorProps) {
   const pathname = usePathname()
   const steps = mapWorkflowSteps(
-    buildWorkflowSteps(projectId),
+    buildWorkflowSteps(projectId, episodeId),
     currentStatus,
     pathname,
     errorStepId ? { errorStepId } : undefined,

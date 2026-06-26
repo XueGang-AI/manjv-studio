@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
+import { toLocalMediaReadUrl } from '@/server/services/local-media-read-url'
 
 export async function GET(
   request: NextRequest,
@@ -19,17 +20,24 @@ export async function GET(
       },
     })
 
-    const grouped = shots.map(shot => ({
-      shot: {
-        id: shot.id, shotNo: shot.shotNo, shotName: shot.shotName,
-        startTime: shot.startTime, endTime: shot.endTime,
-        videoPrompt: shot.videoPrompts[0] || null,
-        confirmedImage: shot.shotImages[0] || null,
-      },
-      videos: shot.shotVideos,
-      selectedVideo: shot.shotVideos.find(v => v.isSelected) || null,
-      confirmed: shot.shotVideos.some(v => v.isConfirmed),
-    }))
+    const grouped = shots.map(shot => {
+      const videos = shot.shotVideos.map(video => ({
+        ...video,
+        videoUrl: toLocalMediaReadUrl(video.videoUrl),
+      }))
+
+      return {
+        shot: {
+          id: shot.id, shotNo: shot.shotNo, shotName: shot.shotName,
+          startTime: shot.startTime, endTime: shot.endTime,
+          videoPrompt: shot.videoPrompts[0] || null,
+          confirmedImage: shot.shotImages[0] || null,
+        },
+        videos,
+        selectedVideo: videos.find(v => v.isSelected) || null,
+        confirmed: videos.some(v => v.isConfirmed),
+      }
+    })
 
     const allConfirmed = grouped.length > 0 && grouped.every(g => g.confirmed)
 

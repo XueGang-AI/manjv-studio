@@ -15,6 +15,7 @@ export default function ProjectDetailLayout({
   const params = useParams()
   const projectId = params.id as string
   const [status, setStatus] = useState('DRAFT')
+  const [episodeId, setEpisodeId] = useState<string | undefined>()
   const [errorStepId, setErrorStepId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -30,14 +31,19 @@ export default function ProjectDetailLayout({
         ])
         if (controller.signal.aborted) return
         // 项目状态是主信息，tasks 失败不得影响主页面可用性
+        let resolvedEpisodeId: string | undefined
         if (projRes.success && projRes.data?.status) {
           setStatus(projRes.data.status)
+          const firstEpisode = projRes.data.episodes?.find((episode: { episodeNo: number }) => episode.episodeNo === 1)
+            || projRes.data.episodes?.[0]
+          resolvedEpisodeId = firstEpisode?.id
+          setEpisodeId(resolvedEpisodeId)
         }
         // errorStepId 为增强信息，失败时仅不显示步骤错误，不白屏
         if (tasksRes.success && Array.isArray(tasksRes.data)) {
           const errorId = deriveErrorStepId(
             tasksRes.data as TaskBrief[],
-            buildWorkflowSteps(projectId),
+            buildWorkflowSteps(projectId, resolvedEpisodeId),
           )
           if (!controller.signal.aborted) setErrorStepId(errorId)
         }
@@ -53,7 +59,7 @@ export default function ProjectDetailLayout({
 
   return (
     <div className="flex flex-col h-full">
-      <StepNavigator projectId={projectId} currentStatus={status} errorStepId={errorStepId} />
+      <StepNavigator projectId={projectId} currentStatus={status} episodeId={episodeId} errorStepId={errorStepId} />
       <WorkflowShell>
         <WorkflowShell.Main className="p-6 bg-[var(--bg-base)]">
           {children}

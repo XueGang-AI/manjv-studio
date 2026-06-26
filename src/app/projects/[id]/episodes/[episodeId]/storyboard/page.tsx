@@ -40,12 +40,26 @@ export default function StoryboardPage() {
 
   const { addToast } = useToast()
 
+  const routeToResolvedEpisode = (episodes: Array<{ id: string; episodeNo: number }> | undefined) => {
+    if (!/^\d+$/.test(episodeId)) return false
+
+    const ep = episodes?.find(e => e.episodeNo === parseInt(episodeId))
+    if (ep && ep.id !== episodeId) {
+      router.replace(`/projects/${projectId}/episodes/${ep.id}/storyboard`)
+      return true
+    }
+    return false
+  }
+
   // Refresh data (for use after mutations)
   const refreshData = async () => {
     try {
       const projRes = await fetch(`/api/projects/${projectId}`)
       const projData = await projRes.json()
-      if (projData.success) setProject(projData.data)
+      if (projData.success) {
+        setProject(projData.data)
+        if (routeToResolvedEpisode(projData.data.episodes)) return
+      }
 
       const epsRes = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/storyboard`)
       const epsData = await epsRes.json()
@@ -66,14 +80,14 @@ export default function StoryboardPage() {
 
         let resolvedId = episodeId
         if (/^\d+$/.test(episodeId) && projData.success) {
-          const ep = projData.data.episodes?.find(
-            (e: { episodeNo: number }) => e.episodeNo === parseInt(episodeId)
-          )
-          if (ep && ep.id !== episodeId) {
-            router.replace(`/projects/${projectId}/episodes/${ep.id}/storyboard`)
-            return
+          const ep = projData.data.episodes?.find((e: { episodeNo: number }) => e.episodeNo === parseInt(episodeId))
+          if (ep) {
+            resolvedId = ep.id
+            if (ep.id !== episodeId) {
+              router.replace(`/projects/${projectId}/episodes/${ep.id}/storyboard`)
+              return
+            }
           }
-          if (ep) resolvedId = ep.id
         }
 
         const epsRes = await fetch(`/api/projects/${projectId}/episodes/${resolvedId}/storyboard`)

@@ -85,8 +85,9 @@ export interface WorkflowStepDef {
  * 构建项目工作流步骤定义（8 步，顺序固定）。
  * 路由与原 StepNavigator 完全一致，不修改业务顺序。
  */
-export function buildWorkflowSteps(projectId: string): WorkflowStepDef[] {
+export function buildWorkflowSteps(projectId: string, episodeId = '1'): WorkflowStepDef[] {
   const base = `/projects/${projectId}`
+  const episodeBase = `${base}/episodes/${episodeId}`
   return [
     {
       id: 'info',
@@ -124,7 +125,7 @@ export function buildWorkflowSteps(projectId: string): WorkflowStepDef[] {
     {
       id: 'storyboard',
       label: '分镜脚本',
-      href: `${base}/episodes/1/storyboard`,
+      href: `${episodeBase}/storyboard`,
       confirmStatus: 'STORYBOARD_CONFIRMED',
       unlockStatus: 'CHARACTER_IMAGE_CONFIRMED',
       generatingStatus: 'STORYBOARD_GENERATING',
@@ -133,7 +134,7 @@ export function buildWorkflowSteps(projectId: string): WorkflowStepDef[] {
     {
       id: 'shot-images',
       label: '分镜图',
-      href: `${base}/episodes/1/shot-images`,
+      href: `${episodeBase}/shot-images`,
       confirmStatus: 'SHOT_IMAGE_CONFIRMED',
       unlockStatus: 'STORYBOARD_CONFIRMED',
       generatingStatus: 'SHOT_IMAGE_GENERATING',
@@ -142,7 +143,7 @@ export function buildWorkflowSteps(projectId: string): WorkflowStepDef[] {
     {
       id: 'shot-videos',
       label: '视频片段',
-      href: `${base}/episodes/1/shot-videos`,
+      href: `${episodeBase}/shot-videos`,
       confirmStatus: 'SHOT_VIDEO_CONFIRMED',
       unlockStatus: 'SHOT_IMAGE_CONFIRMED',
       generatingStatus: 'SHOT_VIDEO_GENERATING',
@@ -151,7 +152,7 @@ export function buildWorkflowSteps(projectId: string): WorkflowStepDef[] {
     {
       id: 'final-preview',
       label: '成片预览',
-      href: `${base}/episodes/1/final-preview`,
+      href: `${episodeBase}/final-preview`,
       confirmStatus: 'RENDERED',
       unlockStatus: 'SHOT_VIDEO_CONFIRMED',
       generatingStatus: 'RENDERING',

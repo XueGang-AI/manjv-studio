@@ -12,6 +12,24 @@ const log = (msg: string) => console.log(`\x1b[36m[E2E]\x1b[0m ${msg}`)
 const ok = (msg: string) => console.log(`\x1b[32m✅ ${msg}\x1b[0m`)
 const fail = (msg: string): never => { console.log(`\x1b[31m❌ ${msg}\x1b[0m`); process.exit(1) }
 
+function resolveLocalVideoPath(videoUrl: string): string {
+  const localMediaPrefix = '/api/local-media/'
+  if (videoUrl.startsWith(localMediaPrefix)) {
+    return `uploads/${decodeURIComponent(videoUrl.slice(localMediaPrefix.length))}`
+  }
+
+  try {
+    const url = new URL(videoUrl)
+    if (url.pathname.startsWith(localMediaPrefix)) {
+      return `uploads/${decodeURIComponent(url.pathname.slice(localMediaPrefix.length))}`
+    }
+  } catch {
+    // Plain filesystem path.
+  }
+
+  return videoUrl
+}
+
 async function post(path: string, body?: Record<string, unknown>) {
   const res = await fetch(`${BASE}${path}`, {
     method: 'POST',
@@ -232,7 +250,7 @@ async function main() {
 
   // 21. Verify final video file
   log('Step 21: 验证最终视频文件')
-  const videoPath = state.finalVideoUrl
+  const videoPath = resolveLocalVideoPath(state.finalVideoUrl)
   if (!fs.existsSync(videoPath)) fail(`文件不存在: ${videoPath}`)
   const stat = fs.statSync(videoPath)
   if (stat.size === 0) fail('文件大小为 0')
