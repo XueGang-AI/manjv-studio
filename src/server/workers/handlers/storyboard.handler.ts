@@ -108,7 +108,9 @@ export async function handleStoryboard(taskId: string): Promise<void> {
       relationship_json: '{}',
     })
 
-    const enhancedSystem = rendered.systemPrompt + materialRefs
+    const targetShotCount = getTargetShotCount(project.episodeDuration, maxShotDuration)
+    const runtimeStoryboardInstruction = buildRuntimeStoryboardInstruction(targetShotCount, project.episodeDuration)
+    const enhancedSystem = rendered.systemPrompt + materialRefs + runtimeStoryboardInstruction
 
     await taskService.updateProgress(taskId, 30)
 
@@ -118,15 +120,48 @@ export async function handleStoryboard(taskId: string): Promise<void> {
       taskType: 'storyboard',
       systemPrompt: enhancedSystem,
       userPrompt: rendered.userPrompt,
+      outputSchema: rendered.outputSchema || undefined,
       temperature: 0.7,
       maxTokens: 8192,
     }
 
-    const response = await textAdapter.generate(genReq)
-    const content = response.json as Record<string, unknown> | undefined
+    let rawText = ''
+    let parsed: unknown
+    try {
+      const response = await textAdapter.generate(genReq)
+      rawText = response.rawText
+      parsed = parseModelResponse(response)
+    } catch (firstErr) {
+      rawText = (firstErr as Error).message
+      parsed = undefined
+    }
 
-    if (!content || !content.shots || !Array.isArray(content.shots)) {
-      throw new Error('模型输出缺少 shots 数组')
+    let content = findStoryboardPayload(parsed, episodeNumber) || recoverStoryboardPayloadFromRawText(rawText)
+    if (!content) {
+      await taskService.appendLog(taskId, 'WARN', '首次分镜 JSON 结构不符合要求，正在重试', {
+        raw_preview: rawText.substring(0, 300),
+        parsed_keys: describeJsonKeys(parsed),
+      })
+
+      const retryResponse = await textAdapter.generate({
+        ...genReq,
+        systemPrompt:
+          enhancedSystem +
+          '\n\nCRITICAL: Your previous response did not contain a usable top-level "shots" array. ' +
+          'Output ONLY one valid JSON object, with no markdown, no explanation, and no wrapper key. ' +
+          'The root object MUST be exactly shaped as: { "episode": {...}, "shots": [...], "ending_hook": {...} }. ' +
+          `The "shots" value MUST be a non-empty array with exactly ${targetShotCount} concise shot objects. ` +
+          'Every shot MUST include shot_no, shot_name, start_time, end_time, scene_time, location, characters, action, camera, visual, emotion, sfx, bgm, dialogue, purpose, and duration. ' +
+          'Keep every text field concise so the JSON closes completely.',
+      })
+      rawText = retryResponse.rawText
+      parsed = parseModelResponse(retryResponse)
+      content = findStoryboardPayload(parsed, episodeNumber) || recoverStoryboardPayloadFromRawText(rawText)
+    }
+
+    if (!content) {
+      const preview = rawText ? rawText.substring(0, 300) : ''
+      throw new Error(`模型输出缺少 shots 数组${preview ? ` (rawText 预览: ${preview})` : ''}`)
     }
 
     await taskService.updateProgress(taskId, 60)
@@ -262,6 +297,327 @@ export async function handleStoryboard(taskId: string): Promise<void> {
     const failed = await taskService.failTask(taskId, errorMsg)
     await emitTaskEvent('task.failed', taskToUpdateEvent(failed))
   }
+}
+
+function parseModelResponse(response: { json?: unknown; rawText?: string }): unknown {
+  const json = response.json
+  if (json && typeof json === 'object') return json
+
+  const rawText = response.rawText || ''
+  if (!rawText) return undefined
+
+  const cleaned = rawText.replace(/^\uFEFF/, '').trim()
+  try {
+    return JSON.parse(cleaned)
+  } catch {
+    /* continue */
+  }
+
+  const fenced = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
+  if (fenced?.[1]) {
+    try {
+      return JSON.parse(fenced[1].trim())
+    } catch {
+      /* continue */
+    }
+  }
+
+  const objSlice = sliceFirstBalanced(cleaned, '{', '}')
+  if (objSlice) {
+    try {
+      return JSON.parse(objSlice)
+    } catch {
+      /* continue */
+    }
+  }
+
+  const arrSlice = sliceFirstBalanced(cleaned, '[', ']')
+  if (arrSlice) {
+    try {
+      return JSON.parse(arrSlice)
+    } catch {
+      /* continue */
+    }
+  }
+
+  return undefined
+}
+
+function buildRuntimeStoryboardInstruction(targetShotCount: number, episodeDuration: number): string {
+  return [
+    '',
+    '',
+    '## Runtime Storyboard Constraints',
+    `Generate exactly ${targetShotCount} shots for this ${episodeDuration}-second episode.`,
+    'Keep JSON compact and fully closed. Do not over-explain.',
+    'Each shot action/dialogue/purpose field should stay under 80 Chinese characters.',
+    'Do not add fields outside the required JSON object unless they are image_prompt or video_prompt.',
+  ].join('\n')
+}
+
+function getTargetShotCount(episodeDuration: number, maxShotDuration: number): number {
+  const minByDuration = Math.ceil(episodeDuration / maxShotDuration)
+  const comfortableCount = Math.ceil(episodeDuration / 6)
+  return Math.max(2, Math.min(8, Math.max(minByDuration, comfortableCount)))
+}
+
+function recoverStoryboardPayloadFromRawText(rawText: string): Record<string, unknown> | undefined {
+  const cleaned = rawText.replace(/^\uFEFF/, '').trim()
+  if (!cleaned || !cleaned.includes('"shots"')) return undefined
+
+  const shotsStart = cleaned.search(/"shots"\s*:/)
+  if (shotsStart === -1) return undefined
+
+  const arrayStart = cleaned.indexOf('[', shotsStart)
+  if (arrayStart === -1) return undefined
+
+  const shots: Array<Record<string, unknown>> = []
+  let cursor = arrayStart + 1
+  while (cursor < cleaned.length) {
+    const objectStart = cleaned.indexOf('{', cursor)
+    if (objectStart === -1) break
+
+    const objectText = sliceBalancedFrom(cleaned, objectStart, '{', '}')
+    if (!objectText) break
+
+    try {
+      const shot = JSON.parse(objectText)
+      if (shot && typeof shot === 'object' && !Array.isArray(shot)) {
+        shots.push(shot as Record<string, unknown>)
+      }
+    } catch {
+      break
+    }
+    cursor = objectStart + objectText.length
+  }
+
+  if (!asShotArray(shots, true)) return undefined
+
+  const episode = recoverNamedObject(cleaned, 'episode')
+  const endingHook = recoverNamedObject(cleaned, 'ending_hook')
+  return {
+    episode: episode || {},
+    shots,
+    ...(endingHook ? { ending_hook: endingHook } : {}),
+  }
+}
+
+function recoverNamedObject(text: string, key: string): Record<string, unknown> | undefined {
+  const keyStart = text.search(new RegExp(`"${key}"\\s*:`))
+  if (keyStart === -1) return undefined
+
+  const objectStart = text.indexOf('{', keyStart)
+  if (objectStart === -1) return undefined
+
+  const objectText = sliceBalancedFrom(text, objectStart, '{', '}')
+  if (!objectText) return undefined
+
+  try {
+    const parsed = JSON.parse(objectText)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>
+    }
+  } catch {
+    return undefined
+  }
+
+  return undefined
+}
+
+function sliceFirstBalanced(text: string, open: '{' | '[', close: '}' | ']'): string | undefined {
+  const start = text.indexOf(open)
+  if (start === -1) return undefined
+  return sliceBalancedFrom(text, start, open, close)
+}
+
+function sliceBalancedFrom(text: string, start: number, open: '{' | '[', close: '}' | ']'): string | undefined {
+  let depth = 0
+  let inString = false
+  let escape = false
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i]
+    if (escape) {
+      escape = false
+      continue
+    }
+    if (ch === '\\') {
+      escape = true
+      continue
+    }
+    if (ch === '"') {
+      inString = !inString
+      continue
+    }
+    if (inString) continue
+    if (ch === open) depth++
+    else if (ch === close) {
+      depth--
+      if (depth === 0) return text.substring(start, i + 1)
+    }
+  }
+
+  return undefined
+}
+
+function findStoryboardPayload(node: unknown, episodeNumber: number, depth = 0): Record<string, unknown> | undefined {
+  if (!node || depth > 5) return undefined
+
+  if (Array.isArray(node)) {
+    const topLevelShots = asShotArray(node, true)
+    if (topLevelShots) return { shots: topLevelShots }
+
+    for (const item of node) {
+      const found = findStoryboardPayload(item, episodeNumber, depth + 1)
+      if (found) return found
+    }
+    return undefined
+  }
+
+  if (typeof node !== 'object') return undefined
+  const obj = node as Record<string, unknown>
+
+  const directShots = findShotArrayOnObject(obj)
+  if (directShots) return { ...obj, shots: directShots }
+
+  const episode = obj.episode
+  if (episode && typeof episode === 'object' && !Array.isArray(episode)) {
+    const episodeObj = episode as Record<string, unknown>
+    const episodeShots = findShotArrayOnObject(episodeObj)
+    if (episodeShots) return { ...obj, episode: episodeObj, shots: episodeShots }
+  }
+
+  const episodes = obj.episodes
+  if (Array.isArray(episodes)) {
+    const preferred = episodes.find(item => {
+      if (!item || typeof item !== 'object') return false
+      const episodeObj = item as Record<string, unknown>
+      return asNumber(episodeObj.episode_no) === episodeNumber || asNumber(episodeObj.episodeNo) === episodeNumber
+    })
+    const orderedEpisodes = preferred ? [preferred, ...episodes.filter(item => item !== preferred)] : episodes
+    for (const item of orderedEpisodes) {
+      const found = findStoryboardPayload(item, episodeNumber, depth + 1)
+      if (found) return found
+    }
+  }
+
+  const wrapperKeys = [
+    'storyboard',
+    'storyboard_script',
+    'storyboardScript',
+    'script',
+    'data',
+    'output',
+    'result',
+    'response',
+    'payload',
+    'body',
+    'content',
+    '分镜脚本',
+    '分镜',
+    '镜头列表',
+  ]
+
+  for (const key of wrapperKeys) {
+    const nested = obj[key]
+    if (nested && typeof nested === 'object') {
+      const found = findStoryboardPayload(nested, episodeNumber, depth + 1)
+      if (found) return mergeStoryboardPayload(obj, found)
+    }
+  }
+
+  for (const key of Object.keys(obj)) {
+    if (wrapperKeys.includes(key) || key === 'shots' || key === 'episode' || key === 'episodes') continue
+    const nested = obj[key]
+    if (nested && typeof nested === 'object') {
+      const found = findStoryboardPayload(nested, episodeNumber, depth + 1)
+      if (found) return mergeStoryboardPayload(obj, found)
+    }
+  }
+
+  return undefined
+}
+
+function findShotArrayOnObject(obj: Record<string, unknown>): Array<Record<string, unknown>> | undefined {
+  const shotKeys = [
+    'shots',
+    'shot_list',
+    'shotList',
+    'shotListJson',
+    'storyboard_shots',
+    'storyboardShots',
+    '镜头',
+    '镜头列表',
+    '分镜列表',
+  ]
+
+  for (const key of shotKeys) {
+    const shots = asShotArray(obj[key], key !== 'shots')
+    if (shots) return shots
+  }
+
+  return undefined
+}
+
+function asShotArray(value: unknown, requireShotLike: boolean): Array<Record<string, unknown>> | undefined {
+  if (!Array.isArray(value) || value.length === 0) return undefined
+  if (!value.every(item => item && typeof item === 'object' && !Array.isArray(item))) return undefined
+
+  const shots = value as Array<Record<string, unknown>>
+  if (!requireShotLike || shots.some(isShotLike)) return shots
+  return undefined
+}
+
+function isShotLike(value: Record<string, unknown>): boolean {
+  const keys = [
+    'shot_no',
+    'shotNo',
+    'shot_name',
+    'shotName',
+    'start_time',
+    'startTime',
+    'end_time',
+    'endTime',
+    'scene_time',
+    'location',
+    'characters',
+    'action',
+    'camera',
+    'visual',
+    'dialogue',
+  ]
+  return keys.filter(key => key in value).length >= 3
+}
+
+function mergeStoryboardPayload(wrapper: Record<string, unknown>, found: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...wrapper,
+    ...found,
+    episode: found.episode || wrapper.episode,
+    ending_hook: found.ending_hook || wrapper.ending_hook,
+    voice_timeline: found.voice_timeline || wrapper.voice_timeline,
+  }
+}
+
+function asNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return undefined
+}
+
+function describeJsonKeys(value: unknown): string[] {
+  if (!value) return []
+  if (Array.isArray(value)) {
+    const first = value[0]
+    if (first && typeof first === 'object' && !Array.isArray(first)) {
+      return [`array(${value.length})`, ...Object.keys(first as Record<string, unknown>).slice(0, 20)]
+    }
+    return [`array(${value.length})`]
+  }
+  if (typeof value === 'object') return Object.keys(value as Record<string, unknown>).slice(0, 30)
+  return [typeof value]
 }
 
 /** 从素材库加载相关参考并格式化为 prompt 片段 */

@@ -92,7 +92,7 @@ export async function handleFinalRender(taskId: string): Promise<void> {
 
     let result: { success: boolean; outputPath?: string; duration?: number; error?: string }
 
-    if (ffAvailable && confirmedVideos.length > 1) {
+    if (ffAvailable) {
       await updateProgress(10)
       result = await ffmpegService.concatVideos({
         shotVideos: confirmedVideos.map(v => ({
@@ -102,14 +102,8 @@ export async function handleFinalRender(taskId: string): Promise<void> {
         outputFileName,
         aspectRatio,
         fps: 25,
-        addFadeTransition: true,
+        addFadeTransition: confirmedVideos.length > 1,
       })
-    } else if (ffAvailable) {
-      result = await ffmpegService.generatePlaceholder(
-        outputFileName,
-        episode.duration || confirmedVideos[0]?.duration || 90,
-        aspectRatio,
-      )
     } else {
       result = {
         success: true,

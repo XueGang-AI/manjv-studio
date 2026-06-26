@@ -149,12 +149,13 @@ export async function handleShotVideos(taskId: string): Promise<void> {
         ? confirmedImage.referenceImages
         : []
       const referenceImageUrls = await resolveStructuredReferenceImagesForModel(inheritedReferenceImages, 4)
+      const sentReferenceImageUrls = inputImageUrl ? [] : referenceImageUrls
 
       const genReq: VideoGenerationRequest = {
         taskType: 'image_to_video',
         prompt,
         inputImage: inputImageUrl,
-        referenceImages: referenceImageUrls,
+        referenceImages: sentReferenceImageUrls,
         duration,
         aspectRatio,
         motionStrength: (vidPrompt?.motionStrength as 'low' | 'medium' | 'high') || 'medium',
@@ -185,7 +186,9 @@ export async function handleShotVideos(taskId: string): Promise<void> {
             params: {
               aspect_ratio: aspectRatio,
               generation_method: 'async_task',
-              sent_reference_image_count: referenceImageUrls.length,
+              seedance_input_mode: inputImageUrl ? 'first_frame' : 'reference_media',
+              available_reference_image_count: referenceImageUrls.length,
+              sent_reference_image_count: sentReferenceImageUrls.length,
             } as unknown as JsonValue,
             remoteTaskId: createResult.taskId,
             remoteStatus: createResult.status,
@@ -215,7 +218,13 @@ export async function handleShotVideos(taskId: string): Promise<void> {
                 ? [{ image_url: confirmedImage.imageUrl, reference_type: 'input_image' }, ...inheritedReferenceImages] as unknown as JsonValue
                 : [] as unknown as JsonValue,
               duration: v.duration || duration,
-              params: { ...v.params, aspect_ratio: aspectRatio, sent_reference_image_count: referenceImageUrls.length } as unknown as JsonValue,
+              params: {
+                ...v.params,
+                aspect_ratio: aspectRatio,
+                seedance_input_mode: inputImageUrl ? 'first_frame' : 'reference_media',
+                available_reference_image_count: referenceImageUrls.length,
+                sent_reference_image_count: sentReferenceImageUrls.length,
+              } as unknown as JsonValue,
               isSelected: idx === 0 && autoSelect, isConfirmed: false,
             },
           })

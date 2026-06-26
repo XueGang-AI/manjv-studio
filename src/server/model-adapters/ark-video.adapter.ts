@@ -107,16 +107,23 @@ export class ArkVideoAdapter extends BaseVideoAdapter {
       content.push({
         type: 'image_url',
         image_url: { url: request.inputImage },
+        role: 'first_frame',
       })
     }
 
-    const extraReferenceImages = (request.referenceImages || [])
-      .filter(url => url && url !== request.inputImage)
-      .slice(0, 8)
+    // Seedance visual modes are mutually exclusive: first/last-frame mode cannot
+    // be mixed with multimodal reference media. The confirmed shot image is the
+    // first frame; character/scene consistency is already baked into that frame.
+    const extraReferenceImages = request.inputImage
+      ? []
+      : (request.referenceImages || [])
+        .filter(url => url)
+        .slice(0, 8)
     for (const imageUrl of extraReferenceImages) {
       content.push({
         type: 'image_url',
         image_url: { url: imageUrl },
+        role: 'reference_image',
       })
     }
 

@@ -13,6 +13,7 @@ interface FinalVideoPlayerProps {
 
 export function FinalVideoPlayer({ video, onRerender, rerendering }: FinalVideoPlayerProps) {
   const [loadError, setLoadError] = useState(false)
+  const playerFrameClass = getPlayerFrameClass(video?.aspectRatio)
 
   // No video at all
   if (!video) {
@@ -56,17 +57,23 @@ export function FinalVideoPlayer({ video, onRerender, rerendering }: FinalVideoP
 
   // Normal player
   return (
-    <div className="relative rounded-[var(--radius-lg)] overflow-hidden bg-black max-w-lg mx-auto">
+    <div className={`relative rounded-[var(--radius-lg)] overflow-hidden bg-black mx-auto ${playerFrameClass}`}>
       <video
         key={video.id}
         src={video.videoUrl}
         controls
         preload="metadata"
         playsInline
-        className="w-full aspect-video"
+        className="h-full w-full object-contain"
         aria-label="最终成片播放"
         onError={() => setLoadError(true)}
       />
     </div>
   )
+}
+
+function getPlayerFrameClass(aspectRatio?: string | null): string {
+  if (aspectRatio === '16:9') return 'aspect-video w-full max-w-3xl'
+  if (aspectRatio === '1:1') return 'aspect-square w-full max-w-lg'
+  return 'aspect-[9/16] w-full max-w-[405px]'
 }

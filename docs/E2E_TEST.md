@@ -88,11 +88,17 @@ npm run test:e2e:real
 10. Ark 图片模型生成场景参考图
 11. Ark 图片模型生成分镜图
 12. 确认分镜图
-13. Seedance 2.0 创建视频异步任务
+13. Ark/Seedance 创建视频异步任务（确认分镜图作为 `first_frame`）
 14. 轮询远端任务直到 completed
 15. 下载真实视频到本地
 16. FFmpeg 合成最终 MP4
 17. ffprobe 验证
+
+### 真实接口注意事项
+
+- Seedance 图片输入模式互斥：`first_frame` / `last_frame` 不能与 `reference_image` 混用。生产链路用确认分镜图作为 `first_frame`；角色和场景参考图在分镜图生成阶段传入并固化到首帧。
+- 若强制指定 `ARK_VIDEO_MODEL=doubao-seedance-2-0-260128`，账号必须先在 Ark 控制台开通该模型；未开通时接口会返回 `ModelNotOpen`。
+- 单片段成片也必须走 FFmpeg `concatVideos()` 两阶段规范化链路，确保输出落在 `uploads/final_videos/` 并可被 `/api/local-media/final_videos/...` 读取。
 
 ## 探针测试
 
@@ -123,4 +129,6 @@ npm run probe:ark:video:poll -- --task-id <id> --timeout-minutes 60 --interval-s
 | Redis 连接失败 | Redis 未运行 | 可忽略或启动 Redis，系统会 DB 轮询降级 |
 | ffprobe 失败 | FFmpeg 未安装或路径错误 | 安装 FFmpeg，检查 `FFMPEG_PATH` / `FFPROBE_PATH` |
 | 视频一直 queued | Ark 视频队列拥堵 | 后续用 `probe:ark:video:poll` 继续轮询 |
+| `ModelNotOpen` | 当前 Ark 账号未开通指定视频模型 | 在 Ark 控制台开通模型，或使用 `.env` 中已开通的视频模型 |
+| `first/last frame content cannot be mixed with reference media content` | Seedance 首帧模式与参考媒体模式混用 | 视频阶段只发送确认分镜图首帧；角色/场景参考放在分镜图阶段 |
 | 分镜图生成报错 | 角色图或场景参考未准备好 | 确认前置阶段完成并已确认 |
