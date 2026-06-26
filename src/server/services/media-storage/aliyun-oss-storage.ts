@@ -256,16 +256,17 @@ export function createAliyunOssStorageProvider(config?: AliyunOssConfig): MediaS
 
     async createReadUrl(input: CreateReadUrlInput): Promise<string> {
       // 签名读取永远用公网 endpoint（signClient）
-      // signatureUrl 返回完整公网 HTTPS 签名 URL
-      const expires = Math.min(
+      // 使用阿里云 OSS V4 签名 API
+      const expiresInSeconds = Math.min(
         Math.max(input.expiresInSeconds, 300),
         7 * 24 * 60 * 60,
       )
-      // ali-oss V4 签名：signatureUrl 在 V4 模式下内部用 V4
-      const url = signClient.signatureUrl(input.objectKey, {
-        expires,
-        method: 'GET',
-      })
+      const url = await signClient.signatureUrlV4(
+        'GET',
+        expiresInSeconds,
+        { headers: {} },
+        input.objectKey,
+      )
       return url
     },
 
@@ -287,7 +288,7 @@ export function createAliyunOssStorageProvider(config?: AliyunOssConfig): MediaS
     async getMetadata(objectKey: string): Promise<MediaObjectMetadata> {
       try {
         const head = await uploadClient.head(objectKey)
-        const headers = head?.res?.headers || {}
+        const headers = (head?.res?.headers ?? {}) as Record<string, string>
         return {
           contentType: headers['content-type'] || '',
           sizeBytes: parseInt(headers['content-length'] || '0', 10) || 0,

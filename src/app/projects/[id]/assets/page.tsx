@@ -6,7 +6,7 @@ export default function AssetsPage() {
       <Card>
         <CardHeader><CardTitle>素材管理</CardTitle></CardHeader>
         <CardContent>
-          <p className="text-gray-400">此页面将在 Phase 10 实现，展示素材文件列表和下载。</p>
+          <p className="text-gray-400">素材文件由角色图、场景参考图、分镜图、视频片段和发布包页面分别管理。</p>
         </CardContent>
       </Card>
     </div>

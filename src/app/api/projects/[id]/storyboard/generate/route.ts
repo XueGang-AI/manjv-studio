@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { taskService } from '@/server/queues/task-queue.service'
 import { emitTaskEvent, taskToUpdateEvent } from '@/server/workers/task-events'
+import { getRuntimeModelName } from '@/server/model-adapters/model-config'
 
 /**
  * POST /api/projects/:id/storyboard/generate
@@ -62,7 +63,7 @@ export async function POST(
     const task = await taskService.createTask({
       projectId,
       taskType: 'GENERATE_STORYBOARD',
-      modelName: project.modelProvider === 'ark' ? (process.env.ARK_TEXT_MODEL || 'doubao-seed-character-251128') : (process.env.AGNES_TEXT_MODEL || 'agnes-2.0-flash'),
+      modelName: getRuntimeModelName('text'),
       input: { project_id: projectId, episode_number: 1 },
     })
 

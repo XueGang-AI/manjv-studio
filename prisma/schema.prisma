@@ -47,7 +47,7 @@ model Project {
   audience        String?
   endingType      String?  @map("ending_type")
   status          String   @default("DRAFT") @map("status")
-  modelProvider   String   @default("agnes") @map("model_provider")
+  modelProvider   String   @default("ark") @map("model_provider")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
@@ -55,6 +55,8 @@ model Project {
   storyPackages    StoryPackage[]
   characters       Character[]
   characterImages  CharacterImage[]
+  scenes           Scene[]
+  sceneImages      SceneImage[]
   episodes         Episode[]
   shots            Shot[]
   imagePrompts     ImagePrompt[]
@@ -170,6 +172,7 @@ model Episode {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   project      Project       @relation(fields: [projectId], references: [id])
+  scenes       Scene[]
   shots        Shot[]
   voiceScripts VoiceScript[]
   finalVideos  FinalVideo[]
@@ -184,6 +187,7 @@ model Shot {
   id             String   @id @default(uuid())
   episodeId      String   @map("episode_id")
   projectId      String   @map("project_id")
+  sceneId        String?  @map("scene_id")
   shotNo         Int      @map("shot_no")
   shotName       String?  @map("shot_name")
   startTime      Float?   @map("start_time")
@@ -207,12 +211,70 @@ model Shot {
 
   episode      Episode       @relation(fields: [episodeId], references: [id])
   project      Project       @relation(fields: [projectId], references: [id])
+  scene        Scene?        @relation(fields: [sceneId], references: [id])
   imagePrompts ImagePrompt[]
   shotImages   ShotImage[]
   videoPrompts VideoPrompt[]
   shotVideos   ShotVideo[]
 
   @@map("shots")
+}
+
+// ============================================
+// 场景设定
+// ============================================
+model Scene {
+  id          String   @id @default(uuid())
+  projectId   String   @map("project_id")
+  episodeId   String?  @map("episode_id")
+  name        String
+  location    String?
+  sceneTime   String?  @map("scene_time")
+  description String?
+  artStyle    String?  @map("art_style")
+  prompt      String?
+  metadata    Json?    @default("{}")
+  confirmed   Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  project     Project      @relation(fields: [projectId], references: [id])
+  episode     Episode?     @relation(fields: [episodeId], references: [id])
+  shots       Shot[]
+  sceneImages SceneImage[]
+
+  @@index([projectId, episodeId])
+  @@index([projectId, location])
+  @@map("scenes")
+}
+
+// ============================================
+// 场景参考图
+// ============================================
+model SceneImage {
+  id               String   @id @default(uuid())
+  sceneId          String   @map("scene_id")
+  projectId        String   @map("project_id")
+  imageUrl         String?  @map("image_url")
+  storageObjectKey String?  @map("storage_object_key")
+  storageProvider  String?  @map("storage_provider")
+  sourceUrl        String?  @map("source_url")
+  prompt           String?
+  negativePrompt   String?  @map("negative_prompt")
+  seed             String?
+  modelName        String?  @map("model_name")
+  params           Json?    @default("{}")
+  referenceType    String?  @map("reference_type")
+  isPrimary        Boolean  @default(false) @map("is_primary")
+  isSelected       Boolean  @default(false) @map("is_selected")
+  isConfirmed      Boolean  @default(false) @map("is_confirmed")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  scene   Scene   @relation(fields: [sceneId], references: [id])
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@index([projectId, sceneId])
+  @@map("scene_images")
 }
 
 // ============================================
@@ -319,7 +381,7 @@ model ShotVideo {
   params          Json?    @default("{}")
   isSelected      Boolean  @default(false) @map("is_selected")
   isConfirmed     Boolean  @default(false) @map("is_confirmed")
-  // 远端异步任务跟踪（Agnes Video 等）
+  // 远端异步任务跟踪（Ark Video 等）
   remoteTaskId         String?   @map("remote_task_id")
   remoteStatus         String?   @map("remote_status")
   remoteProgress       Int?      @map("remote_progress")

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { taskService } from '@/server/queues/task-queue.service'
 import { emitTaskEvent, taskToUpdateEvent } from '@/server/workers/task-events'
+import { getRuntimeModelName } from '@/server/model-adapters/model-config'
 
 /**
  * POST /api/projects/:id/episodes/:episodeId/shot-videos/generate
@@ -67,7 +68,7 @@ export async function POST(
       projectId,
       episodeId,
       taskType: 'GENERATE_SHOT_VIDEOS',
-      modelName: project.modelProvider === 'ark' ? (process.env.ARK_VIDEO_MODEL || 'doubao-seedance-1-5-pro-251215') : (process.env.AGNES_VIDEO_MODEL || 'agnes-video-v2.0'),
+      modelName: getRuntimeModelName('video'),
       input: { episodeId, shot_count: shots.length },
     })
 

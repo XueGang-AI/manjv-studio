@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { adapterFactory } from '@/server/model-adapters/adapter.factory'
+import { getRuntimeModelName } from '@/server/model-adapters/model-config'
+import { resolveImageUrlForModel } from '@/server/services/media-reference-url'
 import type { ImageGenerationRequest } from '@/server/model-adapters/types'
 
 /**
@@ -19,6 +21,15 @@ export async function POST(
 
     const project = await prisma.project.findUnique({ where: { id: projectId } })
     const imgPrompt = await prisma.imagePrompt.findFirst({ where: { shotId }, orderBy: { createdAt: 'desc' } })
+    const scene = shot.sceneId
+      ? await prisma.scene.findFirst({
+          where: { id: shot.sceneId, projectId },
+          include: { sceneImages: { where: { isConfirmed: true, isSelected: true }, orderBy: { createdAt: 'asc' } } },
+        })
+      : await prisma.scene.findFirst({
+          where: { projectId, episodeId, location: shot.location || undefined },
+          include: { sceneImages: { where: { isConfirmed: true, isSelected: true }, orderBy: { createdAt: 'asc' } } },
+        })
 
     const style = project?.artStyle || '韩漫'
     const aspectRatio = (project?.aspectRatio || '9:16') as '9:16'
@@ -29,7 +40,14 @@ export async function POST(
       include: { character: { select: { id: true, name: true } } },
     })
 
-    type RefEntry = { characterId: string; characterName: string; imageUrl: string; referenceType: string }
+    type RefEntry = {
+      characterId: string
+      characterName: string
+      imageUrl: string
+      referenceType: string
+      storageObjectKey?: string | null
+      sourceUrl?: string | null
+    }
     const refByName = new Map<string, RefEntry[]>()
     for (const ci of charImages) {
       const name = ci.character.name?.trim()
@@ -40,6 +58,8 @@ export async function POST(
           characterName: name,
           imageUrl: ci.imageUrl,
           referenceType: ci.referenceType || 'front_full_body',
+          storageObjectKey: ci.storageObjectKey,
+          sourceUrl: ci.sourceUrl,
         })
       }
     }
@@ -113,7 +133,14 @@ export async function POST(
     else if (isCloseUp)   priorityTypes.push('front_half_body', 'front_full_body')
     else                  priorityTypes.push('front_half_body', 'front_full_body')
 
-    const references: Array<{ character_id: string; character_name: string; image_url: string; reference_type: string }> = []
+    const references: Array<{
+      character_id: string
+      character_name: string
+      image_url: string
+      reference_type: string
+      storage_object_key?: string | null
+      source_url?: string | null
+    }> = []
     const usedNames = new Set<string>()
     for (const sc of shotChars) {
       let entries: RefEntry[] | undefined
@@ -138,10 +165,21 @@ export async function POST(
           character_name: sorted[i].characterName,
           image_url: sorted[i].imageUrl,
           reference_type: sorted[i].referenceType,
+          storage_object_key: sorted[i].storageObjectKey || null,
+          source_url: sorted[i].sourceUrl || null,
         })
       }
       usedNames.add(sorted[0].characterName)
     }
+
+    const sceneReferences = (scene?.sceneImages || []).map(img => ({
+      scene_id: scene!.id,
+      scene_name: scene!.name,
+      image_url: img.imageUrl || '',
+      reference_type: img.referenceType || 'scene',
+      storage_object_key: img.storageObjectKey,
+      source_url: img.sourceUrl,
+    })).filter(ref => !!ref.image_url || !!ref.storage_object_key)
 
     // ─── 构建增强 prompt（嵌入角色外貌描述） ───
     const basePrompt = imgPrompt?.enPrompt || imgPrompt?.zhPrompt || shot.action || ''
@@ -167,11 +205,35 @@ export async function POST(
     const negative = imgPrompt?.negativePrompt || 'ugly, deformed, bad anatomy, bad proportions, low quality, blurry, pixelated, distorted face, extra fingers, missing fingers, asymmetric eyes, watermark, text, logo'
 
     // ─── 先生成新图 ───
-    // NOTE: Agnes Image API 传 reference_images 时忽略 num_outputs，只返回 1 张。
-    // 角色一致性已通过 prompt 中的 Character Reference 描述保证。
+    // 角色与场景一致性通过 reference_images + prompt 中的结构化描述共同保证。
     const genReq: ImageGenerationRequest = {
       taskType: 'shot_image', prompt, negativePrompt: negative,
       aspectRatio, style, numOutputs: 4,
+    }
+
+    const characterReferenceUrls = (await Promise.all(
+      references.map(ref => resolveImageUrlForModel({
+        imageUrl: ref.image_url,
+        sourceUrl: ref.source_url,
+        storageObjectKey: ref.storage_object_key,
+      }))
+    )).filter((url): url is string => !!url)
+
+    const sceneReferenceUrls = (await Promise.all(
+      sceneReferences.map(ref => resolveImageUrlForModel({
+        imageUrl: ref.image_url,
+        sourceUrl: ref.source_url,
+        storageObjectKey: ref.storage_object_key,
+      }))
+    )).filter((url): url is string => !!url)
+
+    const referenceImageUrls = [
+      ...sceneReferenceUrls.slice(0, 2),
+      ...characterReferenceUrls,
+    ].slice(0, 4)
+
+    if (referenceImageUrls.length > 0) {
+      genReq.referenceImages = referenceImageUrls
     }
 
     const response = await adapterFactory.getImageAdapter(project?.modelProvider).generate(genReq)
@@ -213,9 +275,15 @@ export async function POST(
             prompt,
             negativePrompt: negative, seed: String(img.seed || ''),
             style, aspectRatio,
-            modelName: project?.modelProvider === 'ark' ? (process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5-0-260128') : (process.env.AGNES_IMAGE_MODEL || 'agnes-image-2.0-flash'),
-            referenceImages: references,
-            params: { ...img.params, num_outputs: 4 },
+            modelName: getRuntimeModelName('image'),
+            referenceImages: [...sceneReferences, ...references],
+            params: {
+              ...img.params,
+              num_outputs: 4,
+              character_reference_image_count: references.length,
+              scene_reference_image_count: sceneReferences.length,
+              sent_reference_image_count: genReq.referenceImages?.length || 0,
+            },
             isSelected: false, isConfirmed: false,
           },
         })

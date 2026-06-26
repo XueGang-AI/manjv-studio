@@ -10,7 +10,7 @@ AI 漫剧全流程生产平台。8 步工作流已全部实现：
 创建项目 → 故事方案 → 角色设定 → 角色图 → 分镜脚本 → 分镜图 → 视频片段 → FFmpeg 成片 MP4
 ```
 
-面向中国短视频平台（抖音/快手），支持 Agnes（免费）和 Ark/豆包（付费）两种 AI Provider。
+面向中国短视频平台（抖音/快手），真实生产只保留 Ark/豆包模型链路，Mock 仅用于非生产测试。
 
 ## 技术栈
 
@@ -18,7 +18,7 @@ AI 漫剧全流程生产平台。8 步工作流已全部实现：
 - **Prisma 7** + PostgreSQL 16 — `datasource.url` 在 `prisma.config.ts`，不在 schema 里
 - **FFmpeg 8**（视频合成，libx264 + aac）
 - **Vitest**（单元测试）
-- AI: Agnes 系列 / Ark 豆包系列，通过 AdapterFactory 统一调用
+- AI: Ark/豆包系列，通过 AdapterFactory 统一调用
 
 ## 进程架构（核心）
 
@@ -53,7 +53,11 @@ pending → running → success
 
 | 类型 | Handler | 并发 | 超时 |
 |------|---------|------|------|
+| `GENERATE_STORY_PACKAGE` | story-package.handler | 2 | 10min |
+| `GENERATE_CHARACTERS` | characters.handler | 2 | 10min |
+| `GENERATE_CHARACTER_IMAGES` | character-images.handler | 1 | 20min |
 | `GENERATE_STORYBOARD` | storyboard.handler | 2 | 10min |
+| `GENERATE_SCENE_REFERENCES` | scene-references.handler | 1 | 15min |
 | `GENERATE_SHOT_IMAGES` | shot-images.handler | 1 | 15min |
 | `GENERATE_SHOT_VIDEOS` | shot-videos.handler | 1 | 35min |
 | `RENDER_FINAL_VIDEO` | final-render.handler | 1 | 10min |
@@ -89,24 +93,23 @@ adapterFactory.getImageAdapter(provider)  // IImageAdapter
 adapterFactory.getVideoAdapter(provider)  // IVideoAdapter
 ```
 
-优先级：`USE_MOCK_MODEL=true` → Mock → `provider="ark"` → Ark → 默认 → Agnes。**禁止绕过 AdapterFactory 直接调用 AI API。**
+优先级：`USE_MOCK_MODEL=true` 且非生产 → Mock；其他情况 → Ark。生产环境设置 `USE_MOCK_MODEL=true` 会直接报配置错误。**禁止绕过 AdapterFactory 直接调用 AI API。**
 
 适配器文件位于 `src/server/model-adapters/`：
 - `types.ts` — 接口定义（ITextAdapter / IImageAdapter / IVideoAdapter）+ `AdapterError` 结构化错误
 - `base.adapter.ts` — 共享 `normalizeStatus()` / `createAdapterError()`
 - `adapter.factory.ts` — AdapterFactory 单例
-- `mock/` — Mock 适配器（1s 延迟 + 硬编码数据）
-- `agnes/` — Agnes 适配器（OpenAI 兼容协议）
+- `mock/` — Mock 适配器（1s 延迟 + 硬编码数据，仅非生产）
 - `ark/` + 根目录 `ark-*.adapter.ts` — Ark 适配器
 
 所有适配器错误统一为 `AdapterError`（`code` / `message` / `retryable` / `statusCode`），`retryable` 按 HTTP 状态判断（5xx / 429 可重试）。
 
-### 2. 双 Provider 架构
+### 2. Ark-only 生产架构
 
-- **Agnes（免费）**：agnes-2.0-flash 系列，项目默认 Provider
-- **Ark（付费）**：火山引擎豆包系列，需 `ARK_API_KEY`
-- 项目级 `model_provider` 字段控制，创建项目时选择
-- `modelName` 在所有 generate/regenerate 路由中按 `project.modelProvider` 动态选择
+- **Ark（火山引擎/豆包）**：唯一真实生产 Provider，需 `ARK_API_KEY`
+- 项目级 `model_provider` 字段保留兼容历史数据，新项目固定写入 `ark`
+- `modelName` 统一通过 `getRuntimeModelName(type)` 解析，禁止散落 provider 三元判断
+- Mock 仅用于开发/测试，生产环境禁止启用
 
 ### 3. Prompt 模板化
 
@@ -130,11 +133,19 @@ adapterFactory.getVideoAdapter(provider)  // IVideoAdapter
 
 ### 8. 角色一致性系统
 
-多角度参考图（front_full_body / front_half_body / left_side / right_side / back_view），锚点图先行，去重、失败重试（指数退避 ×3）、先成后删。
+多角度参考图（front_full_body / front_half_body / left_side / right_side / back_view），锚点图先行，去重、失败重试（指数退避 ×3）、先成后删。分镜图与视频生成必须真实传入匹配角色的 `referenceImages`，同时保留角色文字外貌描述。
 
-### 9. FFmpeg 成片
+### 9. 场景一致性系统
+
+分镜图生成前必须先建立 `Scene` / `SceneImage` 场景资产层。场景参考图由 `GENERATE_SCENE_REFERENCES` Worker 任务生成，分镜图和视频生成都要传入当前镜头绑定场景的参考图，保证同一地点、时间、构图基调稳定。
+
+### 10. FFmpeg 成片
 
 `src/server/services/ffmpeg.service.ts` 使用两阶段法：先 `normalizeInput()` 将每个输入标准化到统一规格（letterbox padding 居中填充，不裁切人物；统一 H.264 / AAC 44100Hz / yuv420p / 固定帧率；无音频输入补静音音轨），再 concat（`-c copy`，失败回退 re-encode）。解决异构分辨率（如 496×864 + 1280×768）concat `exit=254` 问题。`ffmpeg-utils.ts` 提供 ffprobe 校验与安全 spawn。
+
+### 11. 自动 QC 与发布包
+
+规则 QC 由 `qcService` 执行。`/automation/auto-confirm` 在 QC 达标后自动确认角色图、分镜图、视频片段；缺少未来阶段产物时不阻断当前阶段自动确认。`/release-package/generate` 在成片完成后生成发布 manifest，并写回 `FinalVideo.assetPackageUrl`。
 
 ## 不可破坏的约束
 
@@ -164,25 +175,11 @@ adapterFactory.getVideoAdapter(provider)  // IVideoAdapter
 - PrismaClient 需要 `adapter` 参数：`new PrismaClient({ adapter: new PrismaPg({ connectionString }) })`
 - Datasource URL 配置在 `prisma.config.ts`，不在 `schema.prisma`
 
-### Agnes Video API
-
-- 创建：`POST /v1/videos`，参数 `model` + `prompt` + `num_frames` + `frame_rate`
-- 推荐轮询：`/agnesapi?video_id=<VIDEO_ID>`（优先用 `video_id`）
-- 时长控制：`num_frames`(≤441, 8n+1) + `frame_rate`(1-60)
-- TTS 配音：`voice_text` + `generate_audio: true` → AAC 2ch 48kHz
-- 输入限制：仅 1 张 `image`
-
-### Agnes Image API
-
-- `reference_images` 参数：传此参数时 API 忽略 `num_outputs`，只返回 1 张
-- 分镜图一致性策略：prompt 嵌入角色完整外貌描述 + `numOutputs: 4`（不传 reference_images）
-- 角色图一致性策略：锚点图先行 + reference_images 传 1 张
-
 ### Ark（火山引擎/豆包）
 
 - 文本模型 `doubao-seed-character-251128`：OpenAI 兼容 `/chat/completions`
 - 图片模型 `doubao-seedream-5-0-260128`
-- 视频模型 `doubao-seedance-1-5-pro-251215`：异步任务（创建 → 轮询 → 下载），t2v 5/10s，i2v 4~12s 整数
+- 视频模型 `doubao-seedance-2-0-260128`：异步任务（创建 → 轮询 → 下载），支持多 `image_url` 参考，时长按 4~15s 整数约束
 - 环境变量：`ARK_API_KEY` + `ARK_API_BASE_URL`（默认 `https://ark.cn-beijing.volces.com/api/v3`）
 - Ark 视频 URL 位于轮询响应 `content.video_url` 路径
 
@@ -199,17 +196,13 @@ npm run db:push                # 推送 Prisma schema
 npm run db:seed                # 种子数据 + Prompt 模板
 npm run db:studio              # Prisma Studio
 npm run lint                   # ESLint
-# AI 探针：npm run probe:agnes:text / probe:ark:video 等，见 package.json
+# AI 探针：npm run probe:ark:text / probe:ark:image / probe:ark:video
 ```
 
 **npm 缓存**：本地有权限问题，使用 `npm install --cache ~/.npm-cache-new`。
 
 ## 已知问题
 
-- ⚠️ Agnes 视频队列延迟：非高峰 ~2min，高峰可能数小时
-- ⚠️ Agnes 视频分辨率：1280×768（非 1080×1920），FFmpeg 两阶段法已处理异构分辨率合成
-- ⚠️ Agnes Image + `reference_images`：忽略 `num_outputs`，只返回 1 张
-- ⚠️ Agnes Video 输入限制：仅 1 张 inputImage
 - ⚠️ `npm run build` 可能因 Google Fonts 网络不可达而失败
 
 ## 禁止提交

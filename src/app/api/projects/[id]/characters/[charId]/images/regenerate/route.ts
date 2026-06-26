@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { adapterFactory } from '@/server/model-adapters/adapter.factory'
+import { getRuntimeModelName } from '@/server/model-adapters/model-config'
 import type { ImageGenerationRequest } from '@/server/model-adapters/types'
 
 /** 各角度 Prompt 后缀 */
@@ -175,7 +176,7 @@ export async function POST(
             prompt: img.prompt,
             negativePrompt,
             seed: img.seed,
-            modelName: project.modelProvider === 'ark' ? (process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5-0-260128') : (process.env.AGNES_IMAGE_MODEL || 'agnes-image-2.0-flash'),
+            modelName: getRuntimeModelName('image'),
             referenceType: img.referenceType,
             isPrimary: img.isPrimary,
             isSelected: img.isSelected,

@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
+import fs from 'fs'
+import path from 'path'
 import prisma from '@/lib/prisma'
 import { adapterFactory } from '@/server/model-adapters/adapter.factory'
+import { getRuntimeModelName, RUNTIME_MODEL_PROVIDER } from '@/server/model-adapters/model-config'
 import { snapShotDuration } from '@/lib/utils'
 import type { VideoGenerationRequest } from '@/server/model-adapters/types'
 import { checkImageAccessible } from '@/server/services/media-resource-check'
 import { getReadUrl } from '@/server/services/media-persist'
+import { UPLOAD_DIR } from '@/server/services/ffmpeg-utils'
+import { resolveStructuredReferenceImagesForModel } from '@/server/services/media-reference-url'
 
 type JsonValue = import('@prisma/client').Prisma.InputJsonValue
 
@@ -161,11 +166,9 @@ export async function POST(
     }
 
     const rawDuration = (shot.endTime || 10) - (shot.startTime || 0)
-    const duration = snapShotDuration(rawDuration, project.modelProvider)
-    const modelProvider = project.modelProvider
-    const modelName = modelProvider === 'ark'
-      ? (process.env.ARK_VIDEO_MODEL || 'doubao-seedance-1-5-pro-251215')
-      : (process.env.AGNES_VIDEO_MODEL || 'agnes-video-v2.0')
+    const duration = snapShotDuration(rawDuration, RUNTIME_MODEL_PROVIDER)
+    const modelProvider = RUNTIME_MODEL_PROVIDER
+    const modelName = getRuntimeModelName('video')
     const isMock = process.env.USE_MOCK_MODEL === 'true'
 
     // ─── VideoPrompt upsert（Phase 6：@@unique([shotId]) 原子 upsert）───
@@ -174,28 +177,57 @@ export async function POST(
     const vidPrompt = await prisma.videoPrompt.findFirst({ where: { shotId }, orderBy: { createdAt: 'desc' } })
     const effectivePrompt = userPrompt || vidPrompt?.prompt || ''
 
-    // ─── 确定 inputImage URL（Phase 6：优先自有存储）───
-    // 优先用 storageObjectKey 生成稳定 readUrl（生产环境为公网签名 URL）。
-    // 若历史数据未转存（无 storageObjectKey），回落到供应商签名 URL + 前置校验。
+    // ─── 确定 inputImage URL（Phase 6+：智能回退）───
+    // 优先级：
+    //   1. 自有存储 readUrl 为公网绝对 URL → 直接使用（生产 OSS/S3 签名 URL）
+    //   2. readUrl 为相对路径 → 尝试 sourceUrl（供应商原始 URL）
+    //   3. sourceUrl 不可达 → 读取本地文件转 base64 data URI（Ark 支持）
     let inputImageUrl = confirmedImage?.imageUrl || ''
     if (confirmedImage?.storageObjectKey) {
-      inputImageUrl = await getReadUrl(confirmedImage.storageObjectKey)
+      const readUrl = await getReadUrl(confirmedImage.storageObjectKey)
+      if (!readUrl.startsWith('/')) {
+        // 公网绝对 URL（OSS/S3 签名 URL）→ 直接使用
+        inputImageUrl = readUrl
+      } else if (confirmedImage?.sourceUrl) {
+        // 相对路径 → 尝试 sourceUrl
+        const sourceCheck = await checkImageAccessible(confirmedImage.sourceUrl)
+        if (sourceCheck.accessible) {
+          inputImageUrl = confirmedImage.sourceUrl
+        } else {
+          // sourceUrl 过期 → 读取本地文件转 base64 data URI
+          const localPath = path.join(UPLOAD_DIR, 'media', confirmedImage.storageObjectKey)
+          if (fs.existsSync(localPath)) {
+            const buffer = fs.readFileSync(localPath)
+            const b64 = buffer.toString('base64')
+            const ext = path.extname(localPath).toLowerCase()
+            const mimeType = ext === '.png' ? 'image/png'
+              : ext === '.webp' ? 'image/webp'
+              : 'image/jpeg'
+            inputImageUrl = `data:${mimeType};base64,${b64}`
+          }
+        }
+      }
     }
 
     // ─── 前置资源校验（真实模式，非 mock）───
-    // 签名 URL 过期会 403。调 Ark 前校验可访问，避免付费生成因输入图片失效而失败。
-    // 自有存储 readUrl 通常长期可访问，仍校验确保可用。
-    if (!isMock && inputImageUrl) {
+    // 仅对 HTTP(S) URL 做可访问性检查。data URI 和本地路径跳过。
+    if (!isMock && inputImageUrl && !inputImageUrl.startsWith('data:')) {
       const check = await checkImageAccessible(inputImageUrl)
       if (!check.accessible) {
         return safeError(check.reason || '输入图片暂不可访问', 422)
       }
     }
 
+    const inheritedReferenceImages = Array.isArray(confirmedImage?.referenceImages)
+      ? confirmedImage.referenceImages
+      : []
+    const referenceImageUrls = await resolveStructuredReferenceImagesForModel(inheritedReferenceImages, 4)
+
     const genReq: VideoGenerationRequest = {
       taskType: 'image_to_video',
       prompt: effectivePrompt,
       inputImage: inputImageUrl || undefined,
+      referenceImages: referenceImageUrls,
       duration,
       aspectRatio: (project.aspectRatio || '9:16') as '9:16',
       motionStrength: effectiveMotion,
@@ -229,9 +261,11 @@ export async function POST(
             prompt: effectivePrompt,
             seed: String(response.videos[0]?.params?.seed || ''),
             modelName,
-            referenceImages: confirmedImage ? [{ image_url: inputImageUrl }] : [] as unknown as JsonValue,
+            referenceImages: confirmedImage
+              ? [{ image_url: inputImageUrl, reference_type: 'input_image' }, ...inheritedReferenceImages] as unknown as JsonValue
+              : [] as unknown as JsonValue,
             duration: response.videos[0]?.duration || duration,
-            params: { aspect_ratio: project.aspectRatio } as unknown as JsonValue,
+            params: { aspect_ratio: project.aspectRatio, sent_reference_image_count: referenceImageUrls.length } as unknown as JsonValue,
             isSelected: false, isConfirmed: false,
             clientRequestId: clientRequestId ?? undefined,
             // mock 同步完成，标记为已完成
@@ -265,9 +299,15 @@ export async function POST(
           prompt: effectivePrompt,
           seed: '',
           modelName,
-          referenceImages: confirmedImage ? [{ image_url: inputImageUrl }] : [] as unknown as JsonValue,
+          referenceImages: confirmedImage
+            ? [{ image_url: inputImageUrl, reference_type: 'input_image' }, ...inheritedReferenceImages] as unknown as JsonValue
+            : [] as unknown as JsonValue,
           duration,
-          params: { aspect_ratio: project.aspectRatio, generation_method: 'async_task' } as unknown as JsonValue,
+          params: {
+            aspect_ratio: project.aspectRatio,
+            generation_method: 'async_task',
+            sent_reference_image_count: referenceImageUrls.length,
+          } as unknown as JsonValue,
           // 标记为排队中：作为"当前尝试"。旧视频不受影响。
           remoteStatus: 'queued',
           remoteResponseJson: {} as unknown as JsonValue,

@@ -41,10 +41,10 @@ export async function POST(
       })
     }
 
-    // 按 referenceType 分组，每组只保留一张（最新的）
+    // 按 characterId + referenceType 分组，每个角色每种参考图保留一张（最新的）
     const byType = new Map<string, typeof imagesToConfirm[0]>()
     for (const img of imagesToConfirm) {
-      const key = img.referenceType || '__unknown__'
+      const key = `${img.characterId}:${img.referenceType || '__unknown__'}`
       const existing = byType.get(key)
       if (!existing || img.createdAt > existing.createdAt) {
         byType.set(key, img)

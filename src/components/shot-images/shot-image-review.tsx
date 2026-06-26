@@ -225,9 +225,12 @@ export function ShotImageReview({ group, isConfirmed, isGenerating, projectId, e
                 {img.referenceImages?.length > 0 && (
                   <div className="px-2 py-1.5 bg-[var(--bg-elevated)] border-t border-[var(--color-border-dim)]">
                     <div className="flex flex-wrap gap-1">
-                      {img.referenceImages.slice(0, 3).map((ref, i) => (
-                        <span key={i} className="text-[9px] text-[var(--color-text-muted)] bg-[var(--bg-panel)] px-1.5 py-0.5 rounded truncate">{ref.character_name}</span>
-                      ))}
+                      {img.referenceImages.slice(0, 3).map((ref, i) => {
+                        const label = ref.character_name || ref.scene_name || ref.reference_type || 'reference'
+                        return (
+                          <span key={i} className="text-[9px] text-[var(--color-text-muted)] bg-[var(--bg-panel)] px-1.5 py-0.5 rounded truncate">{label}</span>
+                        )
+                      })}
                       {img.referenceImages.length > 3 && <span className="text-[9px] text-[var(--color-text-muted)]">+{img.referenceImages.length - 3}</span>}
                     </div>
                   </div>

@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * 开发预览：图片卡片状态视觉验证（Phase 3）。
+ * 开发预览：图片卡片状态视觉验证。
  * --------------------------------------------
  * 复用真实角色图 URL，渲染普通/选中/生成中/失败/已确认五种状态，
  * 验证 Film Atelier 图片卡片视觉语义（边框色 + 图标 + 文案，不只靠颜色）。
@@ -85,7 +85,7 @@ export default function ImageStatesPreviewPage() {
   return (
     <div className="min-h-screen bg-[var(--bg-base)] p-6">
       <div className="max-w-5xl mx-auto">
-        <h1 className="text-xl font-bold text-[var(--text-primary)] mb-1">图片卡片状态预览（Phase 3）</h1>
+        <h1 className="text-xl font-bold text-[var(--text-primary)] mb-1">图片卡片状态预览</h1>
         <p className="text-sm text-[var(--text-tertiary)] mb-6">普通 / 选中 / 生成中 / 失败 / 已确认 — 状态不只靠颜色</p>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <ImageCard state="normal" label="正面全身" />

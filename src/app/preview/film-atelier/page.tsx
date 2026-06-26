@@ -183,6 +183,7 @@ export default function FilmAtelierPage() {
   const [colorScheme, setColorScheme] = useState<ColorScheme>('warm')
   const [bgMode, setBgMode] = useState<BackgroundMode>('glow')
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false)
+  const [previewStatus, setPreviewStatus] = useState(mockProject.saveStatus)
 
   // 模拟生成状态切换
   const handleStartGeneration = () => {
@@ -198,6 +199,11 @@ export default function FilmAtelierPage() {
     setTimeout(() => setQuickGenState('running'), 500)
     setTimeout(() => setQuickGenState('success'), 3000)
     setTimeout(() => setQuickGenState('idle'), 5000)
+  }
+
+  const handlePreviewAction = (message: string) => {
+    setPreviewStatus(message)
+    setTimeout(() => setPreviewStatus(mockProject.saveStatus), 1400)
   }
 
   const currentStep = workflowSteps.find(s => s.id === activeStep)
@@ -281,7 +287,7 @@ export default function FilmAtelierPage() {
 
           <span className="flex items-center gap-1 text-[11px] text-[var(--text-tertiary)]">
             <Save size={12} />
-            {mockProject.saveStatus}
+            {previewStatus}
           </span>
           <button
             type="button"
@@ -380,10 +386,10 @@ export default function FilmAtelierPage() {
                   <HoverPlayCard
                     key={card.id}
                     {...card}
-                    onPreview={(id) => console.log('Preview:', id)}
-                    onRegenerate={(id) => console.log('Regenerate:', id)}
-                    onSetFinal={(id) => console.log('Set final:', id)}
-                    onDelete={(id) => console.log('Delete:', id)}
+                    onPreview={(id) => handlePreviewAction(`预览 ${id}`)}
+                    onRegenerate={(id) => handlePreviewAction(`重新生成 ${id}`)}
+                    onSetFinal={(id) => handlePreviewAction(`设为最终 ${id}`)}
+                    onDelete={(id) => handlePreviewAction(`删除 ${id}`)}
                   />
                 ))}
               </div>
@@ -396,10 +402,10 @@ export default function FilmAtelierPage() {
                   <HoverPlayCard
                     key={card.id}
                     {...card}
-                    onPreview={(id) => console.log('Preview:', id)}
-                    onRegenerate={(id) => console.log('Regenerate:', id)}
-                    onSetFinal={(id) => console.log('Set final:', id)}
-                    onDelete={(id) => console.log('Delete:', id)}
+                    onPreview={(id) => handlePreviewAction(`预览 ${id}`)}
+                    onRegenerate={(id) => handlePreviewAction(`重新生成 ${id}`)}
+                    onSetFinal={(id) => handlePreviewAction(`设为最终 ${id}`)}
+                    onDelete={(id) => handlePreviewAction(`删除 ${id}`)}
                   />
                 ))}
               </div>
@@ -441,9 +447,9 @@ export default function FilmAtelierPage() {
               <div className="max-w-2xl">
                 <FileUpload
                   files={mockUploadFiles}
-                  onUpload={(files) => console.log('Upload:', files.map(f => f.name))}
-                  onDelete={(id) => console.log('Delete upload:', id)}
-                  onRetry={(id) => console.log('Retry upload:', id)}
+                  onUpload={(files) => handlePreviewAction(`选择 ${files.length} 个文件`)}
+                  onDelete={(id) => handlePreviewAction(`删除上传 ${id}`)}
+                  onRetry={(id) => handlePreviewAction(`重试上传 ${id}`)}
                 />
               </div>
             )}
@@ -509,8 +515,8 @@ export default function FilmAtelierPage() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         options={mockImageOptions}
-        onImageSelect={(id: string) => console.log('Selected:', id)}
-        onConfirm={(id) => console.log('Confirmed:', id)}
+        onImageSelect={(id: string) => handlePreviewAction(`选择图片 ${id}`)}
+        onConfirm={(id) => handlePreviewAction(`确认图片 ${id}`)}
         title="选择分镜图片"
       />
 

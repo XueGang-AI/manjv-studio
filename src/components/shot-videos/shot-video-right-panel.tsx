@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowRight, CheckCircle2, Sparkles, RefreshCw, Zap, X } from
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ProgressBar } from '@/components/ui/progress-bar'
+import { useToast } from '@/components/ui/toast'
 import type { ShotVideoGroup } from './shot-videos-types'
 
 interface ShotVideoRightPanelProps {
@@ -33,6 +34,35 @@ export function ShotVideoRightPanel({
   }).length
   const hasAnyVideos = shots.some(s => s.videos.length > 0)
   const hasPendingTasks = shots.some(s => s.videos.some(v => v.remoteTaskId && !['completed', 'succeeded', 'success', 'done', 'failed', 'error', 'cancelled', 'timeout'].includes((v.remoteStatus || '').toLowerCase())))
+
+  // 是否所有镜头都有已选中且视频就绪的候选
+  const allSelectedReady = shots.length > 0 && shots.every(s => {
+    const sel = s.selectedVideo
+    return sel && sel.videoUrl
+  })
+
+  const { addToast } = useToast()
+  const [batchConfirming, setBatchConfirming] = useState(false)
+
+  const handleBatchConfirm = async () => {
+    setBatchConfirming(true)
+    try {
+      const res = await fetch(
+        `/api/projects/${projectId}/episodes/${episodeId}/shot-videos/batch-confirm`,
+        { method: 'POST' }
+      )
+      const json = await res.json()
+      if (json.success) {
+        addToast({ type: 'success', title: `已确认 ${json.data.confirmed} 个视频`, description: `跳过 ${json.data.skipped} 个` })
+        // 刷新页面以显示新状态
+        window.location.reload()
+      } else {
+        addToast({ type: 'error', title: '批量确认失败', description: json.error })
+      }
+    } catch {
+      addToast({ type: 'error', title: '请求失败' })
+    } finally { setBatchConfirming(false) }
+  }
 
   // Mobile drawer
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -87,6 +117,18 @@ export function ShotVideoRightPanel({
                 {hasPendingTasks && (
                   <Button variant="outline" size="sm" className="w-full" icon={<RefreshCw size={12} />} onClick={onBatchCheck}>
                     批量检查任务状态
+                  </Button>
+                )}
+                {!isGenerating && !hasPendingTasks && allSelectedReady && (
+                  <Button
+                    variant="aurora"
+                    size="sm"
+                    className="w-full"
+                    icon={<CheckCircle2 size={12} />}
+                    onClick={handleBatchConfirm}
+                    disabled={batchConfirming}
+                  >
+                    {batchConfirming ? '确认中…' : '一键确认全部'}
                   </Button>
                 )}
               </>

@@ -113,8 +113,8 @@ export function ProjectCardV3({ project, onDelete }: ProjectCardProps) {
     return () => document.removeEventListener('keydown', handleKey)
   }, [menuOpen])
 
-  const providerLabel = project.modelProvider === 'ark' ? '豆包' : 'Agnes'
-  const providerVariant = project.modelProvider === 'ark' ? 'violet' as const : 'info' as const
+  const providerLabel = '豆包'
+  const providerVariant = 'violet' as const
 
   return (
     <Card hover className="overflow-hidden group">

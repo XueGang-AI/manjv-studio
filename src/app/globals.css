@@ -60,6 +60,18 @@
   --color-border-default: var(--border-default);
   --color-border-bright: var(--border-strong);
 
+  /* ---- Gray scale（反转：暗色背景专用，gray-900=最亮文字，gray-50=最深表面） ---- */
+  --color-gray-50: #1a1917;
+  --color-gray-100: #211f1c;
+  --color-gray-200: #292623;
+  --color-gray-300: #787269;
+  --color-gray-400: #a0988f;
+  --color-gray-500: #bdb6ac;
+  --color-gray-600: #d2cbc0;
+  --color-gray-700: #ddd7cf;
+  --color-gray-800: #eee9e1;
+  --color-gray-900: #faf6f0;
+
   /* ---- Radii ---- */
   --radius-sm: 6px;
   --radius-md: 10px;
@@ -81,11 +93,11 @@
   --bg-hover: #302d29;
   --bg-input: #1a1917;
 
-  /* Text */
-  --text-primary: #f4efe7;
-  --text-secondary: #b1aaa1;
-  --text-tertiary: #7f7870;
-  --text-disabled: #5f5953;
+  /* Text — 大幅提升对比度，暖炭黑背景上确保清晰可读 */
+  --text-primary: #faf6f0;       /* 原 #f4efe7 → 极致明亮 */
+  --text-secondary: #ddd7cf;     /* 原 #b1aaa1 → elevated 上 ~7.2:1（WCAG AAA） */
+  --text-tertiary: #bdb6ac;      /* 原 #7f7870 → elevated 上 ~4.9:1（WCAG AA） */
+  --text-disabled: #8b847a;      /* 原 #5f5953 → ~3.5:1，大幅提升可辨度 */
   --text-inverse: #17120f;
 
   /* Borders */

@@ -6,16 +6,25 @@ import fs from 'fs'
 import { execSync } from 'child_process'
 // Node 24 has built-in fetch
 
-const BASE = 'http://localhost:3000'
-const API_KEY = process.env.AGNES_TEXT_API_KEY || ''
-const IMG_BASE = process.env.AGNES_IMAGE_API_BASE_URL || 'https://apihub.agnes-ai.com/v1'
-const VID_BASE = process.env.AGNES_VIDEO_API_BASE_URL || 'https://apihub.agnes-ai.com/v1'
-const IMG_MODEL = process.env.AGNES_IMAGE_MODEL || 'agnes-image-2.0-flash'
-const VID_MODEL = process.env.AGNES_VIDEO_MODEL || 'agnes-video-v2.0'
+const BASE = process.env.E2E_BASE_URL || 'http://localhost:3000'
+const API_KEY = process.env.ARK_API_KEY || ''
+const ARK_BASE = process.env.ARK_API_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3'
+const IMG_MODEL = process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5-0-260128'
+const VID_MODEL = process.env.ARK_VIDEO_MODEL || 'doubao-seedance-2-0-260128'
 
 const log = (msg: string) => console.log(`\x1b[36m[REAL]\x1b[0m ${msg}`)
 const ok = (msg: string) => console.log(`\x1b[32m✅ ${msg}\x1b[0m`)
-const fail = (msg: string) => { console.log(`\x1b[31m❌ ${msg}\x1b[0m`); process.exit(1) }
+const fail = (msg: string): never => { console.log(`\x1b[31m❌ ${msg}\x1b[0m`); process.exit(1) }
+
+function safeUrlPreview(raw?: string | null): string {
+  if (!raw) return '(none)'
+  try {
+    const url = new URL(raw)
+    return `${url.origin}${url.pathname}`.substring(0, 120)
+  } catch {
+    return raw.split('?')[0].substring(0, 120)
+  }
+}
 
 interface State {
   projectId: string; storyPackageId: string; characterIds: string[]
@@ -30,6 +39,29 @@ async function post(path: string, body?: Record<string,unknown>) {
 }
 async function gett(path: string) { return (await fetch(`${BASE}${path}`)).json() }
 
+interface ProjectTask {
+  id: string
+  status: string
+  errorMessage?: string | null
+  output?: Record<string, unknown> | null
+}
+
+async function waitTask(projectId: string, taskId: string, label: string, timeoutMs = 600000): Promise<ProjectTask> {
+  const startedAt = Date.now()
+  while (Date.now() - startedAt < timeoutMs) {
+    const tasks = await gett(`/api/projects/${projectId}/tasks`)
+    if (!tasks.success) fail(`获取任务失败: ${tasks.error}`)
+    const task = (tasks.data as ProjectTask[]).find(t => t.id === taskId)
+    if (!task) fail(`${label}任务不存在: ${taskId}`)
+    if (task.status === 'success') return task
+    if (task.status === 'failed' || task.status === 'cancelled') {
+      fail(`${label}任务失败: ${task.errorMessage || task.status}`)
+    }
+    await new Promise(r => setTimeout(r, 3000))
+  }
+  fail(`${label}任务超时: ${taskId}`)
+}
+
 async function downloadImage(url: string, localPath: string) {
   const res = await fetch(url); const buf = Buffer.from(await res.arrayBuffer())
   fs.writeFileSync(localPath, buf)
@@ -37,7 +69,7 @@ async function downloadImage(url: string, localPath: string) {
 }
 
 async function main() {
-  console.log('\n🎬 REAL Agnes API Minimal E2E\n')
+  console.log('\n🎬 REAL Ark API Minimal E2E\n')
   console.log(`IMG Model: ${IMG_MODEL}`)
   console.log(`VID Model: ${VID_MODEL}\n`)
 
@@ -58,6 +90,7 @@ async function main() {
   log('Step 2: 真实生成故事方案')
   const story = await post(`/api/projects/${s.projectId}/story/generate`)
   if (!story.success) fail('故事生成失败: ' + story.error)
+  await waitTask(s.projectId, story.data.taskId, '故事生成')
   s.storyPackageId = (await gett(`/api/projects/${s.projectId}/story`)).data.packages[0].id
   ok(`story_package_id=${s.storyPackageId}`)
 
@@ -70,6 +103,7 @@ async function main() {
   log('Step 4: 真实生成角色设定')
   const chars = await post(`/api/projects/${s.projectId}/characters/generate`)
   if (!chars.success) fail('角色生成失败: ' + chars.error)
+  await waitTask(s.projectId, chars.data.taskId, '角色生成')
   s.characterIds = (await gett(`/api/projects/${s.projectId}/characters`)).data.characters.map((c:{id:string})=>c.id)
   ok(`${s.characterIds.length} 个角色`)
 
@@ -83,7 +117,7 @@ async function main() {
   const charData = (await gett(`/api/projects/${s.projectId}/characters`)).data.characters[0]
   const charPrompt = charData.enFixedPrompt || charData.zhFixedPrompt || 'beautiful Chinese woman, Korean manhwa style'
 
-  const imgRes = await fetch(`${IMG_BASE}/images/generations`, {
+  const imgRes = await fetch(`${ARK_BASE}/images/generations`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` },
     body: JSON.stringify({ model: IMG_MODEL, prompt: charPrompt + ', portrait, elegant, high quality', aspect_ratio: '9:16', num_outputs: 1 }),
   })
@@ -91,7 +125,7 @@ async function main() {
   const imgData = await imgRes.json() as { data?: Array<{ url?: string }> }
   s.realCharImgUrl = imgData.data?.[0]?.url || ''
   if (!s.realCharImgUrl) fail('图片 URL 为空')
-  ok(`real_character_image_url=${s.realCharImgUrl.substring(0,60)}...`)
+  ok(`real_character_image_url=${safeUrlPreview(s.realCharImgUrl)}...`)
 
   // Save image locally
   const charImgDir = 'uploads/probes/images'
@@ -103,6 +137,7 @@ async function main() {
   log('Step 6b: 批量生成角色图 (via real adapter)')
   const charImgsGen = await post(`/api/projects/${s.projectId}/character-images/generate`)
   if (!charImgsGen.success) fail('角色图批量生成失败: ' + charImgsGen.error)
+  await waitTask(s.projectId, charImgsGen.data.taskId, '角色图生成')
   const charImgsList = await gett(`/api/projects/${s.projectId}/character-images`)
   const firstImgUrl = charImgsList.data.characters[0]?.images[0]?.imageUrl
   ok(`角色图生成成功 — 第一张 URL: ${firstImgUrl?.substring(0,60)}...`)
@@ -121,40 +156,54 @@ async function main() {
   log('Step 8: 真实生成分镜脚本')
   const sb = await post(`/api/projects/${s.projectId}/storyboard/generate`)
   if (!sb.success) fail('分镜生成失败: ' + sb.error)
-  s.episodeId = sb.data.episode.id
-  s.shotId = sb.data.shots[0]?.id
-  ok(`episode_id=${s.episodeId} shots=${sb.data.shotCount}`)
+  const sbTask = await waitTask(s.projectId, sb.data.taskId, '分镜生成')
+  s.episodeId = sbTask.output?.episode_id as string
+  if (!s.episodeId) fail('分镜任务未返回 episode_id')
+  const storyboard = await gett(`/api/projects/${s.projectId}/episodes/${s.episodeId}/storyboard`)
+  s.shotId = storyboard.data.shots[0]?.id
+  ok(`episode_id=${s.episodeId} shots=${storyboard.data.shots.length}`)
 
   // 9. Confirm storyboard
   log('Step 9: 确认分镜脚本')
   await post(`/api/projects/${s.projectId}/episodes/${s.episodeId}/storyboard/confirm`)
   ok('分镜已确认')
 
-  // 10. Generate 1 real shot image
-  log('Step 10: 真实生成 1 个镜头图')
+  // 10. Generate scene references
+  log('Step 10: 真实生成场景参考图')
+  const sceneRefs = await post(`/api/projects/${s.projectId}/episodes/${s.episodeId}/scene-references/generate`)
+  if (!sceneRefs.success) fail('场景参考图生成失败: ' + sceneRefs.error)
+  await waitTask(s.projectId, sceneRefs.data.taskId, '场景参考图生成')
+
+  // 11. Generate 1 real shot image
+  log('Step 11: 真实生成 1 个镜头图')
   const shotImgs = await post(`/api/projects/${s.projectId}/episodes/${s.episodeId}/shot-images/generate`)
   if (!shotImgs.success) fail('分镜图生成失败: ' + shotImgs.error)
+  await waitTask(s.projectId, shotImgs.data.taskId, '分镜图生成')
   const shotImgsList = await gett(`/api/projects/${s.projectId}/episodes/${s.episodeId}/shot-images`)
   const firstShotImgId = shotImgsList.data.shots[0]?.images[0]?.id
   const firstShotImgUrl = shotImgsList.data.shots[0]?.images[0]?.imageUrl
-  ok(`real_shot_image_url=${firstShotImgUrl?.substring(0,60)}...`)
+  ok(`real_shot_image_url=${safeUrlPreview(firstShotImgUrl)}...`)
 
-  // 11. Select + confirm shot image
-  log('Step 11: 选择并确认镜头图')
+  // 12. Select + confirm shot image
+  log('Step 12: 选择并确认镜头图')
   await post(`/api/projects/${s.projectId}/episodes/${s.episodeId}/shot-images/${firstShotImgId}/select`)
   await post(`/api/projects/${s.projectId}/episodes/${s.episodeId}/shot-images/${firstShotImgId}/confirm`)
   ok('镜头图已确认')
 
-  // 12. Generate 1 real shot video via direct API
-  log('Step 12: 真实生成 1 个镜头视频')
-  const vidRes = await fetch(`${VID_BASE}/videos`, {
+  // 13. Generate 1 real shot video via direct API
+  log('Step 13: 真实生成 1 个镜头视频')
+  const vidRes = await fetch(`${ARK_BASE}/contents/generations/tasks`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` },
     body: JSON.stringify({
       model: VID_MODEL,
-      prompt: 'Slow push-in camera movement, gentle hair motion, cinematic lighting, Korean manhwa style, high quality',
-      image: firstShotImgUrl,
+      content: [
+        { type: 'text', text: 'Slow push-in camera movement, gentle hair motion, cinematic lighting, Korean manhwa style, high quality' },
+        { type: 'image_url', image_url: { url: firstShotImgUrl } },
+      ],
       duration: 5,
-      aspect_ratio: '9:16',
+      ratio: '9:16',
+      resolution: process.env.ARK_VIDEO_RESOLUTION || '720p',
+      watermark: false,
     }),
   })
   if (!vidRes.ok) fail(`视频 API 创建失败 (${vidRes.status}): ${(await vidRes.text()).substring(0,200)}`)
@@ -163,17 +212,17 @@ async function main() {
   if (!s.videoTaskId) fail(`无 task_id: ${JSON.stringify(vidCreateData).substring(0,200)}`)
   ok(`video_task_id=${s.videoTaskId}`)
 
-  // 13. Poll until complete
-  log('Step 13: 轮询视频状态...')
+  // 14. Poll until complete
+  log('Step 14: 轮询视频状态...')
   let videoUrl = ''
   for (let i = 0; i < 120; i++) {
     await new Promise(r => setTimeout(r, 5000))
-    const pollRes = await fetch(`${VID_BASE}/videos/${s.videoTaskId}`, { headers: { 'Authorization': `Bearer ${API_KEY}` } })
-    const pollData = await pollRes.json() as { status?: string; progress?: number; video_url?: string; url?: string; output_url?: string }
+    const pollRes = await fetch(`${ARK_BASE}/contents/generations/tasks/${s.videoTaskId}`, { headers: { 'Authorization': `Bearer ${API_KEY}` } })
+    const pollData = await pollRes.json() as { status?: string; progress?: number; video_url?: string; url?: string; output_url?: string; content?: { video_url?: string } }
     const st = pollData.status
     process.stdout.write(`\r   poll #${i+1}: status=${st} progress=${pollData.progress || '?'}%`)
     if (st === 'completed' || st === 'succeeded' || st === 'success') {
-      videoUrl = pollData.video_url || pollData.url || pollData.output_url || ''
+      videoUrl = pollData.content?.video_url || pollData.video_url || pollData.url || pollData.output_url || ''
       ok(`\n   视频完成! url=${videoUrl.substring(0,60)}...`)
       break
     }
@@ -183,8 +232,8 @@ async function main() {
   }
   if (!videoUrl) fail('视频轮询超时 (10 分钟)')
 
-  // 14. Download real video
-  log('Step 14: 下载真实视频')
+  // 15. Download real video
+  log('Step 15: 下载真实视频')
   const vidDir = 'uploads/probes/videos'
   fs.mkdirSync(vidDir, { recursive: true })
   s.realVideoPath = `${vidDir}/real-shot-${s.shotId}.mp4`
@@ -207,8 +256,8 @@ async function main() {
     }
   }
 
-  // 15. FFmpeg merge (single shot = normalize to 1080x1920)
-  log('Step 15: FFmpeg 合成最终 MP4')
+  // 16. FFmpeg merge (single shot = normalize to 1080x1920)
+  log('Step 16: FFmpeg 合成最终 MP4')
   const finalDir = 'uploads/final_videos'
   fs.mkdirSync(finalDir, { recursive: true })
   s.finalVideoPath = `${finalDir}/real-final-${s.projectId}.mp4`
@@ -218,26 +267,26 @@ async function main() {
   const finalStat = fs.statSync(s.finalVideoPath)
   ok(`final_video: ${(finalStat.size/1024).toFixed(1)}KB`)
 
-  // 16. ffprobe final video
-  log('Step 16: ffprobe 验证')
+  // 17. ffprobe final video
+  log('Step 17: ffprobe 验证')
   const probeOut = execSync(`ffprobe -v quiet -print_format json -show_format -show_streams "${s.finalVideoPath}"`, { encoding:'utf-8' })
   const probe = JSON.parse(probeOut)
   const vStream = probe.streams.find((st: { codec_type: string }) => st.codec_type === 'video')
   ok(`duration=${probe.format.duration}s | ${vStream?.width}x${vStream?.height} | ${vStream?.r_frame_rate} | ${vStream?.codec_name}`)
 
-  // 17. Final report
+  // 18. Final report
   console.log(`\n${'='.repeat(60)}`)
   console.log('🎉 REAL API Minimal E2E Complete!')
   console.log(`${'='.repeat(60)}`)
   console.log(`project_id:              ${s.projectId}`)
   console.log(`story_package_id:        ${s.storyPackageId}`)
   console.log(`character_count:         ${s.characterIds.length}`)
-  console.log(`real_char_image_url:     ${s.realCharImgUrl?.substring(0,80)}...`)
+  console.log(`real_char_image_url:     ${safeUrlPreview(s.realCharImgUrl)}...`)
   console.log(`episode_id:              ${s.episodeId}`)
   console.log(`shot_id:                 ${s.shotId}`)
-  console.log(`real_shot_image_url:     ${firstShotImgUrl?.substring(0,80)}...`)
+  console.log(`real_shot_image_url:     ${safeUrlPreview(firstShotImgUrl)}...`)
   console.log(`video_task_id:           ${s.videoTaskId}`)
-  console.log(`real_shot_video_url:     ${videoUrl?.substring(0,80)}...`)
+  console.log(`real_shot_video_url:     ${safeUrlPreview(videoUrl)}...`)
   console.log(`downloaded_video_path:   ${s.realVideoPath}`)
   console.log(`final_merged_video_path: ${s.finalVideoPath}`)
   console.log(`file_size:               ${(finalStat.size/1024).toFixed(1)}KB`)

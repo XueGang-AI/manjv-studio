@@ -1,13 +1,13 @@
 // ============================================
 // Ark Video Model Probe — Create Video Tasks
-// Model: doubao-seedance-1-5-pro-251215
+// Model: doubao-seedance-2-0-260128
 // Usage: npx tsx scripts/probes/probe-ark-video.ts
 // ============================================
 import 'dotenv/config'
 import fs from 'fs'
 
 const BASE = 'https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks'
-const MODEL = 'doubao-seedance-1-5-pro-251215'
+const MODEL = process.env.ARK_VIDEO_MODEL || 'doubao-seedance-2-0-260128'
 const KEY = process.env.ARK_API_KEY || ''
 const TEST_IMAGE_URL = 'https://ark-project.tos-cn-beijing.volces.com/doc_image/seepro_i2v.png'
 
@@ -160,7 +160,7 @@ async function main() {
   const paramTests: Array<{ label: string; params: Record<string, unknown> }> = [
     { label: 'duration=5', params: { duration: 5 } },
     { label: 'ratio="9:16"', params: { ratio: '9:16' } },
-    { label: 'resolution="480p"', params: { resolution: '480p' } },
+    { label: 'resolution="720p"', params: { resolution: '720p' } },
     { label: 'fps=24', params: { fps: 24 } },
     { label: 'watermark=false', params: { watermark: false } },
     { label: 'camerafixed=true', params: { camerafixed: true } },

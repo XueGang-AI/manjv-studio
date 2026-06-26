@@ -242,23 +242,43 @@ export class FFmpegService {
       const listPath = writeConcatList(taskDir, normalizedPaths)
 
       // 7. FFmpeg concat — inputs are already normalized, try -c copy first (fast, no quality loss)
+      //
+      // -fflags +genpts+igndts：重新生成时间戳 + 忽略 DTS 异常，解决 fps filter 残留的时间戳跳变
+      // -bsf:v h264_mp4toannexb：将 H.264 转为 Annex B 字节流格式（内联 SPS/PPS），
+      //   解决独立编码片段间 SPS/PPS 不一致导致 concat demuxer exit=254 的问题
       let result = await spawnSafe(FFMPEG_PATH, [
+        '-fflags', '+genpts+igndts',
         '-f', 'concat',
         '-safe', '0',
         '-i', listPath,
         '-c', 'copy',
+        '-bsf:v', 'h264_mp4toannexb',
         '-movflags', '+faststart',
         '-y',
         outputPath,
       ], { timeout: 300_000 })
 
-      // Fallback: if -c copy fails (e.g., minor parameter mismatch), re-encode
+      // Fallback: if -c copy fails, re-encode using concat filter (NOT concat demuxer).
+      //
+      // concat demuxer 工作在容器/demux 层，独立编码片段间微小的码流参数差异
+      // （H.264 profile/level、GOP 结构、extradata）仍可能导致 demux 失败。
+      // concat filter 工作在解码后的帧层面，完全不依赖编码参数兼容性，是最可靠的兜底方案。
       if (result.exitCode !== 0 && !result.timedOut) {
-        console.log(`[ffmpeg] concat -c copy failed (exit=${result.exitCode}), falling back to re-encode`)
-        result = await spawnSafe(FFMPEG_PATH, [
-          '-f', 'concat',
-          '-safe', '0',
-          '-i', listPath,
+        console.log(`[ffmpeg] concat -c copy failed (exit=${result.exitCode}), falling back to concat filter re-encode`)
+
+        // Build concat filter: [0:v][0:a][1:v][1:a]...concat=n=N:v=1:a=1[outv][outa]
+        const filterParts = normalizedPaths.map((_, i) => `[${i}:v][${i}:a]`).join('')
+        const n = normalizedPaths.length
+        const filterComplex = `${filterParts}concat=n=${n}:v=1:a=1[outv][outa]`
+
+        const concatFilterArgs: string[] = []
+        for (const np of normalizedPaths) {
+          concatFilterArgs.push('-i', np)
+        }
+        concatFilterArgs.push(
+          '-filter_complex', filterComplex,
+          '-map', '[outv]',
+          '-map', '[outa]',
           '-c:v', 'libx264',
           '-preset', 'fast',
           '-crf', '23',
@@ -267,7 +287,9 @@ export class FFmpegService {
           '-movflags', '+faststart',
           '-y',
           outputPath,
-        ], { timeout: 300_000 })
+        )
+
+        result = await spawnSafe(FFMPEG_PATH, concatFilterArgs, { timeout: 300_000 })
       }
 
       if (result.timedOut) {
@@ -334,6 +356,10 @@ export class FFmpegService {
 
     // 音频编码 — 统一格式
     args.push('-c:a', 'aac', '-b:a', '128k', '-ar', '44100', '-ac', '2')
+
+    // 强制恒定帧率输出，避免 fps filter 产生时间戳不规则
+    // 导致后续 concat demuxer 无法处理
+    args.push('-vsync', 'cfr')
 
     if (!hasAudio) {
       args.push('-shortest')

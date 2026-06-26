@@ -97,7 +97,7 @@ export interface PromptTemplate {
 export interface ModelOption {
   id: string
   name: string
-  provider: 'agnes' | 'ark'
+  provider: 'ark'
   description?: string
 }
 

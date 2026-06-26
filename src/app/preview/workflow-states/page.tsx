@@ -5,7 +5,7 @@ import { buildWorkflowSteps, mapWorkflowSteps } from '@/components/project/workf
 import { ProjectWorkflowStepper } from '@/components/project/workflow/project-workflow-stepper'
 
 /**
- * 开发预览：五种工作流状态的视觉验证（Phase 2）。
+ * 开发预览：五种工作流状态的视觉验证。
  * 不接真实路由/数据库，纯渲染组件，用于覆盖 generating / error 等真实项目数据难以触发的状态。
  * 路由 /preview/workflow-states，正式环境可保留供回归。
  */
@@ -31,7 +31,7 @@ export default function WorkflowStatesPreviewPage() {
   return (
     <div className="min-h-screen bg-[var(--bg-base)] p-8 space-y-8">
       <div>
-        <h1 className="text-xl font-bold text-[var(--text-primary)] mb-1">工作流状态预览（Phase 2）</h1>
+        <h1 className="text-xl font-bold text-[var(--text-primary)] mb-1">工作流状态预览</h1>
         <p className="text-sm text-[var(--text-tertiary)]">五种状态视觉验证：completed / active / generating / error / locked</p>
       </div>
       {SCENARIOS.map((s) => {

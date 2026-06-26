@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { taskService } from '@/server/queues/task-queue.service'
 import { emitTaskEvent, taskToUpdateEvent } from '@/server/workers/task-events'
+import { getRuntimeModelName } from '@/server/model-adapters/model-config'
 
 /**
  * POST /api/projects/:id/episodes/:episodeId/shot-images/generate
@@ -54,6 +55,21 @@ export async function POST(
       }, { status: 400 })
     }
 
+    const sceneReferenceCount = await prisma.sceneImage.count({
+      where: {
+        projectId,
+        isConfirmed: true,
+        isSelected: true,
+        scene: { episodeId },
+      },
+    })
+    if (sceneReferenceCount === 0) {
+      return NextResponse.json({
+        success: false,
+        error: '请先生成场景参考图',
+      }, { status: 400 })
+    }
+
     const shots = await prisma.shot.findMany({
       where: { episodeId, projectId },
       orderBy: { shotNo: 'asc' },
@@ -67,7 +83,7 @@ export async function POST(
       projectId,
       episodeId,
       taskType: 'GENERATE_SHOT_IMAGES',
-      modelName: project.modelProvider === 'ark' ? (process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5-0-260128') : (process.env.AGNES_IMAGE_MODEL || 'agnes-image-2.0-flash'),
+      modelName: getRuntimeModelName('image'),
       input: { episodeId, shot_count: shots.length },
     })
 

@@ -70,46 +70,27 @@ export const TASK_TYPE_MAP: Record<string, string> = {
   GENERATE_CHARACTERS: '生成角色设定',
   GENERATE_CHARACTER_IMAGES: '生成角色图',
   GENERATE_STORYBOARD: '生成分镜脚本',
-  GENERATE_IMAGE_PROMPTS: '生成图片 Prompt',
+  GENERATE_SCENE_REFERENCES: '生成场景参考图',
   GENERATE_SHOT_IMAGES: '生成分镜图',
-  GENERATE_VIDEO_PROMPTS: '生成视频 Prompt',
   GENERATE_SHOT_VIDEOS: '生成视频片段',
-  GENERATE_VOICE_SCRIPT: '生成配音文案',
-  GENERATE_PLATFORM_COPY: '生成平台文案',
   RENDER_FINAL_VIDEO: '合成最终成片',
   QUALITY_CHECK: '质量检查',
 }
 
 /**
- * 按 provider 约束 snap 镜头 duration，确保存入 DB 的值与实际视频时长一致。
+ * 按 Ark Seedance 2.0 i2v 约束 snap 镜头 duration，确保存入 DB 的值与实际视频时长一致。
  *
- * - Agnes: num_frames ≤ 441 / 24fps，snap 到 8n+1 帧数对应的精确秒数
- * - Ark i2v: 4~12 秒整数
- * - Ark t2v: 5 或 10 秒
+ * - Seedance 2.0: 输出最长 15 秒，取 4~15 秒整数
  */
-export function snapShotDuration(requested: number, modelProvider: string): number {
-  if (modelProvider === 'ark') {
-    return Math.max(4, Math.min(12, Math.round(requested)))
-  }
-  // Agnes: snap 到 8n+1 帧数 / 24fps 对应的秒数
-  const fps = 24
-  const targetFrames = Math.round(requested * fps)
-  let n = Math.round((targetFrames - 1) / 8)
-  n = Math.max(0, Math.min(n, 55)) // 8*55+1=441
-  const numFrames = 8 * n + 1
-  return numFrames / fps
+export function snapShotDuration(requested: number, _modelProvider: string): number {
+  return Math.max(4, Math.min(15, Math.round(requested)))
 }
 
 /**
- * 根据项目的 modelProvider 返回视频生成模型单镜头最大时长（秒）
- * - Agnes Video: num_frames ≤ 441 / 24fps ≈ 18.4s，取 18
- * - Ark Seedance i2v: 最大 12 秒
- * - 保守默认: 12 秒
+ * 返回视频生成模型单镜头最大时长（秒）。
  */
-export function getMaxShotDuration(modelProvider: string | null): number {
-  if (modelProvider === 'ark') return 12
-  if (modelProvider === 'agnes') return 18
-  return 12
+export function getMaxShotDuration(_modelProvider: string | null): number {
+  return 15
 }
 
 /**

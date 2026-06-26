@@ -61,7 +61,7 @@ export function StoryboardRightPanel({ project, episode, isConfirmed, hasStorybo
                   { l: '类型', v: project.storyType || '-' },
                   { l: '画风', v: project.artStyle || '-' },
                   { l: '时长', v: `${project.episodeDuration}s/集` },
-                  { l: '模型', v: project.modelProvider === 'ark' ? '豆包' : 'Agnes' },
+                  { l: '模型', v: '豆包' },
                   { l: '比例', v: project.aspectRatio },
                 ].map(i => (
                   <div key={i.l} className="flex justify-between text-xs py-1.5 border-b border-[var(--color-border-dim)] last:border-0">

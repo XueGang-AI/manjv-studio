@@ -29,7 +29,7 @@ export function ShotVideoReview({ group, isConfirmed, isGenerating, projectId, e
   const { addToast } = useToast()
 
   // 项目 modelProvider（只读展示，后端按此选模型）。一次获取，projectId 稳定。
-  const [modelProvider, setModelProvider] = useState<string>('agnes')
+  const [modelProvider, setModelProvider] = useState<string>('ark')
   useEffect(() => {
     let cancelled = false
     fetch(`/api/projects/${projectId}`)

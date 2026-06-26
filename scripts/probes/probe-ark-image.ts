@@ -462,7 +462,7 @@ async function main() {
   console.log('Ark Image Model Probe')
   console.log(`   Model: ${MODEL}`)
   console.log(`   Endpoint: ${ENDPOINT}`)
-  console.log(`   API Key: ${KEY ? KEY.substring(0, 15) + '...' : 'NOT SET'}`)
+  console.log(`   API Key: ${KEY ? 'SET' : 'NOT SET'}`)
   console.log('')
 
   if (!KEY) {

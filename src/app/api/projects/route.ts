@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
         episodeCount: Number(body.episode_count) || 10,
         episodeDuration: Number(body.episode_duration) || 90,
         aspectRatio: body.aspect_ratio || '9:16',
-        modelProvider: body.model_provider || 'agnes',
+        modelProvider: 'ark',
         status: 'DRAFT',
       },
     })

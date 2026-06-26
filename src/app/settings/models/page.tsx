@@ -4,9 +4,9 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 
 const MODEL_CONFIGS = [
-  { name: 'Agnes-2.0-Flash', type: 'TEXT', status: '未配置', description: '文本生成模型，用于故事分析、角色设定、分镜脚本等' },
-  { name: 'Agnes-Image-2.0-Flash', type: 'IMAGE', status: '未配置', description: '图片生成模型，用于角色图、分镜图、封面图等' },
-  { name: 'Agnes-Video-2.0', type: 'VIDEO', status: '未配置', description: '视频生成模型，用于分镜图动态化和视频片段生成' },
+  { name: 'doubao-seed-character', type: 'TEXT', status: '环境变量', description: '故事分析、角色设定、分镜脚本' },
+  { name: 'doubao-seedream', type: 'IMAGE', status: '环境变量', description: '角色图、场景图、分镜图' },
+  { name: 'doubao-seedance', type: 'VIDEO', status: '环境变量', description: '分镜图动态化和视频片段生成' },
 ]
 
 export default function ModelsPage() {
@@ -14,7 +14,7 @@ export default function ModelsPage() {
     <div>
       <h1 className="text-2xl font-bold mb-2">模型设置</h1>
       <p className="text-gray-500 mb-6">
-        管理 AI 模型连接配置。Phase 1 仅展示占位，Phase 2+ 接入真实 API。
+        当前运行时固定使用豆包 Ark，配置通过环境变量读取。
       </p>
 
       <div className="space-y-4 max-w-2xl">
@@ -26,7 +26,7 @@ export default function ModelsPage() {
                 <Badge variant={model.type === 'TEXT' ? 'info' : model.type === 'IMAGE' ? 'warning' : 'success'}>
                   {model.type}
                 </Badge>
-                <Badge variant="danger">未配置</Badge>
+                <Badge variant="info">{model.status}</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>

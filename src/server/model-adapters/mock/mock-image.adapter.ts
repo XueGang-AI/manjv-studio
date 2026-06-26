@@ -1,6 +1,6 @@
 // ============================================
 // Mock 图片适配器 - 返回占位图
-// Phase 2+ 时替换为 AgnesImageAdapter
+// Development-only image adapter
 // ============================================
 import { BaseImageAdapter } from '../base.adapter'
 import { ImageGenerationRequest, ImageGenerationResponse } from '../types'

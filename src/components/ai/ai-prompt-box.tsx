@@ -59,7 +59,7 @@ export interface AIPromptBoxProps {
 export function AIPromptBox({
   shotId,
   shotNo,
-  modelProvider,
+  modelProvider: _modelProvider,
   state: s,
   className,
 }: AIPromptBoxProps) {
@@ -76,7 +76,7 @@ export function AIPromptBox({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <span className="text-[10px] text-[var(--text-tertiary)] font-mono px-1.5 py-0.5 rounded border border-[var(--border-subtle)]">
-            {modelProvider === 'ark' ? '豆包 Ark' : 'Agnes'}
+            豆包 Ark
           </span>
           {showState && (
             <span className={cn('inline-flex items-center gap-1 text-[11px] font-medium', STATE_ACCENT[s.state])}>

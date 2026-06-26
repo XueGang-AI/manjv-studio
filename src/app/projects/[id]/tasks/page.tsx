@@ -25,6 +25,7 @@ const TASK_LABELS: Record<string, string> = {
   GENERATE_CHARACTERS: '角色设定生成',
   GENERATE_CHARACTER_IMAGES: '角色图生成',
   GENERATE_STORYBOARD: '分镜脚本生成',
+  GENERATE_SCENE_REFERENCES: '场景参考图生成',
   GENERATE_SHOT_IMAGES: '分镜图生成',
   GENERATE_SHOT_VIDEOS: '视频片段生成',
   RENDER_FINAL_VIDEO: '成片合成',

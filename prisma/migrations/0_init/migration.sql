@@ -201,7 +201,7 @@ CREATE TABLE "public"."projects" (
     "status" TEXT NOT NULL DEFAULT 'DRAFT',
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
-    "model_provider" TEXT NOT NULL DEFAULT 'agnes',
+    "model_provider" TEXT NOT NULL DEFAULT 'ark',
 
     CONSTRAINT "projects_pkey" PRIMARY KEY ("id")
 );
@@ -490,4 +490,3 @@ ALTER TABLE "public"."voice_scripts" ADD CONSTRAINT "voice_scripts_episode_id_fk
 
 -- AddForeignKey
 ALTER TABLE "public"."voice_scripts" ADD CONSTRAINT "voice_scripts_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-

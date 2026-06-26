@@ -1,0 +1,73 @@
+apiVersion: team-platform.io/v1alpha1
+kind: Project
+
+metadata:
+  slug: manjv-studio
+  name: Manjv Studio
+  labels:
+    domain: ai-video
+    language: typescript
+    runtime: nextjs
+
+spec:
+  type: AI_APPLICATION
+  owner:
+    name: XueGang-AI
+    email: example@example.com
+  repository:
+    url: file:///Users/xuegang/Desktop/My%20Project/manjv-studio
+  documentation:
+    url: file:///Users/xuegang/Desktop/My%20Project/manjv-studio/README.md
+  services:
+    - slug: web
+      name: Manjv Studio Web
+      type: WEB
+      description: Next.js 管理界面与 API Routes
+    - slug: api
+      name: Manjv Studio API Routes
+      type: API
+      description: 项目、任务、版本、QC、媒体接口
+    - slug: worker
+      name: Manjv Studio Worker
+      type: WORKER
+      description: 独立任务 Worker，负责 AI 生成、FFmpeg 合成和崩溃恢复
+    - slug: task-events
+      name: Task Events
+      type: WORKER
+      description: Redis Pub/Sub 与 SSE 事件通知层
+    - slug: model-adapters
+      name: Model Adapters
+      type: MODEL_SERVICE
+      description: Ark/豆包真实模型与非生产 Mock 模型适配层
+  environments:
+    - slug: local
+      name: 本地开发
+      description: npm run dev:all 或本机进程
+    - slug: docker
+      name: Docker 演示
+      description: docker compose up -d --build
+  endpoints:
+    - service: web
+      environment: local
+      baseUrl: http://localhost:3000
+      healthCheck:
+        enabled: true
+        path: /api/health
+    - service: api
+      environment: local
+      baseUrl: http://localhost:3000
+      healthCheck:
+        enabled: true
+        path: /api/health
+    - service: worker
+      environment: local
+      baseUrl: http://localhost:3000
+      healthCheck:
+        enabled: true
+        path: /api/worker/health
+    - service: web
+      environment: docker
+      baseUrl: http://localhost:3000
+      healthCheck:
+        enabled: true
+        path: /api/health

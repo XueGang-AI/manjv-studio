@@ -1,0 +1,35 @@
+# 依赖与构建产物（容器内重新生成）
+node_modules
+.next
+out
+build
+coverage
+
+# 环境与密钥（不进镜像）
+.env
+.env.*
+!.env.example
+
+# 运行时产物
+uploads
+scripts/output
+screenshots
+public
+
+# 版本控制与编辑器
+.git
+.gitignore
+.gitattributes
+.dockerignore
+.DS_Store
+*.log
+*.tsbuildinfo
+next-env.d.ts
+
+# 本地 Claude 配置
+.claude
+
+# 文档（非运行时必需）
+docs
+README.md
+CLAUDE.md

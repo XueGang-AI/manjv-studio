@@ -2,17 +2,40 @@
 
 Base URL: `http://localhost:3000/api`
 
+所有接口统一返回：
+
+```json
+{ "success": true, "data": {} }
+{ "success": false, "error": "错误信息" }
+```
+
+## 异步任务语义
+
+耗时生成接口只创建 `generation_tasks` 记录并返回 `taskId`，实际执行由独立 Worker 完成。前端通过任务列表或 SSE 监听状态：
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/tasks` | 全局任务列表 |
+| GET | `/api/tasks/:id` | 任务详情 |
+| GET | `/api/tasks/:id/logs` | 任务日志 |
+| POST | `/api/tasks/:id/retry` | 重试失败任务 |
+| POST | `/api/tasks/:id/cancel` | 取消等待中或执行中任务 |
+| GET | `/api/projects/:id/tasks` | 项目任务列表 |
+| GET | `/api/projects/:id/tasks/stream` | 项目任务 SSE 实时推送 |
+
+生产 Worker 注册任务：`GENERATE_STORY_PACKAGE`、`GENERATE_CHARACTERS`、`GENERATE_CHARACTER_IMAGES`、`GENERATE_STORYBOARD`、`GENERATE_SCENE_REFERENCES`、`GENERATE_SHOT_IMAGES`、`GENERATE_SHOT_VIDEOS`、`RENDER_FINAL_VIDEO`。
+
 ## 项目 API
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/projects` | 获取项目列表 |
-| POST | `/api/projects` | 创建项目 |
+| POST | `/api/projects` | 创建项目，新项目固定 `model_provider=ark` |
 | GET | `/api/projects/:id` | 获取项目详情 |
 | PATCH | `/api/projects/:id` | 更新项目 |
 | DELETE | `/api/projects/:id` | 删除项目 |
 
-### 创建项目 (POST)
+创建项目示例：
 
 ```json
 {
@@ -21,126 +44,88 @@ Base URL: `http://localhost:3000/api`
   "background": "现代都市，珠宝设计",
   "main_characters": ["林若雪", "顾辰"],
   "core_conflict": "爱情与复仇",
-  "story_summary": "...至少20字",
+  "story_summary": "至少20字的故事简介",
   "art_style": "韩漫",
   "target_platform": "抖音",
   "episode_count": 10,
   "episode_duration": 90,
-  "aspect_ratio": "9:16",
-  "model_provider": "agnes"
+  "aspect_ratio": "9:16"
 }
 ```
 
-## 故事方案 API
+## 创作主流程 API
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/projects/:id/story/generate` | 生成故事方案 |
-| GET | `/api/projects/:id/story` | 获取所有版本 |
-| PATCH | `/api/projects/:id/story/:spId` | 更新内容 |
-| POST | `/api/projects/:id/story/:spId/confirm` | 确认方案 |
+| 阶段 | 方法 | 路径 | 说明 |
+|------|------|------|------|
+| 故事方案 | POST | `/api/projects/:id/story/generate` | 创建故事方案生成任务 |
+| 故事方案 | GET | `/api/projects/:id/story` | 获取所有故事方案版本 |
+| 故事方案 | PATCH | `/api/projects/:id/story/:storyPackageId` | 更新故事方案 |
+| 故事方案 | POST | `/api/projects/:id/story/:storyPackageId/confirm` | 确认故事方案 |
+| 角色设定 | POST | `/api/projects/:id/characters/generate` | 创建角色设定生成任务 |
+| 角色设定 | GET | `/api/projects/:id/characters` | 获取角色列表 |
+| 角色设定 | PATCH | `/api/projects/:id/characters/:charId` | 更新角色 |
+| 角色设定 | POST | `/api/projects/:id/characters/:charId/confirm` | 确认角色 |
+| 角色图 | POST | `/api/projects/:id/character-images/generate` | 创建角色图生成任务 |
+| 角色图 | GET | `/api/projects/:id/character-images` | 获取角色图 |
+| 角色图 | POST | `/api/projects/:id/character-images/:imageId/select` | 选择标准图 |
+| 角色图 | POST | `/api/projects/:id/character-images/:imageId/confirm` | 确认标准图 |
+| 角色图 | POST | `/api/projects/:id/character-images/:imageId/regenerate` | 按图片重生成 |
+| 角色图 | POST | `/api/projects/:id/characters/:charId/images/regenerate` | 按角色重生成 |
+| 角色图 | POST | `/api/projects/:id/character-images/batch-confirm` | 批量确认标准角色图 |
+| 分镜脚本 | POST | `/api/projects/:id/storyboard/generate` | 创建分镜脚本生成任务 |
+| 分镜脚本 | GET | `/api/projects/:id/episodes/:episodeId/storyboard` | 获取分镜 |
+| 分镜脚本 | PATCH | `/api/projects/:id/episodes/:episodeId/storyboard` | 更新剧集分镜 |
+| 分镜脚本 | POST | `/api/projects/:id/episodes/:episodeId/storyboard/confirm` | 确认分镜 |
+| 分镜脚本 | POST | `/api/projects/:id/episodes/:episodeId/shots` | 新增镜头 |
+| 分镜脚本 | PATCH | `/api/projects/:id/episodes/:episodeId/shots/:shotId` | 更新镜头 |
+| 分镜脚本 | DELETE | `/api/projects/:id/episodes/:episodeId/shots/:shotId` | 删除镜头 |
+| 场景参考图 | POST | `/api/projects/:id/episodes/:episodeId/scene-references/generate` | 创建场景参考图生成任务 |
+| 场景参考图 | GET | `/api/projects/:id/episodes/:episodeId/scene-references` | 获取场景与参考图 |
+| 分镜图 | POST | `/api/projects/:id/episodes/:episodeId/shot-images/generate` | 创建分镜图生成任务 |
+| 分镜图 | GET | `/api/projects/:id/episodes/:episodeId/shot-images` | 获取分镜图 |
+| 分镜图 | POST | `/api/projects/:id/episodes/:episodeId/shot-images/:imageId/select` | 选择分镜图 |
+| 分镜图 | POST | `/api/projects/:id/episodes/:episodeId/shot-images/:imageId/confirm` | 确认分镜图 |
+| 分镜图 | POST | `/api/projects/:id/episodes/:episodeId/shots/:shotId/images/regenerate` | 按镜头重生成分镜图 |
+| 分镜图 | POST | `/api/projects/:id/episodes/:episodeId/shot-images/batch-confirm` | 批量确认分镜图 |
+| 视频片段 | POST | `/api/projects/:id/episodes/:episodeId/shot-videos/generate` | 创建视频片段生成任务 |
+| 视频片段 | GET | `/api/projects/:id/episodes/:episodeId/shot-videos` | 获取视频片段 |
+| 视频片段 | POST | `/api/projects/:id/episodes/:episodeId/shot-videos/:videoId/select` | 选择视频片段 |
+| 视频片段 | POST | `/api/projects/:id/episodes/:episodeId/shot-videos/:videoId/confirm` | 确认视频片段 |
+| 视频片段 | POST | `/api/projects/:id/episodes/:episodeId/shots/:shotId/videos/regenerate` | 按镜头重生成视频 |
+| 视频片段 | POST | `/api/projects/:id/episodes/:episodeId/shot-videos/:videoId/check-task` | 手动检查单个远端视频任务 |
+| 视频片段 | POST | `/api/projects/:id/episodes/:episodeId/shot-videos/batch-check-tasks` | 批量检查远端视频任务 |
+| 视频片段 | POST | `/api/projects/:id/episodes/:episodeId/shot-videos/batch-confirm` | 批量确认视频片段 |
+| 成片渲染 | POST | `/api/projects/:id/episodes/:episodeId/final-preview/render` | 创建最终视频合成任务 |
+| 成片渲染 | GET | `/api/projects/:id/episodes/:episodeId/final-preview` | 获取最终视频状态 |
+| 自动化 | POST | `/api/projects/:id/episodes/:episodeId/automation/auto-confirm` | QC 达标后自动确认当前阶段产物 |
+| 发布包 | POST | `/api/projects/:id/episodes/:episodeId/release-package/generate` | 生成发布 manifest 并写回成片记录 |
 
-## 角色 API
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/projects/:id/characters/generate` | 生成角色卡 |
-| GET | `/api/projects/:id/characters` | 获取角色列表 |
-| PATCH | `/api/projects/:id/characters/:cId` | 更新角色 |
-| POST | `/api/projects/:id/characters/:cId/confirm` | 确认角色 |
-
-## 角色图 API
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/projects/:id/character-images/generate` | 生成候选图 |
-| GET | `/api/projects/:id/character-images` | 获取角色图 |
-| POST | `/api/projects/:id/character-images/:iId/select` | 选择标准图 |
-| POST | `/api/projects/:id/character-images/:iId/confirm` | 确认标准图 |
-| POST | `/api/projects/:id/characters/:cId/images/regenerate` | 重新生成 |
-| POST | `/api/projects/:id/character-images/batch-confirm` | 批量确认角色图 |
-
-## 分镜 API
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/projects/:id/storyboard/generate` | 生成分镜 |
-| GET | `/api/projects/:id/episodes/:eId/storyboard` | 获取分镜 |
-| PATCH | `/api/projects/:id/episodes/:eId/storyboard` | 更新剧集 |
-| POST | `/api/projects/:id/episodes/:eId/storyboard/confirm` | 确认分镜 |
-| POST | `/api/projects/:id/episodes/:eId/shots` | 新增镜头 |
-| PATCH | `/api/projects/:id/episodes/:eId/shots/:sId` | 更新镜头 |
-| DELETE | `/api/projects/:id/episodes/:eId/shots/:sId` | 删除镜头 |
-
-## 分镜图 API
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/projects/:id/episodes/:eId/shot-images/generate` | 生成分镜图 |
-| GET | `/api/projects/:id/episodes/:eId/shot-images` | 获取分镜图 |
-| POST | `/api/projects/:id/episodes/:eId/shot-images/:iId/select` | 选择 |
-| POST | `/api/projects/:id/episodes/:eId/shot-images/:iId/confirm` | 确认 |
-| POST | `/api/projects/:id/episodes/:eId/shots/:sId/images/regenerate` | 重新生成 |
-| POST | `/api/projects/:id/episodes/:eId/shot-images/batch-confirm` | 批量确认分镜图 |
-
-## 视频 API
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/projects/:id/episodes/:eId/shot-videos/generate` | 生成视频片段 |
-| GET | `/api/projects/:id/episodes/:eId/shot-videos` | 获取视频片段 |
-| POST | `/api/projects/:id/episodes/:eId/shot-videos/:vId/select` | 选择 |
-| POST | `/api/projects/:id/episodes/:eId/shot-videos/:vId/confirm` | 确认 |
-| POST | `/api/projects/:id/episodes/:eId/shots/:sId/videos/regenerate` | 重新生成 |
-
-## 成片渲染 API
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/projects/:id/episodes/:eId/final-preview/render` | 合成最终视频 |
-| GET | `/api/projects/:id/episodes/:eId/final-preview` | 获取状态 |
-
-## 任务 API
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/tasks` | 所有任务 |
-| GET | `/api/tasks/:id` | 任务详情 |
-| GET | `/api/tasks/:id/logs` | 任务日志 |
-| POST | `/api/tasks/:id/retry` | 重试 |
-| POST | `/api/tasks/:id/cancel` | 取消 |
-| GET | `/api/projects/:id/tasks` | 项目任务 |
-| GET | `/api/projects/:id/tasks/stream` | SSE 实时推送 |
+视频远端任务检查会轮询 Ark Video API，并更新 `remoteStatus`、`remoteProgress`、`videoUrl` 等字段。
 
 ## 版本 API
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/projects/:id/versions` | 版本列表(?entity_type=) |
-| GET | `/api/projects/:id/versions/:vId` | 版本详情 |
-| POST | `/api/projects/:id/versions/:vId/rollback` | 回退 |
-| POST | `/api/projects/:id/versions/:vId/set-current` | 设为当前 |
-| GET | `/api/projects/:id/versions/compare` | 对比(?from=&to=) |
+| GET | `/api/projects/:id/versions` | 版本列表，支持 `?entity_type=` |
+| GET | `/api/projects/:id/versions/:versionId` | 版本详情 |
+| POST | `/api/projects/:id/versions/:versionId/rollback` | 回滚到版本 |
+| POST | `/api/projects/:id/versions/:versionId/set-current` | 设为当前版本 |
+| GET | `/api/projects/:id/versions/compare` | 对比版本，`?from=&to=` |
 
 ## QC API
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | `/api/projects/:id/qc/run` | 运行项目 QC |
-| GET | `/api/projects/:id/qc/reports` | 查看报告 |
-| GET | `/api/projects/:id/qc/reports/:rId` | 报告详情 |
-| POST | `/api/projects/:id/episodes/:eId/qc/run` | 运行剧集 QC |
-| GET | `/api/projects/:id/episodes/:eId/qc/reports` | 剧集报告 |
+| GET | `/api/projects/:id/qc/reports` | 查看项目 QC 报告 |
+| GET | `/api/projects/:id/qc/reports/:reportId` | QC 报告详情 |
+| POST | `/api/projects/:id/episodes/:episodeId/qc/run` | 运行剧集 QC |
+| GET | `/api/projects/:id/episodes/:episodeId/qc/reports` | 查看剧集 QC 报告 |
 
-## 视频任务检查（异步轮询）
+## 健康与媒体
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/projects/:id/episodes/:eId/shot-videos/:vId/check-task` | 手动检查远端视频任务状态 |
-
-调用后自动轮询 Agnes Video API，更新 `remote_status`/`remote_progress`/`videoUrl` 字段。
-
-## 返回格式
-
-成功: `{"success":true,"data":{}}`
-失败: `{"success":false,"error":"错误信息"}`
+| GET | `/api/health` | Web/API 健康检查 |
+| GET | `/api/worker/health` | DB、Redis、Worker heartbeat 综合健康检查 |
+| GET | `/api/media/:key...` | 本地媒体访问代理 |

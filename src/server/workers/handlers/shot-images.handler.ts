@@ -7,7 +7,9 @@
 
 import prisma from '@/lib/prisma'
 import { adapterFactory } from '@/server/model-adapters/adapter.factory'
+import { getRuntimeModelName } from '@/server/model-adapters/model-config'
 import { taskService } from '@/server/queues/task-queue.service'
+import { resolveImageUrlForModel } from '@/server/services/media-reference-url'
 import { emitTaskEvent, taskToUpdateEvent } from '../task-events'
 import type { ImageGenerationRequest } from '@/server/model-adapters/types'
 
@@ -17,14 +19,29 @@ export interface ShotImagesInput {
 
 // ─── 角色参考图匹配 ────────────────────────────────────────────────
 
-type RefEntry = { characterId: string; characterName: string; imageUrl: string; referenceType: string }
+type RefEntry = {
+  characterId: string
+  characterName: string
+  imageUrl: string
+  referenceType: string
+  storageObjectKey?: string | null
+  sourceUrl?: string | null
+}
+type MatchedReference = {
+  character_id: string
+  character_name: string
+  image_url: string
+  reference_type: string
+  storage_object_key?: string | null
+  source_url?: string | null
+}
 type CharAppearance = { name: string; appearanceText: string }
 
 function matchReferences(
   shotCharsRaw: unknown,
   shotContent: { action?: string; camera?: Record<string, unknown>; emotion?: string },
   refByName: Map<string, RefEntry[]>,
-): Array<{ character_id: string; character_name: string; image_url: string; reference_type: string }> {
+): MatchedReference[] {
   const shotChars: string[] = []
   if (Array.isArray(shotCharsRaw)) {
     for (const item of shotCharsRaw) {
@@ -64,7 +81,7 @@ function matchReferences(
   else if (isPropWeapon) priorityTypes.push('prop', 'weapon', 'front_full_body', 'front_half_body')
   else priorityTypes.push('front_half_body', 'front_full_body')
 
-  const matched: Array<{ character_id: string; character_name: string; image_url: string; reference_type: string }> = []
+  const matched: MatchedReference[] = []
   const usedNames = new Set<string>()
 
   for (const sc of shotChars) {
@@ -95,6 +112,8 @@ function matchReferences(
         character_name: sorted[i].characterName,
         image_url: sorted[i].imageUrl,
         reference_type: sorted[i].referenceType,
+        storage_object_key: sorted[i].storageObjectKey || null,
+        source_url: sorted[i].sourceUrl || null,
       })
     }
     usedNames.add(sorted[0].characterName)
@@ -195,6 +214,8 @@ export async function handleShotImages(taskId: string): Promise<void> {
           characterName: name,
           imageUrl: ci.imageUrl,
           referenceType: ci.referenceType || 'front_full_body',
+          storageObjectKey: ci.storageObjectKey,
+          sourceUrl: ci.sourceUrl,
         })
       }
     }
@@ -257,6 +278,14 @@ export async function handleShotImages(taskId: string): Promise<void> {
       include: {
         imagePrompts: { take: 1, orderBy: { createdAt: 'desc' } },
         shotImages: { orderBy: { createdAt: 'desc' } },
+        scene: {
+          include: {
+            sceneImages: {
+              where: { isConfirmed: true, isSelected: true },
+              orderBy: { createdAt: 'asc' },
+            },
+          },
+        },
       },
     })
 
@@ -305,12 +334,48 @@ export async function handleShotImages(taskId: string): Promise<void> {
         console.warn(`[worker:shot-images] Shot #${shot.shotNo}: 0 reference images matched`)
       }
 
+      const sceneReferences = (shot.scene?.sceneImages || []).map(img => ({
+        scene_id: shot.scene!.id,
+        scene_name: shot.scene!.name,
+        image_url: img.imageUrl || '',
+        reference_type: img.referenceType || 'scene',
+        storage_object_key: img.storageObjectKey,
+        source_url: img.sourceUrl,
+      })).filter(ref => !!ref.image_url || !!ref.storage_object_key)
+
       const genReq: ImageGenerationRequest = {
         taskType: 'shot_image', prompt, negativePrompt: negative,
         aspectRatio, style, numOutputs,
       }
 
-      console.log(`[worker:shot-images] Shot #${shot.shotNo}: ${references.length} refs`)
+      const characterReferenceUrls = (await Promise.all(
+        references.map(ref => resolveImageUrlForModel({
+          imageUrl: ref.image_url,
+          sourceUrl: ref.source_url,
+          storageObjectKey: ref.storage_object_key,
+        }))
+      )).filter((url): url is string => !!url)
+
+      const sceneReferenceUrls = (await Promise.all(
+        sceneReferences.map(ref => resolveImageUrlForModel({
+          imageUrl: ref.image_url,
+          sourceUrl: ref.source_url,
+          storageObjectKey: ref.storage_object_key,
+        }))
+      )).filter((url): url is string => !!url)
+
+      const referenceImageUrls = [
+        ...sceneReferenceUrls.slice(0, 2),
+        ...characterReferenceUrls,
+      ].slice(0, 4)
+
+      if (referenceImageUrls.length > 0) {
+        genReq.referenceImages = referenceImageUrls
+      } else if (references.length > 0 || sceneReferences.length > 0) {
+        console.warn(`[worker:shot-images] Shot #${shot.shotNo}: refs matched but none resolved for model`)
+      }
+
+      console.log(`[worker:shot-images] Shot #${shot.shotNo}: ${references.length} character refs, ${sceneReferences.length} scene refs, ${genReq.referenceImages?.length || 0} sent`)
 
       const response = await imageAdapter.generate(genReq)
 
@@ -333,9 +398,15 @@ export async function handleShotImages(taskId: string): Promise<void> {
               sourceUrl: outcome.sourceUrl,
               prompt, negativePrompt: negative,
               seed: String(img.seed || ''), style, aspectRatio,
-              modelName: project.modelProvider === 'ark' ? (process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5-0-260128') : (process.env.AGNES_IMAGE_MODEL || 'agnes-image-2.0-flash'),
-              referenceImages: references,
-              params: { ...img.params, num_outputs: numOutputs },
+              modelName: getRuntimeModelName('image'),
+              referenceImages: [...sceneReferences, ...references],
+              params: {
+                ...img.params,
+                num_outputs: numOutputs,
+                character_reference_image_count: references.length,
+                scene_reference_image_count: sceneReferences.length,
+                sent_reference_image_count: genReq.referenceImages?.length || 0,
+              },
               isSelected: false, isConfirmed: false,
             },
           })

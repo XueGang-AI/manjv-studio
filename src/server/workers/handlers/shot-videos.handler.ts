@@ -9,9 +9,11 @@
 
 import prisma from '@/lib/prisma'
 import { adapterFactory } from '@/server/model-adapters/adapter.factory'
+import { getRuntimeModelName, RUNTIME_MODEL_PROVIDER } from '@/server/model-adapters/model-config'
 import { snapShotDuration } from '@/lib/utils'
 import { taskService } from '@/server/queues/task-queue.service'
 import { emitTaskEvent, taskToUpdateEvent } from '../task-events'
+import { resolveImageUrlForModel, resolveStructuredReferenceImagesForModel } from '@/server/services/media-reference-url'
 import type { VideoGenerationRequest } from '@/server/model-adapters/types'
 
 type JsonValue = import('@prisma/client').Prisma.InputJsonValue
@@ -130,12 +132,29 @@ export async function handleShotVideos(taskId: string): Promise<void> {
       }
 
       const rawDuration = (shot.endTime || 10) - (shot.startTime || 0)
-      const duration = snapShotDuration(rawDuration, project.modelProvider)
+      const duration = snapShotDuration(rawDuration, RUNTIME_MODEL_PROVIDER)
+      const modelName = getRuntimeModelName('video')
+
+      // ─── 确定 inputImage URL（Phase 6+：智能回退）───
+      // 优先级：
+      //   1. imageUrl 为公网绝对 URL → 直接使用（生产 OSS/S3 签名 URL）
+      //   2. imageUrl 为相对路径 → 尝试 sourceUrl（供应商原始 URL）
+      //   3. sourceUrl 不可达 → 读取本地文件转 base64 data URI（Ark 支持）
+      const inputImageUrl = await resolveImageUrlForModel({
+        imageUrl: confirmedImage?.imageUrl,
+        sourceUrl: confirmedImage?.sourceUrl,
+        storageObjectKey: confirmedImage?.storageObjectKey,
+      })
+      const inheritedReferenceImages = Array.isArray(confirmedImage?.referenceImages)
+        ? confirmedImage.referenceImages
+        : []
+      const referenceImageUrls = await resolveStructuredReferenceImagesForModel(inheritedReferenceImages, 4)
 
       const genReq: VideoGenerationRequest = {
         taskType: 'image_to_video',
         prompt,
-        inputImage: confirmedImage?.imageUrl || undefined,
+        inputImage: inputImageUrl,
+        referenceImages: referenceImageUrls,
         duration,
         aspectRatio,
         motionStrength: (vidPrompt?.motionStrength as 'low' | 'medium' | 'high') || 'medium',
@@ -148,6 +167,9 @@ export async function handleShotVideos(taskId: string): Promise<void> {
         // 真实模式：创建异步任务
         const createResult = await videoAdapter.createVideoTask(genReq)
 
+        // 自动选中：若该镜头尚无已选/已确认视频，首个候选自动成为选中项
+        const autoSelect = !shot.shotVideos.some(sv => sv.isSelected || sv.isConfirmed)
+
         const created = await prisma.shotVideo.create({
           data: {
             shotId: shot.id, projectId,
@@ -155,15 +177,21 @@ export async function handleShotVideos(taskId: string): Promise<void> {
             videoUrl: '',
             prompt,
             seed: '',
-            modelName: project.modelProvider === 'ark' ? (process.env.ARK_VIDEO_MODEL || 'doubao-seedance-1-5-pro-251215') : (process.env.AGNES_VIDEO_MODEL || 'agnes-video-v2.0'),
-            referenceImages: confirmedImage ? [{ image_url: confirmedImage.imageUrl }] as unknown as JsonValue : [] as unknown as JsonValue,
+            modelName,
+            referenceImages: confirmedImage
+              ? [{ image_url: confirmedImage.imageUrl, reference_type: 'input_image' }, ...inheritedReferenceImages] as unknown as JsonValue
+              : [] as unknown as JsonValue,
             duration,
-            params: { aspect_ratio: aspectRatio, generation_method: 'async_task' } as unknown as JsonValue,
+            params: {
+              aspect_ratio: aspectRatio,
+              generation_method: 'async_task',
+              sent_reference_image_count: referenceImageUrls.length,
+            } as unknown as JsonValue,
             remoteTaskId: createResult.taskId,
             remoteStatus: createResult.status,
             remoteResponseJson: createResult.createResponse as unknown as JsonValue,
             lastPolledAt: new Date(),
-            isSelected: false, isConfirmed: false,
+            isSelected: autoSelect, isConfirmed: false,
           },
         })
 
@@ -172,18 +200,23 @@ export async function handleShotVideos(taskId: string): Promise<void> {
         // Mock 模式：同步生成
         const response = await videoAdapter.generate(genReq)
 
-        const created = await Promise.all(response.videos.map(v =>
+        // 自动选中：首个候选，除非该镜头已有已选/已确认视频
+        const autoSelect = !shot.shotVideos.some(sv => sv.isSelected || sv.isConfirmed)
+
+        const created = await Promise.all(response.videos.map((v, idx) =>
           prisma.shotVideo.create({
             data: {
               shotId: shot.id, projectId,
               inputImageUrl: confirmedImage?.imageUrl || '',
               videoUrl: v.url, prompt,
               seed: String(v.params?.seed || ''),
-              modelName: project.modelProvider === 'ark' ? (process.env.ARK_VIDEO_MODEL || 'doubao-seedance-1-5-pro-251215') : (process.env.AGNES_VIDEO_MODEL || 'agnes-video-v2.0'),
-              referenceImages: confirmedImage ? [{ image_url: confirmedImage.imageUrl }] as unknown as JsonValue : [] as unknown as JsonValue,
+              modelName,
+              referenceImages: confirmedImage
+                ? [{ image_url: confirmedImage.imageUrl, reference_type: 'input_image' }, ...inheritedReferenceImages] as unknown as JsonValue
+                : [] as unknown as JsonValue,
               duration: v.duration || duration,
-              params: { ...v.params, aspect_ratio: aspectRatio } as unknown as JsonValue,
-              isSelected: false, isConfirmed: false,
+              params: { ...v.params, aspect_ratio: aspectRatio, sent_reference_image_count: referenceImageUrls.length } as unknown as JsonValue,
+              isSelected: idx === 0 && autoSelect, isConfirmed: false,
             },
           })
         ))

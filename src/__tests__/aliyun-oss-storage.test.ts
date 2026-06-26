@@ -10,6 +10,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 const mockPut = vi.fn()
 const mockMultipartUpload = vi.fn()
 const mockSignatureUrl = vi.fn()
+const mockSignatureUrlV4 = vi.fn()
 const mockDelete = vi.fn()
 const mockHead = vi.fn()
 const mockAbortMultipartUpload = vi.fn()
@@ -24,6 +25,7 @@ vi.mock('ali-oss', () => {
       put = mockPut
       multipartUpload = mockMultipartUpload
       signatureUrl = mockSignatureUrl
+      signatureUrlV4 = mockSignatureUrlV4
       delete = mockDelete
       head = mockHead
       abortMultipartUpload = mockAbortMultipartUpload
@@ -96,18 +98,26 @@ describe('Aliyun OSS Provider 配置', () => {
 describe('Aliyun OSS Provider 行为', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockSignatureUrl.mockReturnValue('https://signed-url.example/key')
+    mockSignatureUrlV4.mockResolvedValue('https://manjv-studio.oss-cn-hangzhou.aliyuncs.com/key?x-oss-signature-version=OSS4-HMAC-SHA256')
   })
 
-  it('createReadUrl 使用公网 endpoint 签名，不含 internal', async () => {
+  it('createReadUrl 使用 signatureUrlV4 并返回公网 URL，不含 internal', async () => {
     const provider = createAliyunOssStorageProvider(baseConfig)
     const url = await provider.createReadUrl({ objectKey: 'projects/p1/images/abc.png', expiresInSeconds: 3600 })
-    expect(mockSignatureUrl).toHaveBeenCalledWith(
+    // 必须调用 signatureUrlV4
+    expect(mockSignatureUrlV4).toHaveBeenCalledWith(
+      'GET',
+      3600,
+      { headers: {} },
       'projects/p1/images/abc.png',
-      expect.objectContaining({ expires: 3600, method: 'GET' }),
     )
-    expect(url).toBe('https://signed-url.example/key')
+    // signatureUrl（旧 V1 签名）不得被调用
+    expect(mockSignatureUrl).not.toHaveBeenCalled()
+    expect(url).toBe('https://manjv-studio.oss-cn-hangzhou.aliyuncs.com/key?x-oss-signature-version=OSS4-HMAC-SHA256')
     expect(url).not.toContain('internal')
+    expect(url).not.toContain('cn-hangzhou-internal')
+    // 返回 URL 包含 V4 签名版本
+    expect(url).toContain('x-oss-signature-version=OSS4')
   })
 
   it('exists 返回 true 当 head 成功', async () => {

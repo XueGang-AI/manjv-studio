@@ -1,6 +1,6 @@
 // ============================================
 // ArkVideoAdapter — 豆包 Seedance 视频适配器
-// Model: doubao-seedance-1-5-pro-251215
+// Model: doubao-seedance-2-0-260128
 // Create: POST {baseUrl}/contents/generations/tasks
 // Poll: GET {baseUrl}/contents/generations/tasks/{task_id}
 // Format: content_array
@@ -24,8 +24,8 @@ export interface ArkVideoAdapterOptions {
   baseUrl: string
 }
 
-const DEFAULT_MODEL = 'doubao-seedance-1-5-pro-251215'
-const DEFAULT_RESOLUTION = '480p'
+const DEFAULT_MODEL = 'doubao-seedance-2-0-260128'
+const DEFAULT_RESOLUTION = '720p'
 
 export class ArkVideoAdapter extends BaseVideoAdapter {
   private baseUrl: string
@@ -110,12 +110,22 @@ export class ArkVideoAdapter extends BaseVideoAdapter {
       })
     }
 
+    const extraReferenceImages = (request.referenceImages || [])
+      .filter(url => url && url !== request.inputImage)
+      .slice(0, 8)
+    for (const imageUrl of extraReferenceImages) {
+      content.push({
+        type: 'image_url',
+        image_url: { url: imageUrl },
+      })
+    }
+
     const createBody: Record<string, unknown> = {
       model: this.model,
       content,
-      duration: snapArkSeedanceDuration(request.duration, request.taskType),
+      duration: snapArkSeedanceDuration(request.duration, request.taskType, this.model),
       ratio: request.aspectRatio || '9:16',
-      resolution: DEFAULT_RESOLUTION,
+      resolution: (request.params?.resolution as string | undefined) || process.env.ARK_VIDEO_RESOLUTION || DEFAULT_RESOLUTION,
       watermark: false,
     }
 
@@ -345,18 +355,23 @@ export class ArkVideoAdapter extends BaseVideoAdapter {
 }
 
 /**
- * 把请求里的 duration 收口到 doubao-seedance-1-5-pro-251215 支持的合法值集合。
- * 已知约束（官方文档 + API 实际验证）：
- *   - i2v: 支持 4 ~ 12 秒（整数）
- *   - t2v: 支持 5 / 10
+ * 把请求里的 duration 收口到 Seedance 支持的合法值集合。
+ * - Seedance 2.0: 4 ~ 15 秒整数
+ * - Seedance 1.5 i2v: 4 ~ 12 秒整数
+ * - Seedance 1.5 t2v: 5 / 10
  * 超出范围的值会被远端 400 InvalidParameter 拒掉，所以这里 clamp 到合法区间。
  */
 function snapArkSeedanceDuration(
   requested: number | undefined,
-  taskType: 'text_to_video' | 'image_to_video'
+  taskType: 'text_to_video' | 'image_to_video',
+  model: string
 ): number {
   if (typeof requested !== 'number' || !Number.isFinite(requested) || requested <= 0) {
     return taskType === 'image_to_video' ? 5 : 5
+  }
+
+  if (model.includes('seedance-2-0')) {
+    return Math.max(4, Math.min(15, Math.round(requested)))
   }
 
   if (taskType === 'image_to_video') {

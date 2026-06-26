@@ -267,7 +267,7 @@ export default function CharacterImagesPage() {
                     }`}
                   >
                     <div className="aspect-[9/16] bg-[var(--bg-panel)] relative">
-                      {/* eslint-disable-next-line @next/next/no-img-element -- 动态远端对象存储 URL（agnes/ark），next.config 未配置 images.remotePatterns，且需原生 onError 做失效占位，与 shot-image-review 既有约定一致 */}
+                      {/* eslint-disable-next-line @next/next/no-img-element -- 动态远端对象存储 URL，next.config 未配置 images.remotePatterns，且需原生 onError 做失效占位，与 shot-image-review 既有约定一致 */}
                       <img src={img.imageUrl} alt={refLabel} className="w-full h-full object-cover"
                         onError={(e) => { (e.target as HTMLImageElement).src = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="270" height="480" fill="%23211f1c"><rect width="270" height="480"/><text x="135" y="240" text-anchor="middle" fill="%237f7870" font-size="14">Image</text></svg>` }}
                       />

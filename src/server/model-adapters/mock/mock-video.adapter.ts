@@ -7,17 +7,19 @@ import {
   VideoGenerationRequest, VideoGenerationResponse,
   VideoTaskCreationResult, VideoTaskPollResult, VideoTaskWaitResult,
 } from '../types'
+import { FFmpegService } from '@/server/services/ffmpeg.service'
 import fs from 'fs'
 import path from 'path'
 
 export class MockVideoAdapter extends BaseVideoAdapter {
   async generate(request: VideoGenerationRequest): Promise<VideoGenerationResponse> {
     await new Promise((resolve) => setTimeout(resolve, 3000))
+    const videoUrl = await this.ensureLocalMockVideo(request.duration || 5, request.aspectRatio || '9:16')
 
     return {
       videos: [
         {
-          url: 'https://www.w3schools.com/html/mov_bbb.mp4',
+          url: videoUrl,
           duration: request.duration || 5,
           params: {
             motion_strength: request.motionStrength,
@@ -25,7 +27,7 @@ export class MockVideoAdapter extends BaseVideoAdapter {
           },
         },
         {
-          url: 'https://www.w3schools.com/html/mov_bbb.mp4',
+          url: videoUrl,
           duration: request.duration || 5,
           params: {
             motion_strength: request.motionStrength,
@@ -45,14 +47,16 @@ export class MockVideoAdapter extends BaseVideoAdapter {
   }
 
   async pollVideoTask(taskId: string): Promise<VideoTaskPollResult> {
+    const videoUrl = await this.ensureLocalMockVideo(5, '9:16')
+
     // Mock: 总是返回完成
     return {
       taskId,
       status: 'completed',
       progress: 100,
-      videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
+      videoUrl,
       duration: 5,
-      response: { mock: true, task_id: taskId, status: 'completed', video_url: 'https://www.w3schools.com/html/mov_bbb.mp4' },
+      response: { mock: true, task_id: taskId, status: 'completed', video_url: videoUrl },
       polledAt: new Date().toISOString(),
     }
   }
@@ -82,10 +86,33 @@ export class MockVideoAdapter extends BaseVideoAdapter {
     const dir = path.dirname(localPath)
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
 
-    // Mock: 复制本地占位视频或创建空文件
+    if (!/^https?:\/\//i.test(videoUrl)) {
+      fs.copyFileSync(videoUrl, localPath)
+      return localPath
+    }
+
     const res = await fetch(videoUrl)
     const buffer = Buffer.from(await res.arrayBuffer())
     fs.writeFileSync(localPath, buffer)
     return localPath
+  }
+
+  private async ensureLocalMockVideo(duration: number, aspectRatio: string): Promise<string> {
+    const safeDuration = Math.max(1, Math.min(15, Math.round(duration)))
+    const safeAspect = aspectRatio === '16:9' ? '16x9' : aspectRatio === '1:1' ? '1x1' : '9x16'
+    const outputDir = path.join(process.cwd(), 'uploads', 'mock_videos')
+    const outputPath = path.join(outputDir, `mock-${safeAspect}-${safeDuration}s.mp4`)
+
+    if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
+      return outputPath
+    }
+
+    fs.mkdirSync(outputDir, { recursive: true })
+    const ffmpeg = new FFmpegService()
+    const result = await ffmpeg.generatePlaceholder(outputPath, safeDuration, aspectRatio)
+    if (!result.success || !result.outputPath) {
+      throw new Error(`Mock video placeholder failed: ${result.error || 'unknown error'}`)
+    }
+    return result.outputPath
   }
 }

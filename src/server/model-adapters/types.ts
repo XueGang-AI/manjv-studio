@@ -10,6 +10,7 @@ export interface TextGenerationRequest {
     | 'character_design'
     | 'relationship_network'
     | 'storyboard'
+    | 'scene_prompt'
     | 'image_prompt'
     | 'video_prompt'
     | 'voice_script'
@@ -33,7 +34,7 @@ export interface TextGenerationResponse<T = unknown> {
 
 // ---- 图片生成 ----
 export interface ImageGenerationRequest {
-  taskType: 'character_image' | 'shot_image' | 'cover_image' | 'image_edit'
+  taskType: 'character_image' | 'scene_image' | 'shot_image' | 'cover_image' | 'image_edit'
   prompt: string
   negativePrompt?: string
   referenceImages?: string[]
@@ -57,6 +58,7 @@ export interface VideoGenerationRequest {
   taskType: 'text_to_video' | 'image_to_video'
   prompt: string
   inputImage?: string
+  referenceImages?: string[]
   negativePrompt?: string
   duration?: number
   aspectRatio?: '9:16' | '16:9' | '1:1'

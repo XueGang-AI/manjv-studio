@@ -18,27 +18,15 @@ prompts/
   qc/            — 文本/图片/视频质量检查
 ```
 
-## 状态
+## 同步方式
 
-**当前阶段：Phase 1 — 目录结构预留**
+模板源文件维护在本目录。运行以下命令会将 `.prompt` 与 `.json` 模板同步到数据库 `prompt_templates` 表：
 
-Phase 2 将解析以下 17 个专业文件并填充此目录：
-- AI漫剧创作专业版提示词.docx
-- 漫剧提示词创作合集.doc
-- 【先看这个】分镜画面提示词.xlsx
-- 300+电影风格提示词.csv
-- 即梦100多组神级指令合集.xlsx
-- AI视频脚本分镜模板_共300条.xlsx
-- seedance2.0分镜提示词模板.txt
-- 12组电影级组合运镜提示词.docx
-- 十大经典运镜教程.docx
-- 特效运镜.docx
-- 运镜教学.doc
-- 运镜提示词.doc
-- 组合运镜.docx
-- 组合运镜2.docx
-- 提示词大全（在夸克）.docx
-- 以及分镜提示词整理和小说漫剧提示词目录下的文件
+```bash
+npm run db:seed
+```
+
+业务代码通过 `PromptTemplateService.render()` 按模板名称读取和填充变量，禁止在 Handler 中硬编码 Prompt。
 
 ## 模板格式
 

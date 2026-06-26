@@ -6,7 +6,6 @@ import { cn } from '@/lib/utils'
 /**
  * WorkflowShell — 工作流页面外壳组件
  *
- * 为 Phase 3 工作流页面迁移预留的布局组件。
  * 提供两栏布局：主内容区 + 可选右侧面板。
  *
  * 使用方式：
@@ -18,7 +17,6 @@ import { cn } from '@/lib/utils'
  * ```
  *
  * 右侧面板可折叠，默认宽度 320px。
- * 当前各工作流业务页面无需改动，Phase 3 迁移时逐个替换即可。
  */
 
 interface WorkflowShellProps {

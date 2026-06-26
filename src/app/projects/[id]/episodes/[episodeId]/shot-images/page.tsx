@@ -34,6 +34,7 @@ export default function ShotImagesPage() {
   const [error, setError] = useState<string | null>(null)
   const [activeShotId, setActiveShotId] = useState<string | null>(null)
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false)
+  const [pendingShotImagesAfterScenes, setPendingShotImagesAfterScenes] = useState(false)
   // Mobile shot selector dropdown
   const [mobileSelectorOpen, setMobileSelectorOpen] = useState(false)
 
@@ -75,6 +76,20 @@ export default function ShotImagesPage() {
   // SSE 实时更新 — 替代 setInterval polling
   useTaskSSE(projectId, {
     onTaskUpdate: (type: TaskEventType, payload: TaskUpdateEvent) => {
+      if (payload.taskType === 'GENERATE_SCENE_REFERENCES') {
+        if (type === 'task.completed') {
+          addToast({ type: 'success', title: '场景参考图生成完成' })
+          if (pendingShotImagesAfterScenes) {
+            setPendingShotImagesAfterScenes(false)
+            createShotImageTask()
+          }
+        } else if (type === 'task.failed') {
+          addToast({ type: 'error', title: '场景参考图生成失败', description: payload.errorMessage || '请重试' })
+          setPendingShotImagesAfterScenes(false)
+          setGenerating(false)
+        }
+      }
+
       if (payload.taskType === 'GENERATE_SHOT_IMAGES') {
         refreshData()
         if (type === 'task.completed') {
@@ -97,8 +112,17 @@ export default function ShotImagesPage() {
   const episodeIdFromData = data?.episodeId ?? episodeId
 
   // Actions
-  const handleGenerate = async () => {
-    setGenerating(true)
+  const hasSceneReferences = async () => {
+    const res = await fetch(`/api/projects/${projectId}/episodes/${episodeIdFromData}/scene-references`)
+    const json = await res.json()
+    if (!json.success) return false
+    const scenes = json.data?.scenes || []
+    return scenes.some((scene: { sceneImages?: Array<{ isConfirmed?: boolean; isSelected?: boolean }> }) =>
+      scene.sceneImages?.some(img => img.isConfirmed && img.isSelected)
+    )
+  }
+
+  const createShotImageTask = async () => {
     try {
       const res = await fetch(`/api/projects/${projectId}/episodes/${episodeIdFromData}/shot-images/generate`, { method: 'POST' })
       const json = await res.json()
@@ -107,10 +131,46 @@ export default function ShotImagesPage() {
         await refreshData()
       } else {
         addToast({ type: 'error', title: '创建任务失败', description: json.error })
+        setGenerating(false)
       }
     } catch {
       addToast({ type: 'error', title: '请求失败' })
-    } finally { setGenerating(false) }
+      setGenerating(false)
+    }
+  }
+
+  const createSceneReferenceTask = async () => {
+    try {
+      const res = await fetch(`/api/projects/${projectId}/episodes/${episodeIdFromData}/scene-references/generate`, { method: 'POST' })
+      const json = await res.json()
+      if (json.success) {
+        setPendingShotImagesAfterScenes(true)
+        addToast({ type: 'success', title: '场景参考图任务已创建' })
+      } else if (res.status === 409) {
+        setPendingShotImagesAfterScenes(true)
+        addToast({ type: 'info', title: '场景参考图任务执行中' })
+      } else {
+        addToast({ type: 'error', title: '创建场景参考图任务失败', description: json.error })
+        setGenerating(false)
+      }
+    } catch {
+      addToast({ type: 'error', title: '请求失败' })
+      setGenerating(false)
+    }
+  }
+
+  const handleGenerate = async () => {
+    setGenerating(true)
+    try {
+      if (await hasSceneReferences()) {
+        await createShotImageTask()
+      } else {
+        await createSceneReferenceTask()
+      }
+    } catch {
+      addToast({ type: 'error', title: '请求失败' })
+      setGenerating(false)
+    }
   }
 
   const handleBatchConfirm = async () => {

@@ -1,5 +1,5 @@
 /**
- * 步骤级 errorStepId 派生（Phase 3）
+ * 步骤级 errorStepId 派生
  * --------------------------------------------
  * 从项目任务列表（GET /api/projects/:id/tasks，复用现有 API）派生
  * 当前仍需用户处理的失败步骤，供 Stepper 显示红色 error 状态。
@@ -15,8 +15,8 @@
  * 5. 多个步骤同时失败 → 取工作流顺序中最靠前的步骤（用户应优先处理）。
  *
  * scope 划分：
- * - 镜头级任务（SHOT_IMAGES / SHOT_VIDEOS / IMAGE_PROMPTS / VIDEO_PROMPTS）：scope = `shot:${shotId}`，shotId 缺失 → 'global'
- * - 剧集级任务（RENDER_FINAL_VIDEO / VOICE_SCRIPT）：scope = `ep:${episodeId}`
+ * - 镜头级任务（SHOT_IMAGES / SHOT_VIDEOS）：scope = `shot:${shotId}`，shotId 缺失 → 'global'
+ * - 剧集级任务（SCENE_REFERENCES / RENDER_FINAL_VIDEO）：scope = `ep:${episodeId}`
  * - 项目级任务（CHARACTER_IMAGES / STORYBOARD / STORY_PACKAGE / CHARACTERS）：scope = 'global'
  */
 
@@ -28,26 +28,23 @@ const TASK_TYPE_TO_STEP: Record<string, string> = {
   GENERATE_CHARACTERS: 'characters',
   GENERATE_CHARACTER_IMAGES: 'character-images',
   GENERATE_STORYBOARD: 'storyboard',
-  GENERATE_IMAGE_PROMPTS: 'shot-images',
+  GENERATE_SCENE_REFERENCES: 'shot-images',
   GENERATE_SHOT_IMAGES: 'shot-images',
-  GENERATE_VIDEO_PROMPTS: 'shot-videos',
   GENERATE_SHOT_VIDEOS: 'shot-videos',
   RENDER_FINAL_VIDEO: 'final-preview',
-  // 辅助任务（配音/平台文案）不映射到工作流步骤，忽略
+  // QUALITY_CHECK 是同步辅助任务，不映射到工作流步骤。
 }
 
 /** 镜头级任务类型集合 */
 const SHOT_SCOPED = new Set([
-  'GENERATE_IMAGE_PROMPTS',
   'GENERATE_SHOT_IMAGES',
-  'GENERATE_VIDEO_PROMPTS',
   'GENERATE_SHOT_VIDEOS',
 ])
 
 /** 剧集级任务类型集合 */
 const EPISODE_SCOPED = new Set([
+  'GENERATE_SCENE_REFERENCES',
   'RENDER_FINAL_VIDEO',
-  'GENERATE_VOICE_SCRIPT',
 ])
 
 /** 任务的最小字段（与 GenerationTask 子集兼容） */

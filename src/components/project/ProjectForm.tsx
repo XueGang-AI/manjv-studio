@@ -188,7 +188,7 @@ const defaultForm: ProjectFormData = {
   episode_count: 10,
   episode_duration: 90,
   aspect_ratio: '9:16',
-  model_provider: 'agnes',
+  model_provider: 'ark',
 }
 
 export function ProjectForm({
@@ -199,7 +199,7 @@ export function ProjectForm({
   loading: externalLoading,
   errors: externalErrors,
 }: Props) {
-  const [form, setForm] = useState<ProjectFormData>({ ...defaultForm, ...initialData })
+  const [form, setForm] = useState<ProjectFormData>({ ...defaultForm, ...initialData, model_provider: 'ark' })
   const [internalLoading, setInternalLoading] = useState(false)
   const [localErrors, setLocalErrors] = useState<string[]>([])
 
@@ -241,6 +241,7 @@ export function ProjectForm({
     // 清理空角色
     const cleaned = {
       ...form,
+      model_provider: 'ark',
       main_characters: form.main_characters.filter(c => c.trim()),
     }
 
@@ -446,30 +447,6 @@ export function ProjectForm({
                   }`}
                 >
                   {r}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1.5">模型选择 *</label>
-            <p className="text-xs text-[var(--text-tertiary)] mb-1.5">免费模式使用 Agnes AI，付费模式使用豆包 Ark</p>
-            <div className="flex gap-2">
-              {[
-                { value: 'agnes', label: '免费模式 Agnes' },
-                { value: 'ark', label: '付费模式 Ark' },
-              ].map(opt => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => updateField('model_provider', opt.value)}
-                  className={`px-4 py-2 rounded-lg text-sm border transition-colors ${
-                    form.model_provider === opt.value
-                      ? 'bg-[var(--accent-primary)] text-[var(--text-inverse)] border-[var(--accent-primary)]'
-                      : 'border-[var(--border-default)] text-[var(--text-secondary)] hover:border-[var(--accent-border)]'
-                  }`}
-                >
-                  {opt.label}
                 </button>
               ))}
             </div>

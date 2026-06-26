@@ -121,10 +121,10 @@ describe('TaskQueueService', () => {
   it('should define all task types', () => {
     const types = [
       'GENERATE_STORY_PACKAGE', 'GENERATE_CHARACTERS', 'GENERATE_CHARACTER_IMAGES',
-      'GENERATE_STORYBOARD', 'GENERATE_SHOT_IMAGES', 'GENERATE_SHOT_VIDEOS',
+      'GENERATE_STORYBOARD', 'GENERATE_SCENE_REFERENCES', 'GENERATE_SHOT_IMAGES', 'GENERATE_SHOT_VIDEOS',
       'RENDER_FINAL_VIDEO', 'QUALITY_CHECK',
     ]
-    expect(types).toHaveLength(8)
+    expect(types).toHaveLength(9)
   })
 
   it('should define retry limits per task type', () => {

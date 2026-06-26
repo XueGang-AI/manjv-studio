@@ -1,5 +1,5 @@
 /**
- * 开发预览：真实视频媒体组件验证（Phase 3）。
+ * 开发预览：真实视频媒体组件验证。
  * --------------------------------------------
  * Server Component：从服务端环境变量读取测试项目 ID（PREVIEW_PROJECT_ID /
  * PREVIEW_EPISODE_ID），不暴露为 NEXT_PUBLIC_ 客户端变量。

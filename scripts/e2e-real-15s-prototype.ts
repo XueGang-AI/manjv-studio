@@ -7,9 +7,9 @@ import 'dotenv/config'
 import fs from 'fs'
 import { execSync } from 'child_process'
 
-const BASE = 'http://localhost:3000'
-const VID_BASE = process.env.AGNES_VIDEO_API_BASE_URL || 'https://apihub.agnes-ai.com/v1'
-const VID_KEY = process.env.AGNES_VIDEO_API_KEY || ''
+const BASE = process.env.E2E_BASE_URL || 'http://localhost:3000'
+const VID_BASE = process.env.ARK_API_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3'
+const VID_KEY = process.env.ARK_API_KEY || ''
 
 const log = (msg: string) => console.log(`\x1b[36m[PROTO]\x1b[0m ${msg}`)
 const ok = (msg: string) => console.log(`\x1b[32m  ✅ ${msg}\x1b[0m`)
@@ -25,6 +25,13 @@ interface State {
   videoRecords: Array<{ id: string; shotId: string; remoteTaskId: string; shotNo: number }>
   downloadedVideos: string[]
   finalVideoPath: string
+}
+
+interface ProjectTask {
+  id: string
+  status: string
+  errorMessage?: string | null
+  output?: Record<string, unknown> | null
 }
 
 async function post(path: string, body?: Record<string, unknown>, timeoutMs = 120000) {
@@ -59,6 +66,22 @@ async function gett(path: string) {
   return (await fetch(`${BASE}${path}`)).json()
 }
 
+async function waitTask(projectId: string, taskId: string, label: string, timeoutMs = 900000): Promise<ProjectTask> {
+  const startedAt = Date.now()
+  while (Date.now() - startedAt < timeoutMs) {
+    const tasks = await gett(`/api/projects/${projectId}/tasks`)
+    if (!tasks.success) fail(`获取任务失败: ${tasks.error}`)
+    const task = (tasks.data as ProjectTask[]).find(t => t.id === taskId)
+    if (!task) fail(`${label}任务不存在: ${taskId}`)
+    if (task.status === 'success') return task
+    if (task.status === 'failed' || task.status === 'cancelled') {
+      fail(`${label}任务失败: ${task.errorMessage || task.status}`)
+    }
+    await new Promise(r => setTimeout(r, 5000))
+  }
+  fail(`${label}任务超时: ${taskId}`)
+}
+
 async function pollVideoTask(taskId: string, label: string, timeoutMin = 30): Promise<{ videoUrl: string; duration: number }> {
   log(`轮询视频: ${label} (task: ${taskId.substring(0, 16)}...)`)
   const maxAttempts = Math.floor((timeoutMin * 60) / 10)
@@ -67,7 +90,7 @@ async function pollVideoTask(taskId: string, label: string, timeoutMin = 30): Pr
   for (let i = 1; i <= maxAttempts; i++) {
     await new Promise(r => setTimeout(r, 10000))
     try {
-      const res = await fetch(`${VID_BASE}/videos/${taskId}`, {
+      const res = await fetch(`${VID_BASE}/contents/generations/tasks/${taskId}`, {
         headers: { 'Authorization': `Bearer ${VID_KEY}` },
         signal: AbortSignal.timeout(15000),
       })
@@ -77,7 +100,8 @@ async function pollVideoTask(taskId: string, label: string, timeoutMin = 30): Pr
       process.stdout.write(`\r    poll #${i}: status=${status} | progress=${data.progress ?? '?'}% | elapsed=${elapsed}s`)
 
       if (status === 'completed' || status === 'succeeded' || status === 'success') {
-        const url = (data.video_url || data.url || data.output_url || data.remixed_from_video_id || '') as string
+        const content = data.content as Record<string, unknown> | undefined
+        const url = (content?.video_url || data.video_url || data.url || data.output_url || '') as string
         console.log()
         if (url) {
           ok(`视频完成: ${label} — ${url.substring(0, 60)}...`)
@@ -109,9 +133,9 @@ async function downloadFile(url: string, localPath: string): Promise<string> {
 
 async function main() {
   console.log('\n🎬 真实 API 15s 短视频原型生成\n')
-  console.log(`Text model:  ${process.env.AGNES_TEXT_MODEL || 'agnes-2.0-flash'}`)
-  console.log(`Image model: ${process.env.AGNES_IMAGE_MODEL || 'agnes-image-2.0-flash'}`)
-  console.log(`Video model: ${process.env.AGNES_VIDEO_MODEL || 'agnes-video-v2.0'}`)
+  console.log(`Text model:  ${process.env.ARK_TEXT_MODEL || 'doubao-seed-character-251128'}`)
+  console.log(`Image model: ${process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5-0-260128'}`)
+  console.log(`Video model: ${process.env.ARK_VIDEO_MODEL || 'doubao-seedance-2-0-260128'}`)
   console.log()
 
   const s: State = {
@@ -145,9 +169,10 @@ async function main() {
   // ============================================
   // Step 2: 生成故事方案
   // ============================================
-  log('Step 2: 生成故事方案 (Agnes Text)')
+  log('Step 2: 生成故事方案 (Ark Text)')
   const story = await postWithRetry(`/api/projects/${s.projectId}/story/generate`, undefined, '故事生成')
   if (!story.success) fail('故事生成失败: ' + story.error)
+  await waitTask(s.projectId, (story.data as { taskId: string }).taskId, '故事生成')
   const storyData = await gett(`/api/projects/${s.projectId}/story`)
   s.storyPackageId = storyData.data.packages[0].id
   ok(`story_package_id: ${s.storyPackageId}`)
@@ -160,9 +185,10 @@ async function main() {
   // ============================================
   // Step 3: 生成角色设定
   // ============================================
-  log('Step 3: 生成角色设定 (Agnes Text)')
+  log('Step 3: 生成角色设定 (Ark Text)')
   const chars = await postWithRetry(`/api/projects/${s.projectId}/characters/generate`, undefined, '角色生成')
   if (!chars.success) fail('角色生成失败: ' + chars.error)
+  await waitTask(s.projectId, (chars.data as { taskId: string }).taskId, '角色生成')
   const charsData = await gett(`/api/projects/${s.projectId}/characters`)
   s.characterIds = charsData.data.characters.map((c: { id: string }) => c.id)
   ok(`${s.characterIds.length} 个角色已生成`)
@@ -177,9 +203,10 @@ async function main() {
   // ============================================
   // Step 4: 生成角色图
   // ============================================
-  log('Step 4: 生成角色图 (Agnes Image)')
+  log('Step 4: 生成角色图 (Ark Image)')
   const charImgs = await post(`/api/projects/${s.projectId}/character-images/generate`)
   if (!charImgs.success) fail('角色图生成失败: ' + charImgs.error)
+  await waitTask(s.projectId, charImgs.data.taskId, '角色图生成')
   const charImgsData = await gett(`/api/projects/${s.projectId}/character-images`)
   ok(`${charImgsData.data.characters.length} 个角色的图片已生成`)
 
@@ -196,12 +223,15 @@ async function main() {
   // ============================================
   // Step 5: 生成分镜脚本（带重试，模型输出可能不稳定）
   // ============================================
-  log('Step 5: 生成分镜脚本 (Agnes Text)')
+  log('Step 5: 生成分镜脚本 (Ark Text)')
   const sb = await postWithRetry(`/api/projects/${s.projectId}/storyboard/generate`, undefined, '分镜生成')
   if (!sb.success) fail('分镜生成失败: ' + sb.error)
-  s.episodeId = sb.data.episode.id
-  s.shotIds = sb.data.shots.map((sh: { id: string }) => sh.id)
-  ok(`episode_id: ${s.episodeId} | ${sb.data.shotCount} 个镜头`)
+  const sbTask = await waitTask(s.projectId, (sb.data as { taskId: string }).taskId, '分镜生成')
+  s.episodeId = sbTask.output?.episode_id as string
+  if (!s.episodeId) fail('分镜任务未返回 episode_id')
+  const storyboard = await gett(`/api/projects/${s.projectId}/episodes/${s.episodeId}/storyboard`)
+  s.shotIds = storyboard.data.shots.map((sh: { id: string }) => sh.id)
+  ok(`episode_id: ${s.episodeId} | ${s.shotIds.length} 个镜头`)
 
   // 确认分镜
   log('Step 5b: 确认分镜脚本')
@@ -209,16 +239,26 @@ async function main() {
   ok('分镜已确认')
 
   // ============================================
-  // Step 6: 生成分镜图
+  // Step 6: 生成场景参考图
   // ============================================
-  log('Step 6: 生成分镜图 (Agnes Image)')
+  log('Step 6: 生成场景参考图 (Ark Image)')
+  const sceneRefs = await post(`/api/projects/${s.projectId}/episodes/${s.episodeId}/scene-references/generate`)
+  if (!sceneRefs.success) fail('场景参考图生成失败: ' + sceneRefs.error)
+  await waitTask(s.projectId, sceneRefs.data.taskId, '场景参考图生成')
+  ok('场景参考图已生成')
+
+  // ============================================
+  // Step 7: 生成分镜图
+  // ============================================
+  log('Step 7: 生成分镜图 (Ark Image)')
   const shotImgs = await post(`/api/projects/${s.projectId}/episodes/${s.episodeId}/shot-images/generate`)
   if (!shotImgs.success) fail('分镜图生成失败: ' + shotImgs.error)
+  await waitTask(s.projectId, shotImgs.data.taskId, '分镜图生成')
   const shotImgsData = await gett(`/api/projects/${s.projectId}/episodes/${s.episodeId}/shot-images`)
   ok(`${shotImgsData.data.shots?.length || 0} 个镜头图已生成`)
 
   // 选择并确认分镜图
-  log('Step 6b: 选择并确认分镜图')
+  log('Step 7b: 选择并确认分镜图')
   for (const sg of (shotImgsData.data.shots || [])) {
     if (sg.images?.length > 0) {
       await post(`/api/projects/${s.projectId}/episodes/${s.episodeId}/shot-images/${sg.images[0].id}/select`)
@@ -230,7 +270,7 @@ async function main() {
   // ============================================
   // Step 7: 生成视频片段（异步）
   // ============================================
-  log('Step 7: 生成视频片段 (Agnes Video — 异步)')
+  log('Step 7: 生成视频片段 (Ark Video — 异步)')
   const vidGen = await postWithRetry(`/api/projects/${s.projectId}/episodes/${s.episodeId}/shot-videos/generate`, undefined, '视频创建', 1, 300000)
   if (!vidGen.success) fail('视频任务创建失败: ' + vidGen.error)
   ok(`视频异步任务已创建: ${vidGen.data.totalVideos} 个`)

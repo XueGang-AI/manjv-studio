@@ -60,10 +60,22 @@ vi.mock('@/server/workers/task-events', () => ({
 // ─── Mock handlers ─────────────────────────────────────────────────
 
 const mockHandleStoryboard = vi.fn().mockResolvedValue(undefined)
+const mockHandleStoryPackage = vi.fn().mockResolvedValue(undefined)
+const mockHandleCharacters = vi.fn().mockResolvedValue(undefined)
+const mockHandleCharacterImages = vi.fn().mockResolvedValue(undefined)
 const mockHandleShotImages = vi.fn().mockResolvedValue(undefined)
 const mockHandleShotVideos = vi.fn().mockResolvedValue(undefined)
 const mockHandleFinalRender = vi.fn().mockResolvedValue(undefined)
 
+vi.mock('@/server/workers/handlers/story-package.handler', () => ({
+  handleStoryPackage: mockHandleStoryPackage,
+}))
+vi.mock('@/server/workers/handlers/characters.handler', () => ({
+  handleCharacters: mockHandleCharacters,
+}))
+vi.mock('@/server/workers/handlers/character-images.handler', () => ({
+  handleCharacterImages: mockHandleCharacterImages,
+}))
 vi.mock('@/server/workers/handlers/storyboard.handler', () => ({
   handleStoryboard: mockHandleStoryboard,
 }))
@@ -137,22 +149,31 @@ describe('Atomic task claiming', () => {
     )
   })
 
-  it('should not claim tasks of unregistered types', async () => {
+  it('should only claim registered task types', async () => {
     const ALLOWED_TASK_TYPES = new Set([
+      'GENERATE_STORY_PACKAGE',
+      'GENERATE_CHARACTERS',
+      'GENERATE_CHARACTER_IMAGES',
       'GENERATE_STORYBOARD',
+      'GENERATE_SCENE_REFERENCES',
       'GENERATE_SHOT_IMAGES',
       'GENERATE_SHOT_VIDEOS',
       'RENDER_FINAL_VIDEO',
     ])
 
-    // 未注册的任务类型不应被领取
-    expect(ALLOWED_TASK_TYPES.has('GENERATE_STORY_PACKAGE')).toBe(false)
-    expect(ALLOWED_TASK_TYPES.has('GENERATE_CHARACTERS')).toBe(false)
-    expect(ALLOWED_TASK_TYPES.has('QUALITY_CHECK')).toBe(false)
-
-    // 已注册的类型应可领取
+    // 已注册的生成任务类型应可领取
+    expect(ALLOWED_TASK_TYPES.has('GENERATE_STORY_PACKAGE')).toBe(true)
+    expect(ALLOWED_TASK_TYPES.has('GENERATE_CHARACTERS')).toBe(true)
+    expect(ALLOWED_TASK_TYPES.has('GENERATE_CHARACTER_IMAGES')).toBe(true)
     expect(ALLOWED_TASK_TYPES.has('GENERATE_STORYBOARD')).toBe(true)
+    expect(ALLOWED_TASK_TYPES.has('GENERATE_SCENE_REFERENCES')).toBe(true)
+    expect(ALLOWED_TASK_TYPES.has('GENERATE_SHOT_IMAGES')).toBe(true)
+    expect(ALLOWED_TASK_TYPES.has('GENERATE_SHOT_VIDEOS')).toBe(true)
     expect(ALLOWED_TASK_TYPES.has('RENDER_FINAL_VIDEO')).toBe(true)
+
+    // 同步辅助任务和未知任务不由 Worker 领取
+    expect(ALLOWED_TASK_TYPES.has('QUALITY_CHECK')).toBe(false)
+    expect(ALLOWED_TASK_TYPES.has('UNKNOWN_TASK')).toBe(false)
   })
 })
 
@@ -227,6 +248,9 @@ describe('Crash recovery', () => {
 
   it('should recover project business status when task fails', async () => {
     const statusMap: Record<string, string> = {
+      GENERATE_STORY_PACKAGE: 'DRAFT',
+      GENERATE_CHARACTERS: 'STORY_CONFIRMED',
+      GENERATE_CHARACTER_IMAGES: 'CHARACTER_CONFIRMED',
       GENERATE_STORYBOARD: 'CHARACTER_IMAGE_CONFIRMED',
       GENERATE_SHOT_IMAGES: 'STORYBOARD_CONFIRMED',
       GENERATE_SHOT_VIDEOS: 'SHOT_IMAGE_CONFIRMED',
@@ -452,14 +476,22 @@ describe('SSE event protocol', () => {
 
 describe('Task type timeouts', () => {
   const TIMEOUT_CONFIG: Record<string, number> = {
+    GENERATE_STORY_PACKAGE: 10 * 60 * 1000,
+    GENERATE_CHARACTERS: 10 * 60 * 1000,
+    GENERATE_CHARACTER_IMAGES: 20 * 60 * 1000,
     GENERATE_STORYBOARD: 10 * 60 * 1000,
+    GENERATE_SCENE_REFERENCES: 15 * 60 * 1000,
     GENERATE_SHOT_IMAGES: 15 * 60 * 1000,
     GENERATE_SHOT_VIDEOS: 35 * 60 * 1000,
     RENDER_FINAL_VIDEO: 10 * 60 * 1000,
   }
 
   it('should have reasonable timeouts per task type', () => {
+    expect(TIMEOUT_CONFIG['GENERATE_STORY_PACKAGE']).toBe(600000) // 10 min
+    expect(TIMEOUT_CONFIG['GENERATE_CHARACTERS']).toBe(600000) // 10 min
+    expect(TIMEOUT_CONFIG['GENERATE_CHARACTER_IMAGES']).toBe(1200000) // 20 min
     expect(TIMEOUT_CONFIG['GENERATE_STORYBOARD']).toBe(600000) // 10 min
+    expect(TIMEOUT_CONFIG['GENERATE_SCENE_REFERENCES']).toBe(900000) // 15 min
     expect(TIMEOUT_CONFIG['GENERATE_SHOT_IMAGES']).toBe(900000) // 15 min
     expect(TIMEOUT_CONFIG['GENERATE_SHOT_VIDEOS']).toBe(2100000) // 35 min
     expect(TIMEOUT_CONFIG['RENDER_FINAL_VIDEO']).toBe(600000) // 10 min
@@ -696,34 +728,30 @@ describe('Idempotency verification', () => {
 describe('Unregistered task handling', () => {
   it('Worker allowlist should only contain registered types', () => {
     const ALLOWED = new Set([
+      'GENERATE_STORY_PACKAGE',
+      'GENERATE_CHARACTERS',
+      'GENERATE_CHARACTER_IMAGES',
       'GENERATE_STORYBOARD',
+      'GENERATE_SCENE_REFERENCES',
       'GENERATE_SHOT_IMAGES',
       'GENERATE_SHOT_VIDEOS',
       'RENDER_FINAL_VIDEO',
     ])
 
     // 已注册
+    expect(ALLOWED.has('GENERATE_STORY_PACKAGE')).toBe(true)
+    expect(ALLOWED.has('GENERATE_CHARACTERS')).toBe(true)
+    expect(ALLOWED.has('GENERATE_CHARACTER_IMAGES')).toBe(true)
     expect(ALLOWED.has('GENERATE_STORYBOARD')).toBe(true)
 
     // 未注册
-    expect(ALLOWED.has('GENERATE_STORY_PACKAGE')).toBe(false)
-    expect(ALLOWED.has('GENERATE_CHARACTERS')).toBe(false)
-    expect(ALLOWED.has('GENERATE_CHARACTER_IMAGES')).toBe(false)
-    expect(ALLOWED.has('GENERATE_IMAGE_PROMPTS')).toBe(false)
-    expect(ALLOWED.has('GENERATE_VIDEO_PROMPTS')).toBe(false)
-    expect(ALLOWED.has('GENERATE_VOICE_SCRIPT')).toBe(false)
-    expect(ALLOWED.has('GENERATE_PLATFORM_COPY')).toBe(false)
     expect(ALLOWED.has('QUALITY_CHECK')).toBe(false)
+    expect(ALLOWED.has('UNKNOWN_TASK')).toBe(false)
   })
 
-  it('Non-migrated routes use status=running (synchronous), not pending', () => {
-    // 审计确认：所有未迁移的 generate route 都使用 status: 'running'
-    // 这意味着它们不会创建 pending 任务被 Worker 错误消费
-    // 分类：
-    // A. 已迁移 Worker：创建 pending，由 Worker 消费
-    //    - GENERATE_STORYBOARD, GENERATE_SHOT_IMAGES, GENERATE_SHOT_VIDEOS, RENDER_FINAL_VIDEO
-    // B. 旧同步流程：创建 running，API 内同步执行
-    //    - GENERATE_STORY_PACKAGE, GENERATE_CHARACTERS, GENERATE_CHARACTER_IMAGES, QUALITY_CHECK
+  it('Non-generation tasks remain outside the Worker allowlist', () => {
+    // 已迁移 Worker：故事、角色、角色图、分镜、场景参考、分镜图、视频片段、成片。
+    // 同步辅助任务仍不在 allowlist 内，例如 QUALITY_CHECK。
     expect(true).toBe(true)
   })
 })
@@ -1070,6 +1098,9 @@ describe('TEST_NOOP production cleanup', () => {
   it('should only cleanup TEST_NOOP, not other task types', () => {
     const taskTypesToCleanup = ['TEST_NOOP']
     const otherTaskTypes = [
+      'GENERATE_STORY_PACKAGE',
+      'GENERATE_CHARACTERS',
+      'GENERATE_CHARACTER_IMAGES',
       'GENERATE_STORYBOARD',
       'GENERATE_SHOT_IMAGES',
       'GENERATE_SHOT_VIDEOS',

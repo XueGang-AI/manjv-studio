@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { adapterFactory } from '@/server/model-adapters/adapter.factory'
+import { getRuntimeModelName } from '@/server/model-adapters/model-config'
+import { resolveImageUrlForModel } from '@/server/services/media-reference-url'
 import type { ImageGenerationRequest } from '@/server/model-adapters/types'
 
 /** 各角度 Prompt 后缀 */
@@ -81,6 +83,13 @@ export async function POST(
     })
     // 如果重新生成的是锚点图本身，不传 reference（避免自我引用）
     const anchorImageUrl = (refType !== 'front_full_body' && anchorImage) ? anchorImage.imageUrl : null
+    const anchorImageForModel = (refType !== 'front_full_body' && anchorImage)
+      ? (await resolveImageUrlForModel({
+          imageUrl: anchorImage.imageUrl,
+          sourceUrl: anchorImage.sourceUrl,
+          storageObjectKey: anchorImage.storageObjectKey,
+        })) || anchorImageUrl
+      : null
 
     const imageAdapter = adapterFactory.getImageAdapter(project.modelProvider)
     const prompt = `${corePrompt}, ${angleSuffix}`
@@ -95,8 +104,8 @@ export async function POST(
       seed: undefined,
     }
 
-    if (anchorImageUrl) {
-      genReq.referenceImages = [anchorImageUrl]
+    if (anchorImageForModel) {
+      genReq.referenceImages = [anchorImageForModel]
     }
 
     // 生成新图（带重试）
@@ -145,9 +154,7 @@ export async function POST(
           prompt,
           negativePrompt,
           seed: String(newImg.seed || ''),
-          modelName: project.modelProvider === 'ark'
-            ? (process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5-0-260128')
-            : (process.env.AGNES_IMAGE_MODEL || 'agnes-image-2.0-flash'),
+          modelName: getRuntimeModelName('image'),
           referenceType: refType,
           isPrimary: refType === 'front_full_body',
           isSelected: refType === 'front_full_body',

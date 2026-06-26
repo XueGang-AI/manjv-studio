@@ -10,8 +10,12 @@ import { config } from 'dotenv'
 config()
 
 import prisma from '@/lib/prisma'
+import { handleStoryPackage } from './handlers/story-package.handler'
+import { handleCharacters } from './handlers/characters.handler'
+import { handleCharacterImages } from './handlers/character-images.handler'
 import { handleFinalRender } from './handlers/final-render.handler'
 import { handleStoryboard } from './handlers/storyboard.handler'
+import { handleSceneReferences } from './handlers/scene-references.handler'
 import { handleShotImages } from './handlers/shot-images.handler'
 import { handleShotVideos } from './handlers/shot-videos.handler'
 import { handleTestNoop, isTestTaskEnabled } from './handlers/test-noop.handler'
@@ -72,10 +76,30 @@ interface TaskTypeConfig {
 }
 
 const TASK_TYPE_REGISTRY: Record<string, TaskTypeConfig> = {
+  GENERATE_STORY_PACKAGE: {
+    handler: handleStoryPackage,
+    concurrency: 2,
+    timeout: 10 * 60 * 1000, // 10 分钟
+  },
+  GENERATE_CHARACTERS: {
+    handler: handleCharacters,
+    concurrency: 2,
+    timeout: 10 * 60 * 1000, // 10 分钟
+  },
+  GENERATE_CHARACTER_IMAGES: {
+    handler: handleCharacterImages,
+    concurrency: 1,
+    timeout: 20 * 60 * 1000, // 20 分钟
+  },
   GENERATE_STORYBOARD: {
     handler: handleStoryboard,
     concurrency: 2,
     timeout: 10 * 60 * 1000, // 10 分钟
+  },
+  GENERATE_SCENE_REFERENCES: {
+    handler: handleSceneReferences,
+    concurrency: 1,
+    timeout: 15 * 60 * 1000, // 15 分钟
   },
   GENERATE_SHOT_IMAGES: {
     handler: handleShotImages,
@@ -250,7 +274,11 @@ async function recoverStaleTasks(): Promise<number> {
  */
 async function recoverProjectStatus(projectId: string, taskType: string): Promise<void> {
   const statusMap: Record<string, string> = {
+    GENERATE_STORY_PACKAGE: 'DRAFT',
+    GENERATE_CHARACTERS: 'STORY_CONFIRMED',
+    GENERATE_CHARACTER_IMAGES: 'CHARACTER_CONFIRMED',
     GENERATE_STORYBOARD: 'CHARACTER_IMAGE_CONFIRMED',
+    GENERATE_SCENE_REFERENCES: 'STORYBOARD_CONFIRMED',
     GENERATE_SHOT_IMAGES: 'STORYBOARD_CONFIRMED',
     GENERATE_SHOT_VIDEOS: 'SHOT_IMAGE_CONFIRMED',
     RENDER_FINAL_VIDEO: 'SHOT_VIDEO_CONFIRMED',
@@ -266,6 +294,9 @@ async function recoverProjectStatus(projectId: string, taskType: string): Promis
         id: projectId,
         status: { in: [
           'STORYBOARD_GENERATING',
+          'STORY_GENERATING',
+          'CHARACTER_GENERATING',
+          'CHARACTER_IMAGE_GENERATING',
           'SHOT_IMAGE_GENERATING',
           'SHOT_VIDEO_GENERATING',
           'RENDERING',

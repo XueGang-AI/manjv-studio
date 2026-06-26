@@ -15,7 +15,12 @@ export interface ShotImageItem {
   seed: string | null
   style: string | null
   aspectRatio: string | null
-  referenceImages: Array<{ character_name: string; image_url: string; reference_type?: string }>
+  referenceImages: Array<{
+    character_name?: string
+    scene_name?: string
+    image_url: string
+    reference_type?: string
+  }>
   isSelected: boolean
   isConfirmed: boolean
 }

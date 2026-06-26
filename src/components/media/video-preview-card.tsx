@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * VideoPreviewCard — 正式视频预览卡片（Phase 3）
+ * VideoPreviewCard — 正式视频预览卡片
  * --------------------------------------------
  * 适配真实 ShotVideoItem 数据的 hover 播放卡片。
  * 不复制实验页 Mock；通过 props 接收真实数据。

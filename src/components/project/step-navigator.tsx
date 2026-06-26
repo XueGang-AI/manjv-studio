@@ -9,7 +9,7 @@ interface StepNavigatorProps {
   projectId: string
   currentStatus: string
   /**
-   * 当前需用户处理的失败步骤 id（Phase 3）。
+   * 当前需用户处理的失败步骤 id。
    * 由调用方从 generation_tasks 派生（见 workflow-error-deriver）。
    * 不传则不显示 error 状态（保持 Phase 2 行为）。
    */

@@ -1,6 +1,6 @@
 // ============================================
 // Mock 文本适配器 - 返回模拟数据
-// Phase 2+ 时替换为 AgnesTextAdapter
+// Development-only text adapter
 // ============================================
 import { BaseTextAdapter } from '../base.adapter'
 import { TextGenerationRequest, TextGenerationResponse } from '../types'
@@ -225,6 +225,11 @@ export class MockTextAdapter extends BaseTextAdapter {
             reference_style: { main_style: '韩漫', tone: '活泼可爱', line_style: '柔和圆润' },
           },
         ],
+      },
+      scene_prompt: {
+        zh_scene_prompt: '现代都市暴雨街道场景，深夜，湿润柏油路反射霓虹灯，远处写字楼灯光朦胧，蓝灰冷调，韩漫风格，电影级光影，纵向构图，无人物，稳定场景锚点。',
+        en_scene_prompt: 'Modern urban rainy street at night, wet asphalt reflecting neon lights, distant office buildings softly glowing, blue-gray cool palette, Korean manhwa style, cinematic lighting, vertical composition, no people, stable environment reference.',
+        negative_prompt: 'people, character, portrait, close-up face, ugly, deformed, low quality, blurry, watermark, text, logo',
       },
       storyboard: {
         episode: {

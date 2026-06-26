@@ -58,7 +58,7 @@ export default function ProjectDetailLayout({
         <WorkflowShell.Main className="p-6 bg-[var(--bg-base)]">
           {children}
         </WorkflowShell.Main>
-        {/* RightPanel slot reserved for Phase 3 — no content yet */}
+        {/* RightPanel slot reserved for future contextual panels. */}
       </WorkflowShell>
     </div>
   )

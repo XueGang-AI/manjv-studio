@@ -34,6 +34,20 @@ npm start            # 生产
 npm run worker       # 单 Worker
 ```
 
+### 注册任务类型
+
+| 类型 | Handler | 并发 | 超时 |
+|------|---------|------|------|
+| `GENERATE_STORY_PACKAGE` | `story-package.handler` | 2 | 10 分钟 |
+| `GENERATE_CHARACTERS` | `characters.handler` | 2 | 10 分钟 |
+| `GENERATE_CHARACTER_IMAGES` | `character-images.handler` | 1 | 20 分钟 |
+| `GENERATE_STORYBOARD` | `storyboard.handler` | 2 | 10 分钟 |
+| `GENERATE_SCENE_REFERENCES` | `scene-references.handler` | 1 | 15 分钟 |
+| `GENERATE_SHOT_IMAGES` | `shot-images.handler` | 1 | 15 分钟 |
+| `GENERATE_SHOT_VIDEOS` | `shot-videos.handler` | 1 | 35 分钟 |
+| `RENDER_FINAL_VIDEO` | `final-render.handler` | 1 | 10 分钟 |
+| `TEST_NOOP` | `test-noop.handler` | 5 | 1 分钟，仅测试环境 |
+
 ### 开发组合启动
 
 ```bash
@@ -268,9 +282,13 @@ Worker 在**启动时**和**运行期间每 30 秒**自动扫描超时的 `runni
 
 | 任务类型 | 超时时间 | 说明 |
 |---------|---------|------|
-| GENERATE_STORYBOARD | 10 分钟 | 含 AI 调用 |
-| GENERATE_SHOT_IMAGES | 15 分钟 | 含多次 AI 调用 |
-| GENERATE_SHOT_VIDEOS | 35 分钟 | 含远程轮询等待 |
+| GENERATE_STORY_PACKAGE | 10 分钟 | Ark 文本调用 |
+| GENERATE_CHARACTERS | 10 分钟 | Ark 文本调用 |
+| GENERATE_CHARACTER_IMAGES | 20 分钟 | Ark 图片调用，多角色多角度 |
+| GENERATE_STORYBOARD | 10 分钟 | Ark 文本调用，含镜头时长约束 |
+| GENERATE_SCENE_REFERENCES | 15 分钟 | Ark 图片调用，生成场景参考图 |
+| GENERATE_SHOT_IMAGES | 15 分钟 | Ark 图片调用，传入角色/场景参考 |
+| GENERATE_SHOT_VIDEOS | 35 分钟 | Seedance 2.0 远程任务创建与轮询 |
 | RENDER_FINAL_VIDEO | 10 分钟 | FFmpeg 合成 |
 
 超时任务处理：
@@ -278,7 +296,7 @@ Worker 在**启动时**和**运行期间每 30 秒**自动扫描超时的 `runni
 - `retryCount >= maxRetries` → 标记为 `failed`
 - 自动恢复项目业务状态（避免用户卡在 GENERATING）
 
-### 定期恢复（Phase 4.6 新增）
+### 定期恢复
 
 `recoverStaleTasks` 不仅在启动时执行，主循环每 30 秒调用一次。这解决了 **handler 挂起但 Worker 未崩溃**（如远端 API 无响应、网络阻塞）导致的 stuck `running` 任务——这类任务不会触发进程重启，必须靠定期扫描回收。
 
@@ -337,9 +355,13 @@ Worker 作为独立进程运行，**不会自动加载 `.env`**。入口文件�
 
 | Handler | 保护层级 | 远端任务幂等 |
 |---------|----------|-------------|
-| STORYBOARD | 原子领取 + 状态检查 | 同步 API，无需远端幂等 |
-| SHOT_IMAGES | 原子领取 + 状态检查 + 已有图片跳过 | 同步 API，已有 ShotImage 的镜头跳过 |
-| SHOT_VIDEOS | 原子领取 + 状态检查 + remoteTaskId 持久化 | 异步 API，已有 remoteTaskId 的镜头跳过创建 |
+| STORY_PACKAGE | 原子领取 + 状态检查 + 已有故事包跳过 | 同步文本 API，无需远端幂等 |
+| CHARACTERS | 原子领取 + 状态检查 + 已有角色跳过 | 同步文本 API，无需远端幂等 |
+| CHARACTER_IMAGES | 原子领取 + 状态检查 + 已有角色图跳过 | 同步图片 API，已有 CharacterImage 的角色跳过 |
+| STORYBOARD | 原子领取 + 状态检查 + 已有分镜跳过 | 同步文本 API，无需远端幂等 |
+| SCENE_REFERENCES | 原子领取 + 状态检查 + 已有场景参考图跳过 | 同步图片 API，已有 SceneImage 的场景跳过 |
+| SHOT_IMAGES | 原子领取 + 状态检查 + 已有图片跳过 | 同步图片 API，已有 ShotImage 的镜头跳过 |
+| SHOT_VIDEOS | 原子领取 + 状态检查 + `remoteTaskId` 持久化 | 异步视频 API，已有 `remoteTaskId` 的镜头跳过创建 |
 | FINAL_RENDER | 原子领取 + 状态检查 + output 检查 | FFmpeg 本地执行 |
 
 **SHOT_VIDEOS 幂等性**：

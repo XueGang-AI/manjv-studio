@@ -22,7 +22,7 @@ export async function POST(
     }
 
     // 必须用项目当前的 modelProvider 选择对应适配器。
-    // 之前这里直接调 getVideoAdapter() 走默认 agnes，导致 ark 项目的 task_id 被丢到 agnes API 报错。
+    // 必须保留项目上下文，避免历史任务检查时丢失适配器语义。
     // （忽略 Mock 开关：远端真任务不存在于 mock 模式中，这里始终用真实 API 轮询）
     const project = await prisma.project.findUnique({
       where: { id: projectId },

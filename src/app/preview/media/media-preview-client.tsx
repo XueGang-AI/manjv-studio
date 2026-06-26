@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * MediaPreviewClient — 视频媒体组件预览客户端（Phase 3）
+ * MediaPreviewClient — 视频媒体组件预览客户端
  * --------------------------------------------
  * 接收服务端传入的测试项目 ID（非 NEXT_PUBLIC_ 变量），fetch 真实 shot-videos 数据。
  */
@@ -64,7 +64,7 @@ export function MediaPreviewClient({
   return (
     <div className="min-h-screen bg-[var(--bg-base)] p-6">
       <div className="max-w-5xl mx-auto">
-        <h1 className="text-xl font-bold text-[var(--text-primary)] mb-1">视频媒体组件预览（Phase 3）</h1>
+        <h1 className="text-xl font-bold text-[var(--text-primary)] mb-1">视频媒体组件预览</h1>
         <p className="text-sm text-[var(--text-tertiary)] mb-6">
           真实项目视频数据 · hover 静音预览 · 点击播放 · 多卡互斥 · 离开视口暂停
         </p>

@@ -42,10 +42,8 @@ const DEFAULT_TEMPLATES = [
 ]
 
 const DEFAULT_MODELS = [
-  { id: 'agnes-image', name: 'Agnes-Image-V2.0' },
   { id: 'ark-image', name: '豆包-Seedream-5.0' },
-  { id: 'agnes-video', name: 'Agnes-Video-V2.0' },
-  { id: 'ark-video', name: '豆包-Seedance-1.5-Pro' },
+  { id: 'ark-video', name: '豆包-Seedance-2.0' },
 ]
 
 export interface AIPromptBoxProps {
