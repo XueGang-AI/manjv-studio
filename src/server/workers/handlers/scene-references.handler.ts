@@ -122,18 +122,22 @@ export async function handleSceneReferences(taskId: string): Promise<void> {
       const textResponse = await textAdapter.generate(scenePromptRequest)
       const scenePrompt = parseScenePrompt(textResponse.json, textResponse.rawText)
 
-      const genReq: ImageGenerationRequest = {
-        taskType: 'scene_image',
-        prompt: scenePrompt,
-        negativePrompt,
-        aspectRatio,
-        style: artStyle,
-        numOutputs: missingTypes.length,
-      }
+      const created = []
+      for (const referenceType of missingTypes) {
+        const genReq: ImageGenerationRequest = {
+          taskType: 'scene_image',
+          prompt: buildSceneReferencePrompt(scenePrompt, referenceType),
+          negativePrompt,
+          aspectRatio,
+          style: artStyle,
+          numOutputs: 1,
+        }
 
-      const imageResponse = await imageAdapter.generate(genReq)
-      const created = (await Promise.all(
-        imageResponse.images.slice(0, missingTypes.length).map(async (img, idx) => {
+        const imageResponse = await imageAdapter.generate(genReq)
+        const img = imageResponse.images[0]
+        if (!img) continue
+
+        const createdImage = await (async () => {
           const outcome = await persistImageWithPolicy(
             img.url,
             projectId,
@@ -145,7 +149,6 @@ export async function handleSceneReferences(taskId: string): Promise<void> {
             return null
           }
 
-          const referenceType = missingTypes[idx]
           return prisma.sceneImage.create({
             data: {
               sceneId: scene.id,
@@ -154,7 +157,7 @@ export async function handleSceneReferences(taskId: string): Promise<void> {
               storageObjectKey: outcome.storageObjectKey,
               storageProvider: outcome.storageProvider,
               sourceUrl: outcome.sourceUrl,
-              prompt: scenePrompt,
+              prompt: genReq.prompt,
               negativePrompt,
               seed: String(img.seed || ''),
               modelName: getRuntimeModelName('image'),
@@ -171,8 +174,10 @@ export async function handleSceneReferences(taskId: string): Promise<void> {
               } as unknown as JsonValue,
             },
           })
-        })
-      )).filter((x): x is NonNullable<typeof x> => x !== null)
+        })()
+
+        if (createdImage) created.push(createdImage)
+      }
 
       if (created.length > 0) {
         createdImageCount += created.length
@@ -338,6 +343,14 @@ function parseScenePrompt(json: unknown, rawText: string): string {
   }
 
   throw new Error('场景 Prompt 输出无法解析')
+}
+
+function buildSceneReferencePrompt(scenePrompt: string, referenceType: typeof SCENE_REFERENCE_TYPES[number]): string {
+  if (referenceType === 'establishing') {
+    return `${scenePrompt}\n\nReference type: establishing shot. Show the full environment layout, clear spatial structure, lighting, props, and color palette. No characters.`
+  }
+
+  return `${scenePrompt}\n\nReference type: key angle. Keep the same environment identity, but show a reusable camera angle for medium shots, with stable props, lighting, and composition. No characters.`
 }
 
 async function updateProgress(taskId: string, index: number, total: number): Promise<void> {

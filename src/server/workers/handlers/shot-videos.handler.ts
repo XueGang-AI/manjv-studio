@@ -9,7 +9,7 @@
 
 import prisma from '@/lib/prisma'
 import { adapterFactory } from '@/server/model-adapters/adapter.factory'
-import { getRuntimeModelName, RUNTIME_MODEL_PROVIDER } from '@/server/model-adapters/model-config'
+import { getRuntimeModelName } from '@/server/model-adapters/model-config'
 import { snapShotDuration } from '@/lib/utils'
 import { taskService } from '@/server/queues/task-queue.service'
 import { emitTaskEvent, taskToUpdateEvent } from '../task-events'
@@ -131,9 +131,9 @@ export async function handleShotVideos(taskId: string): Promise<void> {
         prompt = parts.join('. ') + ', Korean manhwa style, cinematic lighting, smooth motion, no text, no watermark'
       }
 
-      const rawDuration = (shot.endTime || 10) - (shot.startTime || 0)
-      const duration = snapShotDuration(rawDuration, RUNTIME_MODEL_PROVIDER)
       const modelName = getRuntimeModelName('video')
+      const rawDuration = (shot.endTime || 10) - (shot.startTime || 0)
+      const duration = snapShotDuration(rawDuration, modelName)
 
       // ─── 确定 inputImage URL（Phase 6+：智能回退）───
       // 优先级：

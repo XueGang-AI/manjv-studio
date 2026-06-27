@@ -77,20 +77,23 @@ export const TASK_TYPE_MAP: Record<string, string> = {
   QUALITY_CHECK: '质量检查',
 }
 
+const MIN_SHOT_DURATION = 4
+
 /**
- * 按 Ark Seedance 2.0 i2v 约束 snap 镜头 duration，确保存入 DB 的值与实际视频时长一致。
+ * 按当前 Ark Seedance i2v 模型约束 snap 镜头 duration，确保存入 DB 的值与实际视频时长一致。
  *
- * - Seedance 2.0: 输出最长 15 秒，取 4~15 秒整数
+ * - Seedance 2.0: 4~15 秒整数
+ * - Seedance 1.5 i2v: 4~12 秒整数
  */
-export function snapShotDuration(requested: number, _modelProvider: string): number {
-  return Math.max(4, Math.min(15, Math.round(requested)))
+export function snapShotDuration(requested: number, videoModelName: string): number {
+  return Math.max(MIN_SHOT_DURATION, Math.min(getMaxShotDuration(videoModelName), Math.round(requested)))
 }
 
 /**
  * 返回视频生成模型单镜头最大时长（秒）。
  */
-export function getMaxShotDuration(_modelProvider: string | null): number {
-  return 15
+export function getMaxShotDuration(videoModelName: string | null): number {
+  return (videoModelName || '').toLowerCase().includes('seedance-1-5') ? 12 : 15
 }
 
 /**
@@ -106,48 +109,80 @@ export function normalizeShotDurations(
 ): Array<Record<string, unknown>> {
   if (!shots.length) return shots
 
-  // Step 1: 先拆分超长镜头
-  const split = splitOversizedShots(shots, maxDuration)
+  const target = Math.max(MIN_SHOT_DURATION, Math.round(targetDuration))
+  const max = Math.max(MIN_SHOT_DURATION, Math.round(maxDuration))
+  const min = Math.min(MIN_SHOT_DURATION, max)
 
-  // Step 2: 计算当前总时长
-  let totalDuration = 0
-  for (const shot of split) {
-    const start = (shot.start_time as number) || 0
-    const end = (shot.end_time as number) || 0
-    totalDuration += (end - start)
+  // Step 1: 先拆分超长镜头，并保留每段原始时长作为后续配比依据
+  const parts = splitOversizedShots(shots, max)
+  const maxShotCount = Math.max(1, Math.floor(target / min))
+  while (parts.length > maxShotCount) {
+    const last = parts.pop()
+    const prev = parts[parts.length - 1]
+    if (!last || !prev) break
+    prev.duration = getShotDuration(prev) + getShotDuration(last)
   }
 
-  if (totalDuration === 0) return split
+  const minShotCount = Math.ceil(target / max)
+  while (parts.length < minShotCount) {
+    const largestIndex = findLargestDurationIndex(parts)
+    const largest = parts[largestIndex]
+    const duration = getShotDuration(largest)
+    const firstDuration = Math.max(min, Math.floor(duration / 2))
+    const secondDuration = Math.max(min, duration - firstDuration)
+    parts.splice(
+      largestIndex,
+      1,
+      { ...largest, shot_name: `${largest.shot_name || largest.shotName || ''} (1/2)`, duration: firstDuration },
+      { ...largest, shot_name: `${largest.shot_name || largest.shotName || ''} (2/2)`, duration: secondDuration }
+    )
+  }
 
-  // Step 3: 如果总时长与目标差距超过 0.5s，按比例缩放每个镜头
-  const tolerance = 0.5
-  let result = split
+  const rawTotal = parts.reduce((sum, shot) => sum + getShotDuration(shot), 0)
+  if (rawTotal <= 0) return parts
 
-  if (Math.abs(totalDuration - targetDuration) > tolerance) {
-    const ratio = targetDuration / totalDuration
-    result = split.map(shot => {
-      const start = (shot.start_time as number) || 0
-      const end = (shot.end_time as number) || 0
-      const dur = end - start
-      const newDur = Math.max(1, Math.round(dur * ratio))
-      return { ...shot, duration: newDur }
-    })
-
-    // 微调最后一个镜头，使总时长精确等于 targetDuration
-    let adjustedTotal = 0
-    for (const shot of result) {
-      adjustedTotal += (shot.duration as number) || 0
+  // Step 2: 按目标总长重新分配整数秒，确保每段都在 Seedance 合法区间内
+  const weighted = parts.map((shot, index) => {
+    const scaled = (getShotDuration(shot) / rawTotal) * target
+    const duration = clamp(Math.round(scaled), min, max)
+    return {
+      shot,
+      index,
+      duration,
+      fraction: scaled - Math.floor(scaled),
     }
-    const lastShot = result[result.length - 1]
-    const lastDur = (lastShot.duration as number) || 0
-    lastShot.duration = Math.max(1, lastDur + (targetDuration - adjustedTotal))
+  })
+
+  let total = weighted.reduce((sum, item) => sum + item.duration, 0)
+  let diff = target - total
+  while (diff !== 0) {
+    const candidates = weighted
+      .filter(item => diff > 0 ? item.duration < max : item.duration > min)
+      .sort((a, b) => diff > 0 ? b.fraction - a.fraction : a.fraction - b.fraction)
+
+    if (candidates.length === 0) break
+    for (const item of candidates) {
+      if (diff === 0) break
+      item.duration += diff > 0 ? 1 : -1
+      diff += diff > 0 ? -1 : 1
+    }
   }
 
-  // Step 4: 重建连续时间轴
+  total = weighted.reduce((sum, item) => sum + item.duration, 0)
+  if (total !== target) {
+    const adjustable = weighted.find(item => item.duration + (target - total) >= min && item.duration + (target - total) <= max)
+    if (adjustable) adjustable.duration += target - total
+  }
+
+  const result: Array<Record<string, unknown>> = weighted
+    .sort((a, b) => a.index - b.index)
+    .map(item => ({ ...item.shot, duration: item.duration }))
+
+  // Step 3: 重建连续时间轴
   let currentTime = 0
   let shotNo = 1
   for (const shot of result) {
-    const dur = (shot.duration as number) || (targetDuration / result.length)
+    const dur = getShotDuration(shot)
     shot.shot_no = shotNo++
     shot.start_time = currentTime
     shot.end_time = currentTime + dur
@@ -168,31 +203,63 @@ function splitOversizedShots(
   const result: Array<Record<string, unknown>> = []
 
   for (const shot of shots) {
-    const startTime = (shot.start_time as number) || 0
-    const endTime = (shot.end_time as number) || 10
-    const duration = endTime - startTime
+    const duration = getShotDuration(shot)
 
     if (duration <= maxDuration) {
-      result.push({ ...shot })
+      result.push({ ...shot, duration })
     } else {
       // 超长镜头：拆分为多个等长的子镜头
       const partCount = Math.ceil(duration / maxDuration)
       const partDuration = duration / partCount
 
       for (let i = 0; i < partCount; i++) {
-        const partStart = startTime + Math.round(i * partDuration)
-        const partEnd = startTime + Math.round((i + 1) * partDuration)
         const suffix = partCount > 1 ? ` (${i + 1}/${partCount})` : ''
 
         result.push({
           ...shot,
           shot_name: `${shot.shot_name || ''}${suffix}`,
-          start_time: partStart,
-          end_time: partEnd,
+          duration: Math.max(MIN_SHOT_DURATION, Math.round(partDuration)),
         })
       }
     }
   }
 
   return result
+}
+
+function getShotDuration(shot: Record<string, unknown>): number {
+  const explicit = toFiniteNumber(shot.duration)
+  if (explicit && explicit > 0) return explicit
+
+  const start = toFiniteNumber(shot.start_time) ?? toFiniteNumber(shot.startTime) ?? 0
+  const end = toFiniteNumber(shot.end_time) ?? toFiniteNumber(shot.endTime)
+  if (typeof end === 'number' && end > start) return end - start
+
+  return 10
+}
+
+function toFiniteNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return undefined
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
+}
+
+function findLargestDurationIndex(shots: Array<Record<string, unknown>>): number {
+  let largestIndex = 0
+  let largestDuration = 0
+  for (let i = 0; i < shots.length; i++) {
+    const duration = getShotDuration(shots[i])
+    if (duration > largestDuration) {
+      largestDuration = duration
+      largestIndex = i
+    }
+  }
+  return largestIndex
 }

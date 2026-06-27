@@ -9,10 +9,12 @@
  */
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { AlertTriangle, Film, ChevronDown } from 'lucide-react'
+import { AlertTriangle, Film, ChevronDown, Image as ImageIcon, MapPinned } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useToast } from '@/components/ui/toast'
 import { ShotImageNavigation } from '@/components/shot-images/shot-image-navigation'
@@ -21,6 +23,23 @@ import { ShotImageRightPanel } from '@/components/shot-images/shot-image-right-p
 import { getImageGroupStatus, STATUS_LABELS, type ShotImagesData } from '@/components/shot-images/shot-images-types'
 import { useTaskSSE, type TaskEventType, type TaskUpdateEvent } from '@/lib/hooks/use-task-sse'
 
+interface SceneReferenceImage {
+  id: string
+  imageUrl: string
+  referenceType: string | null
+  isConfirmed: boolean
+  isSelected: boolean
+}
+
+interface SceneReferenceItem {
+  id: string
+  name: string
+  location: string | null
+  sceneTime: string | null
+  sceneImages: SceneReferenceImage[]
+  shots: Array<{ id: string; shotNo: number; location: string | null; sceneTime: string | null }>
+}
+
 export default function ShotImagesPage() {
   const params = useParams()
   const router = useRouter()
@@ -28,6 +47,7 @@ export default function ShotImagesPage() {
   const episodeId = params.episodeId as string
 
   const [data, setData] = useState<ShotImagesData | null>(null)
+  const [sceneReferences, setSceneReferences] = useState<SceneReferenceItem[]>([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [batchConfirming, setBatchConfirming] = useState(false)
@@ -49,6 +69,14 @@ export default function ShotImagesPage() {
     } catch { /* silent */ }
   }
 
+  const refreshSceneReferences = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/scene-references`)
+      const json = await res.json()
+      if (json.success) setSceneReferences(json.data?.scenes || [])
+    } catch { /* silent */ }
+  }, [projectId, episodeId])
+
   useEffect(() => {
     let cancelled = false
     async function load() {
@@ -58,7 +86,10 @@ export default function ShotImagesPage() {
         const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/shot-images`)
         const json = await res.json()
         if (cancelled) return
-        if (json.success) setData(json.data)
+        if (json.success) {
+          setData(json.data)
+          refreshSceneReferences()
+        }
         else setError(json.error || '加载失败')
       } catch {
         if (!cancelled) setError('网络错误，请重试')
@@ -68,7 +99,7 @@ export default function ShotImagesPage() {
     }
     load()
     return () => { cancelled = true }
-  }, [projectId, episodeId])
+  }, [projectId, episodeId, refreshSceneReferences])
 
   // Derived: first shot as active
   const effectiveActiveShotId = activeShotId ?? (data?.shots?.length ? data.shots[0].shot.id : null)
@@ -79,6 +110,7 @@ export default function ShotImagesPage() {
       if (payload.taskType === 'GENERATE_SCENE_REFERENCES') {
         if (type === 'task.completed') {
           addToast({ type: 'success', title: '场景参考图生成完成' })
+          refreshSceneReferences()
           if (pendingShotImagesAfterScenes) {
             setPendingShotImagesAfterScenes(false)
             createShotImageTask()
@@ -103,6 +135,7 @@ export default function ShotImagesPage() {
     },
     onSnapshot: () => {
       refreshData()
+      refreshSceneReferences()
     },
   })
 
@@ -296,6 +329,7 @@ export default function ShotImagesPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto">
+        <SceneReferenceStrip scenes={sceneReferences} />
         {activeGroup ? (
           <ShotImageReview
             group={activeGroup}
@@ -334,6 +368,77 @@ export default function ShotImagesPage() {
         loading={batchConfirming}
         onConfirm={handleBatchConfirm}
       />
+    </div>
+  )
+}
+
+function SceneReferenceStrip({ scenes }: { scenes: SceneReferenceItem[] }) {
+  if (scenes.length === 0) {
+    return (
+      <div className="px-4 md:px-6 pt-4 md:pt-6">
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-[var(--radius-md)] bg-[var(--bg-panel)] flex items-center justify-center text-[var(--color-text-muted)]">
+              <MapPinned size={18} />
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-[var(--color-text-primary)]">场景参考图</div>
+              <div className="text-xs text-[var(--color-text-muted)]">尚未生成；点击右侧生成分镜图时会先自动生成场景参考</div>
+            </div>
+          </div>
+        </Card>
+      </div>
+    )
+  }
+
+  const totalImages = scenes.reduce((sum, scene) => sum + scene.sceneImages.length, 0)
+
+  return (
+    <div className="px-4 md:px-6 pt-4 md:pt-6">
+      <Card className="p-4">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <MapPinned size={16} className="text-[var(--color-accent-cyan)]" />
+            <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">场景参考图</h3>
+            <Badge variant="cyan">{scenes.length} 个场景</Badge>
+            <Badge variant="default">{totalImages} 张图</Badge>
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {scenes.map(scene => (
+            <div key={scene.id} className="rounded-[var(--radius-md)] border border-[var(--color-border-dim)] bg-[var(--bg-panel)] overflow-hidden">
+              <div className="px-3 py-2 border-b border-[var(--color-border-dim)]">
+                <div className="text-xs font-semibold text-[var(--color-text-primary)] truncate">{scene.name}</div>
+                <div className="text-[10px] text-[var(--color-text-muted)] truncate">
+                  镜头 {scene.shots.map(shot => shot.shotNo).join('、') || '-'}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 p-2">
+                {scene.sceneImages.length > 0 ? scene.sceneImages.slice(0, 4).map(image => (
+                  <div key={image.id} className="relative aspect-[3/4] rounded-[var(--radius-sm)] overflow-hidden bg-[var(--bg-elevated)]">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={image.imageUrl}
+                      alt={`${scene.name} ${image.referenceType || 'scene'}`}
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                    <span className="absolute left-1 top-1 rounded bg-black/55 px-1.5 py-0.5 text-[9px] text-white">
+                      {image.referenceType || 'scene'}
+                    </span>
+                  </div>
+                )) : (
+                  <div className="col-span-2 aspect-[3/1] flex items-center justify-center gap-2 text-xs text-[var(--color-text-muted)]">
+                    <ImageIcon size={14} />
+                    无参考图
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>
   )
 }

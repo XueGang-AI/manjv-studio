@@ -165,10 +165,10 @@ export async function POST(
       }
     }
 
-    const rawDuration = (shot.endTime || 10) - (shot.startTime || 0)
-    const duration = snapShotDuration(rawDuration, RUNTIME_MODEL_PROVIDER)
     const modelProvider = RUNTIME_MODEL_PROVIDER
     const modelName = getRuntimeModelName('video')
+    const rawDuration = (shot.endTime || 10) - (shot.startTime || 0)
+    const duration = snapShotDuration(rawDuration, modelName)
     const isMock = process.env.USE_MOCK_MODEL === 'true'
 
     // ─── VideoPrompt upsert（Phase 6：@@unique([shotId]) 原子 upsert）───

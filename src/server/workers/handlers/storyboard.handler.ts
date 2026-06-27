@@ -12,6 +12,7 @@ import { getMaxShotDuration, normalizeShotDurations } from '@/lib/utils'
 import { taskService } from '@/server/queues/task-queue.service'
 import { emitTaskEvent, taskToUpdateEvent } from '../task-events'
 import type { TextGenerationRequest } from '@/server/model-adapters/types'
+import { getRuntimeModelName } from '@/server/model-adapters/model-config'
 
 type JsonValue = import('@prisma/client').Prisma.InputJsonValue // Used for Prisma JSON fields
 
@@ -80,7 +81,9 @@ export async function handleStoryboard(taskId: string): Promise<void> {
     const materialRefs = loadMaterialRefs()
 
     // 计算视频模型单镜头时长上限
-    const maxShotDuration = getMaxShotDuration(project.modelProvider)
+    const videoModelName = getRuntimeModelName('video')
+    const maxShotDuration = getMaxShotDuration(videoModelName)
+    const minimumShotCount = getMinimumShotCount(project.episodeDuration, maxShotDuration)
 
     // 渲染 Prompt
     const rendered = await promptTemplateService.render('storyboard', {
@@ -137,10 +140,12 @@ export async function handleStoryboard(taskId: string): Promise<void> {
     }
 
     let content = findStoryboardPayload(parsed, episodeNumber) || recoverStoryboardPayloadFromRawText(rawText)
-    if (!content) {
+    if (!isStoryboardPayloadUsable(content, minimumShotCount)) {
       await taskService.appendLog(taskId, 'WARN', '首次分镜 JSON 结构不符合要求，正在重试', {
         raw_preview: rawText.substring(0, 300),
         parsed_keys: describeJsonKeys(parsed),
+        shot_count: Array.isArray(content?.shots) ? content.shots.length : 0,
+        minimum_shot_count: minimumShotCount,
       })
 
       const retryResponse = await textAdapter.generate({
@@ -159,9 +164,10 @@ export async function handleStoryboard(taskId: string): Promise<void> {
       content = findStoryboardPayload(parsed, episodeNumber) || recoverStoryboardPayloadFromRawText(rawText)
     }
 
-    if (!content) {
+    if (!isStoryboardPayloadUsable(content, minimumShotCount)) {
       const preview = rawText ? rawText.substring(0, 300) : ''
-      throw new Error(`模型输出缺少 shots 数组${preview ? ` (rawText 预览: ${preview})` : ''}`)
+      const shotCount = Array.isArray(content?.shots) ? content.shots.length : 0
+      throw new Error(`模型输出 shots 数量不足（${shotCount}/${minimumShotCount}）${preview ? ` (rawText 预览: ${preview})` : ''}`)
     }
 
     await taskService.updateProgress(taskId, 60)
@@ -357,8 +363,20 @@ function buildRuntimeStoryboardInstruction(targetShotCount: number, episodeDurat
 
 function getTargetShotCount(episodeDuration: number, maxShotDuration: number): number {
   const minByDuration = Math.ceil(episodeDuration / maxShotDuration)
-  const comfortableCount = Math.ceil(episodeDuration / 6)
-  return Math.max(2, Math.min(8, Math.max(minByDuration, comfortableCount)))
+  const comfortableCount = Math.ceil(episodeDuration / 10)
+  return Math.max(2, Math.min(6, Math.max(minByDuration, comfortableCount)))
+}
+
+function getMinimumShotCount(episodeDuration: number, maxShotDuration: number): number {
+  if (episodeDuration <= maxShotDuration) return 1
+  return Math.max(2, Math.ceil(episodeDuration / maxShotDuration))
+}
+
+function isStoryboardPayloadUsable(
+  content: Record<string, unknown> | undefined,
+  minimumShotCount: number,
+): content is Record<string, unknown> & { shots: Array<Record<string, unknown>> } {
+  return !!content && Array.isArray(content.shots) && content.shots.length >= minimumShotCount
 }
 
 function recoverStoryboardPayloadFromRawText(rawText: string): Record<string, unknown> | undefined {
