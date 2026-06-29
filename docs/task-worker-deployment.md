@@ -290,8 +290,8 @@ Worker 在**启动时**和**运行期间每 30 秒**自动扫描超时的 `runni
 | GENERATE_STORYBOARD | 10 分钟 | Ark 文本调用，含镜头时长约束 |
 | GENERATE_SCENE_REFERENCES | 15 分钟 | Ark 图片调用，生成场景参考图 |
 | GENERATE_SHOT_IMAGES | 15 分钟 | Ark 图片调用，传入角色/场景参考 |
-| GENERATE_SHOT_VIDEOS | 35 分钟 | Seedance 2.0 远程任务创建与轮询 |
-| RENDER_FINAL_VIDEO | 10 分钟 | FFmpeg 合成 |
+| GENERATE_SHOT_VIDEOS | 35 分钟 | Seedance 1.5 Pro 远程任务创建与轮询 |
+| RENDER_FINAL_VIDEO | 10 分钟 | FFmpeg 合成与响度归一化 |
 
 超时任务处理：
 - `retryCount < maxRetries` → 重置为 `pending`，等待重新领取

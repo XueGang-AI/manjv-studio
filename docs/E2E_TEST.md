@@ -99,6 +99,7 @@ npm run test:e2e:real
 - Seedance 图片输入模式互斥：`first_frame` / `last_frame` 不能与 `reference_image` 混用。生产链路用确认分镜图作为 `first_frame`；角色和场景参考图在分镜图生成阶段传入并固化到首帧。
 - 当前 Medium Agent Plan 默认视频模型为 `ARK_VIDEO_MODEL=doubao-seedance-1.5-pro`。Seedance 2.0 是高套餐/开通后可选能力；未开通时在 Agent Plan 下会返回 `UnsupportedModel`。
 - 单片段成片也必须走 FFmpeg `concatVideos()` 两阶段规范化链路，确保输出落在 `uploads/final_videos/` 并可被 `/api/local-media/final_videos/...` 读取。
+- 成片阶段默认启用 loudnorm 响度归一化；如需排障可临时设置 `FFMPEG_NORMALIZE_AUDIO=false`，但真实验收应保持默认开启。
 
 ### 真实 90 秒 QA 基线
 
@@ -106,6 +107,21 @@ npm run test:e2e:real
 - 模型：文本 `doubao-seed-2.0-pro`，图片 `doubao-seedream-5.0-lite`，视频 `doubao-seedance-1.5-pro`，Ark base `https://ark.cn-beijing.volces.com/api/plan`。
 - 产物：`uploads/final_videos/86e9a74a-d85f-4712-9fbe-619358ef74e0_ep1_1782644453931.mp4`，ffprobe 显示约 `90.488005s`、`1080x1920`、H.264、AAC。
 - QA 结论：可接受，通过；P2 问题集中在个别镜头发型/脸型轻微漂移、直播 UI 图形接近平台符号、音量偏低。媒体文件和逐帧素材属于生成产物，不纳入 Git。
+
+### 问题驱动重跑验证
+
+分镜图和视频片段页面的单镜头重生成接口支持：
+
+```json
+{
+  "issueTypes": ["character_drift", "hair_inconsistent", "phone_fake_ui_text"],
+  "fixNote": "保持低马尾、红绳手链；手机屏幕只保留不可读光点",
+  "motionStrength": "low",
+  "clientRequestId": "uuid"
+}
+```
+
+后端返回 `appliedFixes`、`candidateId`、`reused` 和可选 `requiresImageRerun`。分镜图重生成会追加候选，不删除旧确认图；视频重生成沿用候选模式并用 `clientRequestId` 保证重复请求不重复提交远端任务。第 6/8 镜头人物或发型问题应先重跑分镜图，再重跑视频；第 7-9 镜头手机伪 UI/文字问题可直接重跑视频 prompt，并确认 prompt 含禁止红色对勾、爱心、logo、伪中文和可读文字的约束。
 
 ## 探针测试
 

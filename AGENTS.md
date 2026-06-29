@@ -141,11 +141,11 @@ adapterFactory.getVideoAdapter(provider)  // IVideoAdapter
 
 ### 10. FFmpeg 成片
 
-`src/server/services/ffmpeg.service.ts` 使用两阶段法：先 `normalizeInput()` 将每个输入标准化到统一规格（letterbox padding 居中填充，不裁切人物；统一 H.264 / AAC 44100Hz / yuv420p / 固定帧率；无音频输入补静音音轨），再 concat（`-c copy`，失败回退 re-encode）。解决异构分辨率（如 496×864 + 1280×768）concat `exit=254` 问题。`ffmpeg-utils.ts` 提供 ffprobe 校验与安全 spawn。
+`src/server/services/ffmpeg.service.ts` 使用两阶段法：先 `normalizeInput()` 将每个输入标准化到统一规格（letterbox padding 居中填充，不裁切人物；统一 H.264 / AAC 44100Hz / yuv420p / 固定帧率；无音频输入补静音音轨），再 concat（`-c copy`，失败回退 re-encode），最后默认执行 loudnorm 响度归一化。解决异构分辨率（如 496×864 + 1280×768）concat `exit=254` 问题。`ffmpeg-utils.ts` 提供 ffprobe 校验与安全 spawn。
 
 ### 11. 自动 QC 与发布包
 
-规则 QC 由 `qcService` 执行。`/automation/auto-confirm` 在 QC 达标后自动确认角色图、分镜图、视频片段；缺少未来阶段产物时不阻断当前阶段自动确认。`/release-package/generate` 在成片完成后生成发布 manifest，并写回 `FinalVideo.assetPackageUrl`。
+规则 QC 由 `qcService` 执行。QC issue 输出 `issueType`、`severity`、`recommendedAction`，覆盖参考图数量、手机屏幕禁用项、成片音轨、响度、黑屏和冻结风险。`/automation/auto-confirm` 在 QC 达标后自动确认角色图、分镜图、视频片段；缺少未来阶段产物时不阻断当前阶段自动确认。`/release-package/generate` 在成片完成后生成发布 manifest，并写回 `FinalVideo.assetPackageUrl`。
 
 ## 不可破坏的约束
 

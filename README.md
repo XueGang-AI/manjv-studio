@@ -128,6 +128,14 @@ npm run test:e2e:real         # 真实 AI API 最小闭环
 
 已验收的真实 API 基线：`2026-06-28` 使用当前 Medium Agent Plan 默认视频模型 `doubao-seedance-1.5-pro` 完成 90 秒《古城最后一盏花灯》MP4 质检并由 QA 判定可接受通过。最终视频产物路径为 `uploads/final_videos/86e9a74a-d85f-4712-9fbe-619358ef74e0_ep1_1782644453931.mp4`；该媒体文件属于生成产物，不纳入 Git 提交。
 
+### Seedance 1.5 Pro 质量优化闭环
+
+当前视频模型继续使用 `doubao-seedance-1.5-pro`。分镜图和视频片段页面支持问题驱动重跑，问题类型包括人物漂移、发型不一致、场景漂移、手机伪 UI/文字、动作过大/手部变形、音频问题和其他。重跑请求会把 `issueTypes`、`fixNote`、`motionStrength`、`clientRequestId` 传给后端，后端统一叠加共享角色/场景/Seedance 一致性约束。
+
+单镜头分镜图重生成采用候选追加模式：新图生成成功后追加候选，不删除旧确认图；用户确认候选后才替换确认态。视频重生成继续保留旧视频候选，并通过 `clientRequestId` 避免网络重试重复提交远端任务。
+
+FFmpeg 成片阶段默认启用 loudnorm 响度归一化，保持原有两阶段输入标准化、无音频补静音和 concat/re-encode 兜底。QC 报告会输出 `issueType`、`severity`、`recommendedAction`，并检查参考图数量、手机屏幕禁用项、成片音轨、响度、黑屏和冻结风险。
+
 AI Provider 连通性探针：
 
 ```bash

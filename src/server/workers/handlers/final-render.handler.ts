@@ -19,6 +19,7 @@ import { emitTaskEvent, taskToUpdateEvent } from '../task-events'
 export interface FinalRenderInput {
   episodeId: string
   aspectRatio?: string
+  normalizeAudio?: boolean
 }
 
 /**
@@ -90,7 +91,7 @@ export async function handleFinalRender(taskId: string): Promise<void> {
     const ffAvailable = await ffmpegService.checkAvailable()
     const outputFileName = `${projectId}_ep${episode.episodeNo}_${Date.now()}.mp4`
 
-    let result: { success: boolean; outputPath?: string; duration?: number; error?: string }
+    let result: { success: boolean; outputPath?: string; duration?: number; audioNormalized?: boolean; error?: string }
 
     if (ffAvailable) {
       await updateProgress(10)
@@ -103,6 +104,7 @@ export async function handleFinalRender(taskId: string): Promise<void> {
         aspectRatio,
         fps: 25,
         addFadeTransition: confirmedVideos.length > 1,
+        normalizeAudio: typeof input.normalizeAudio === 'boolean' ? input.normalizeAudio : undefined,
       })
     } else {
       result = {
@@ -152,6 +154,7 @@ export async function handleFinalRender(taskId: string): Promise<void> {
     const completed = await taskService.completeTask(taskId, {
       final_video_id: finalVideo.id,
       duration: result.duration,
+      audio_normalized: result.audioNormalized ?? false,
     })
 
     await emitTaskEvent('task.completed', taskToUpdateEvent(completed))

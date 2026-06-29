@@ -58,5 +58,6 @@ Worker 是独立进程，入口已主动加载 `.env`。生产部署需要单独
 | `PUBLIC_ASSET_BASE_URL` | 公共资源访问前缀 | `http://localhost:3100/assets` |
 | `FFMPEG_PATH` | FFmpeg 可执行文件路径 | `ffmpeg` |
 | `FFPROBE_PATH` | ffprobe 可执行文件路径 | `ffprobe` |
+| `FFMPEG_NORMALIZE_AUDIO` | 成片阶段是否启用 loudnorm 响度归一化 | `true` |
 
 生产环境不要把供应商临时签名 URL 当作正式产物保存；需要转存到项目存储后再写入业务记录。

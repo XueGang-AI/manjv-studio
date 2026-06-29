@@ -102,6 +102,29 @@ Base URL: `http://localhost:3100/api`
 
 视频远端任务检查会轮询 Ark Video API，并更新 `remoteStatus`、`remoteProgress`、`videoUrl` 等字段。
 
+### 单镜头问题驱动重生成
+
+分镜图和视频片段的单镜头重生成接口均支持问题驱动参数：
+
+```json
+{
+  "issueTypes": [
+    "character_drift",
+    "hair_inconsistent",
+    "scene_drift",
+    "phone_fake_ui_text",
+    "large_motion_or_hand_deform",
+    "audio_issue",
+    "other"
+  ],
+  "fixNote": "保持低马尾和红绳手链，手机屏幕只显示不可读光点",
+  "motionStrength": "low",
+  "clientRequestId": "uuid"
+}
+```
+
+返回 `data` 会包含 `candidateId`、`reused`、`appliedFixes`，视频重生成在人物/发型/场景问题下还会返回 `requiresImageRerun=true`。分镜图重生成采用候选追加模式，不删除旧确认图；视频重生成继续保留旧视频候选，并通过 `clientRequestId` 避免重复提交 Ark 远端视频任务。
+
 ## 版本 API
 
 | 方法 | 路径 | 说明 |
@@ -121,6 +144,8 @@ Base URL: `http://localhost:3100/api`
 | GET | `/api/projects/:id/qc/reports/:reportId` | QC 报告详情 |
 | POST | `/api/projects/:id/episodes/:episodeId/qc/run` | 运行剧集 QC |
 | GET | `/api/projects/:id/episodes/:episodeId/qc/reports` | 查看剧集 QC 报告 |
+
+QC issue 输出保留旧字段 `level/field/problem/suggestion`，并补充 `shotNo`、`timeRange`、`issueType`、`severity`（`P0`/`P1`/`P2`/`P3`）和 `recommendedAction`（`accept`、`rerun_shot_image`、`rerun_shot_video`、`rerender_final`）。当前规则会检查角色/场景参考数量、手机屏幕禁用项、成片音轨、响度、黑屏和冻结风险。
 
 ## 健康与媒体
 

@@ -9,11 +9,19 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useToast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
 import { getImageGroupStatus, STATUS_LABELS, type ShotGroup, type ShotImageItem } from './shot-images-types'
+import { RegenerationIssuePanel, type RegenerationIssueType } from '@/components/regeneration/regeneration-issue-panel'
 
 // Track loading/error state per image
 interface ImageLoadState {
   loading: boolean
   error: boolean
+}
+
+function createClientRequestId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
 interface ShotImageReviewProps {
@@ -39,6 +47,8 @@ export function ShotImageReview({ group, isConfirmed, isGenerating, projectId, e
 
   // Regenerate
   const [regenerating, setRegenerating] = useState(false)
+  const [issueTypes, setIssueTypes] = useState<RegenerationIssueType[]>([])
+  const [fixNote, setFixNote] = useState('')
 
   // Prompt expand
   const [promptExpanded, setPromptExpanded] = useState(false)
@@ -89,10 +99,18 @@ export function ShotImageReview({ group, isConfirmed, isGenerating, projectId, e
   const handleRegenerate = async () => {
     setRegenerating(true)
     try {
-      const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/shots/${shot.id}/images/regenerate`, { method: 'POST' })
+      const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/shots/${shot.id}/images/regenerate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          issueTypes,
+          fixNote: fixNote.trim() || undefined,
+          clientRequestId: createClientRequestId(),
+        }),
+      })
       const data = await res.json()
       if (data.success) {
-        addToast({ type: 'success', title: `镜头 ${shot.shotNo} 重新生成中` })
+        addToast({ type: 'success', title: `镜头 ${shot.shotNo} 已追加候选图` })
         onRefresh()
       } else {
         addToast({ type: 'error', title: '重新生成失败', description: data.error })
@@ -132,6 +150,16 @@ export function ShotImageReview({ group, isConfirmed, isGenerating, projectId, e
           </Button>
         )}
       </div>
+
+      {!isConfirmed && images.length > 0 && (
+        <RegenerationIssuePanel
+          issueTypes={issueTypes}
+          onIssueTypesChange={setIssueTypes}
+          fixNote={fixNote}
+          onFixNoteChange={setFixNote}
+          disabled={regenerating || isGenerating}
+        />
+      )}
 
       {/* Image grid */}
       {images.length > 0 ? (
