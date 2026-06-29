@@ -49,25 +49,25 @@ spec:
   endpoints:
     - service: web
       environment: local
-      baseUrl: http://localhost:3000
+      baseUrl: http://localhost:3100
       healthCheck:
         enabled: true
         path: /api/health
     - service: api
       environment: local
-      baseUrl: http://localhost:3000
+      baseUrl: http://localhost:3100
       healthCheck:
         enabled: true
         path: /api/health
     - service: worker
       environment: local
-      baseUrl: http://localhost:3000
+      baseUrl: http://localhost:3100
       healthCheck:
         enabled: true
         path: /api/worker/health
     - service: web
       environment: docker
-      baseUrl: http://localhost:3000
+      baseUrl: http://localhost:3100
       healthCheck:
         enabled: true
         path: /api/health

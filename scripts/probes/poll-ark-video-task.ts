@@ -1,12 +1,19 @@
 // ============================================
 // Ark Video Model Probe — Poll Task by ID
-// Model: doubao-seedance-2-0-260128
+// Model: doubao-seedance-1.5-pro
 // Usage: npx tsx scripts/probes/poll-ark-video-task.ts --task-id <id>
 // ============================================
 import 'dotenv/config'
 import fs from 'fs'
+import {
+  DEFAULT_ARK_API_BASE_URL,
+  normalizeArkBaseUrl,
+} from '../../src/server/model-adapters/model-config'
 
-const BASE = 'https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks'
+const BASE_URL = normalizeArkBaseUrl(
+  process.env.ARK_VIDEO_API_BASE_URL || process.env.ARK_API_BASE_URL || DEFAULT_ARK_API_BASE_URL
+)
+const BASE = `${BASE_URL}/contents/generations/tasks`
 const KEY = process.env.ARK_API_KEY || ''
 
 function parseArgs(): { taskId: string; timeoutMinutes: number; intervalSeconds: number } {

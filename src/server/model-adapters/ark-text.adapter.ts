@@ -1,6 +1,6 @@
 // ============================================
-// ArkTextAdapter — 豆包 SeedCharacter 文本适配器
-// 模型: doubao-seed-character-251128
+// ArkTextAdapter — 豆包 Seed 文本适配器
+// 模型: doubao-seed-2.0-pro
 // Endpoint: POST {baseUrl}/chat/completions (OpenAI 兼容)
 // JSON 策略: prompt_only (schema 嵌入 prompt, 不使用 response_format)
 // ============================================
@@ -13,7 +13,7 @@ export interface ArkTextAdapterOptions {
   baseUrl: string
 }
 
-const DEFAULT_MODEL = 'doubao-seed-character-251128'
+const DEFAULT_MODEL = 'doubao-seed-2.0-pro'
 const DEFAULT_TIMEOUT_MS = 120000
 
 export class ArkTextAdapter extends BaseTextAdapter {

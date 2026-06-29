@@ -4,9 +4,9 @@
   "private": true,
   "scripts": {
     "dev:all": "bash scripts/dev-all.sh",
-    "dev": "next dev",
+    "dev": "next dev -p 3100",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 3100",
     "worker": "npx tsx src/server/workers/task.worker.ts",
     "lint": "eslint",
     "db:generate": "prisma generate",

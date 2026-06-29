@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, FileText, Users, Image as ImageIcon, Film, Video,
-  Clapperboard, Package, ListTodo, Settings, FileCode,
+  Clapperboard, Package, ListTodo, Settings, FileCode, MapPinned,
   ChevronLeft, Check, Lock, Sparkles,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -28,11 +28,12 @@ const projectSteps: NavItem[] = [
   { label: '角色设定', href: '/characters', icon: <Users size={18} />, step: 3 },
   { label: '角色图', href: '/character-images', icon: <ImageIcon size={18} />, step: 4 },
   { label: '分镜脚本', href: '/episodes/1/storyboard', icon: <Film size={18} />, step: 5 },
-  { label: '分镜图', href: '/episodes/1/shot-images', icon: <ImageIcon size={18} />, step: 6 },
-  { label: '视频片段', href: '/episodes/1/shot-videos', icon: <Video size={18} />, step: 7 },
-  { label: '成片预览', href: '/episodes/1/final-preview', icon: <Clapperboard size={18} />, step: 8 },
-  { label: '素材管理', href: '/assets', icon: <Package size={18} />, step: 9 },
-  { label: '任务队列', href: '/tasks', icon: <ListTodo size={18} />, step: 10 },
+  { label: '场景参考图', href: '/episodes/1/scene-references', icon: <MapPinned size={18} />, step: 6 },
+  { label: '分镜图', href: '/episodes/1/shot-images', icon: <ImageIcon size={18} />, step: 7 },
+  { label: '视频片段', href: '/episodes/1/shot-videos', icon: <Video size={18} />, step: 8 },
+  { label: '成片预览', href: '/episodes/1/final-preview', icon: <Clapperboard size={18} />, step: 9 },
+  { label: '素材管理', href: '/assets', icon: <Package size={18} />, step: 10 },
+  { label: '任务队列', href: '/tasks', icon: <ListTodo size={18} />, step: 11 },
 ]
 
 const systemNavItems: NavItem[] = [

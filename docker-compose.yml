@@ -5,7 +5,7 @@
 # 使用前：
 #   1. cp .env.example .env  并按需填写 AI Provider 凭证
 #   2. docker compose up -d --build
-#   3. 访问 http://localhost:3000
+#   3. 访问 http://localhost:3100
 #
 # 说明：
 #   - DATABASE_URL / REDIS_URL 由下方 environment 强制指向容器内服务名，
@@ -24,8 +24,6 @@ services:
       POSTGRES_DB: manjv_studio
     volumes:
       - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U manjv -d manjv_studio"]
       interval: 5s
@@ -35,8 +33,6 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    ports:
-      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -51,19 +47,20 @@ services:
       APP_ROLE: web
       NODE_ENV: production
       # 强制指向容器内服务（覆盖 .env 中的 localhost 值）
-      DATABASE_URL: postgresql://manjv:manjv@postgres:5432/manjv_studio?schema=public
-      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql://manjv:manjv@postgres/manjv_studio?schema=public
+      REDIS_URL: redis://redis
+      REDIS_KEY_PREFIX: "manjv_studio:"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     ports:
-      - "3000:3000"
+      - "3100:3100"
     volumes:
       - uploads:/app/uploads
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3100/api/health >/dev/null 2>&1 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -76,8 +73,9 @@ services:
     environment:
       APP_ROLE: worker
       NODE_ENV: production
-      DATABASE_URL: postgresql://manjv:manjv@postgres:5432/manjv_studio?schema=public
-      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql://manjv:manjv@postgres/manjv_studio?schema=public
+      REDIS_URL: redis://redis
+      REDIS_KEY_PREFIX: "manjv_studio:"
     depends_on:
       web:
         condition: service_healthy

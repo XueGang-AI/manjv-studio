@@ -2,6 +2,8 @@
 
 更新时间：2026-06-28
 
+> 历史记录说明：本文记录当次 60 秒真实 API 验收的实际环境，下面的旧模型名是历史产物信息，不代表当前默认配置。当前默认配置以 `.env.example` 和 `src/server/model-adapters/model-config.ts` 为准。
+
 ## 验收对象
 
 - 项目 ID：`436d4d93-2d94-4f32-888a-e5e9e3d17ed3`

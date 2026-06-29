@@ -1,0 +1,31 @@
+{
+  "agents": [
+    {
+      "name": "规划Agent",
+      "role": "product_planner",
+      "conv_id": "019f0b54-4556-70d3-827f-3f95735ce808",
+      "next_role": "developer",
+      "workspace": "./agents/plan/",
+      "may_modify_business_code": false
+    },
+    {
+      "name": "开发Agent",
+      "role": "developer",
+      "conv_id": "019f0b54-8659-7e51-9b4e-c97a04278a4f",
+      "next_role": "qa_reviewer",
+      "workspace": "./agents/dev/",
+      "may_modify_business_code": true
+    },
+    {
+      "name": "验收Agent",
+      "role": "qa_reviewer",
+      "conv_id": "019f0b54-cfca-7830-b6df-5826655ca038",
+      "fallback_role": "developer",
+      "workspace": "./agents/qa/",
+      "may_modify_business_code": false
+    }
+  ],
+  "team_policy_file": "./agents/TEAM_RULES.md",
+  "team_policy_version": "2026-06-25",
+  "task_entry_role": "product_planner"
+}

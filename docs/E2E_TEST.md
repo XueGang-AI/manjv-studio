@@ -12,10 +12,10 @@ USE_MOCK_MODEL=true npm run dev:all
 npm run test:e2e
 ```
 
-如服务不在 `http://localhost:3000`，可指定：
+默认服务地址为 `http://localhost:3100`。如服务不在默认地址，可指定：
 
 ```bash
-E2E_BASE_URL=http://localhost:3001 npm run test:e2e
+E2E_BASE_URL=http://localhost:3100 npm run test:e2e
 ```
 
 ### Mock 自动化流程 (22 步)
@@ -97,8 +97,15 @@ npm run test:e2e:real
 ### 真实接口注意事项
 
 - Seedance 图片输入模式互斥：`first_frame` / `last_frame` 不能与 `reference_image` 混用。生产链路用确认分镜图作为 `first_frame`；角色和场景参考图在分镜图生成阶段传入并固化到首帧。
-- 若强制指定 `ARK_VIDEO_MODEL=doubao-seedance-2-0-260128`，账号必须先在 Ark 控制台开通该模型；未开通时接口会返回 `ModelNotOpen`。
+- 当前 Medium Agent Plan 默认视频模型为 `ARK_VIDEO_MODEL=doubao-seedance-1.5-pro`。Seedance 2.0 是高套餐/开通后可选能力；未开通时在 Agent Plan 下会返回 `UnsupportedModel`。
 - 单片段成片也必须走 FFmpeg `concatVideos()` 两阶段规范化链路，确保输出落在 `uploads/final_videos/` 并可被 `/api/local-media/final_videos/...` 读取。
+
+### 真实 90 秒 QA 基线
+
+- 题材：《古城最后一盏花灯》，文旅 / 非遗 / 返乡创业，9 个 10 秒镜头。
+- 模型：文本 `doubao-seed-2.0-pro`，图片 `doubao-seedream-5.0-lite`，视频 `doubao-seedance-1.5-pro`，Ark base `https://ark.cn-beijing.volces.com/api/plan`。
+- 产物：`uploads/final_videos/86e9a74a-d85f-4712-9fbe-619358ef74e0_ep1_1782644453931.mp4`，ffprobe 显示约 `90.488005s`、`1080x1920`、H.264、AAC。
+- QA 结论：可接受，通过；P2 问题集中在个别镜头发型/脸型轻微漂移、直播 UI 图形接近平台符号、音量偏低。媒体文件和逐帧素材属于生成产物，不纳入 Git。
 
 ## 探针测试
 
@@ -129,6 +136,6 @@ npm run probe:ark:video:poll -- --task-id <id> --timeout-minutes 60 --interval-s
 | Redis 连接失败 | Redis 未运行 | 可忽略或启动 Redis，系统会 DB 轮询降级 |
 | ffprobe 失败 | FFmpeg 未安装或路径错误 | 安装 FFmpeg，检查 `FFMPEG_PATH` / `FFPROBE_PATH` |
 | 视频一直 queued | Ark 视频队列拥堵 | 后续用 `probe:ark:video:poll` 继续轮询 |
-| `ModelNotOpen` | 当前 Ark 账号未开通指定视频模型 | 在 Ark 控制台开通模型，或使用 `.env` 中已开通的视频模型 |
+| `UnsupportedModel` / `ModelNotOpen` | 当前 Ark 套餐或账号未开通指定视频模型；Medium Agent Plan 不支持 Seedance 2.0 系列作为默认视频模型 | 使用 `.env` 中当前默认 `doubao-seedance-1.5-pro`，或升级/开通 Seedance 2.0 后再改配置 |
 | `first/last frame content cannot be mixed with reference media content` | Seedance 首帧模式与参考媒体模式混用 | 视频阶段只发送确认分镜图首帧；角色/场景参考放在分镜图阶段 |
 | 分镜图生成报错 | 角色图或场景参考未准备好 | 确认前置阶段完成并已确认 |

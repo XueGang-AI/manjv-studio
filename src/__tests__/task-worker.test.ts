@@ -904,37 +904,39 @@ describe('Redis Subscriber auto-reconnect', () => {
     projectRefCounts.set('proj-3', 0) // 引用已归零，不应重新订阅
 
     const globalRefCount = 1
+    const redisKeyPrefix = 'manjv_studio:'
 
     const channels: string[] = []
 
     for (const [projectId, count] of projectRefCounts) {
       if (count > 0) {
-        channels.push(`manjv:task:${projectId}`)
+        channels.push(`${redisKeyPrefix}task:${projectId}`)
       }
     }
 
     if (globalRefCount > 0) {
-      channels.push('manjv:task:_all')
+      channels.push(`${redisKeyPrefix}task:_all`)
     }
 
     // proj-1 和 proj-2 应被重新订阅，proj-3 不应
-    expect(channels).toContain('manjv:task:proj-1')
-    expect(channels).toContain('manjv:task:proj-2')
-    expect(channels).not.toContain('manjv:task:proj-3')
-    expect(channels).toContain('manjv:task:_all')
+    expect(channels).toContain('manjv_studio:task:proj-1')
+    expect(channels).toContain('manjv_studio:task:proj-2')
+    expect(channels).not.toContain('manjv_studio:task:proj-3')
+    expect(channels).toContain('manjv_studio:task:_all')
     expect(channels).toHaveLength(3)
   })
 
   it('should not resubscribe when no active channels', () => {
     const projectRefCounts = new Map<string, number>()
     const globalRefCount = 0
+    const redisKeyPrefix = 'manjv_studio:'
 
     const channels: string[] = []
 
     for (const [projectId, count] of projectRefCounts) {
-      if (count > 0) channels.push(`manjv:task:${projectId}`)
+      if (count > 0) channels.push(`${redisKeyPrefix}task:${projectId}`)
     }
-    if (globalRefCount > 0) channels.push('manjv:task:_all')
+    if (globalRefCount > 0) channels.push(`${redisKeyPrefix}task:_all`)
 
     expect(channels).toHaveLength(0)
   })

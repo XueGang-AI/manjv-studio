@@ -36,6 +36,24 @@ type MatchedReference = {
   source_url?: string | null
 }
 type CharAppearance = { name: string; appearanceText: string }
+type ShotPromptContext = {
+  shotNo: number
+  shotName?: string | null
+  characters?: unknown
+  action?: string | null
+  details?: string | null
+  camera?: unknown
+  visual?: unknown
+  location?: string | null
+  sceneTime?: string | null
+  emotion?: string | null
+}
+type ScenePromptContext = {
+  name?: string | null
+  location?: string | null
+  sceneTime?: string | null
+  description?: string | null
+}
 
 function matchReferences(
   shotCharsRaw: unknown,
@@ -126,13 +144,14 @@ function matchReferences(
 
 function buildEnhancedPrompt(
   basePrompt: string,
-  shotCharsRaw: unknown,
+  shot: ShotPromptContext,
   styleStr: string,
   charAppearanceByName: Map<string, CharAppearance>,
+  scene?: ScenePromptContext | null,
 ): string {
   const shotChars: string[] = []
-  if (Array.isArray(shotCharsRaw)) {
-    for (const item of shotCharsRaw) {
+  if (Array.isArray(shot.characters)) {
+    for (const item of shot.characters) {
       if (typeof item === 'string') shotChars.push(item.trim())
       else if (item && typeof item === 'object') {
         const name = (item as Record<string, unknown>).name
@@ -157,10 +176,43 @@ function buildEnhancedPrompt(
   let enhanced = basePrompt
   if (charsInShot.length > 0) {
     const charDescriptions = charsInShot.map(c => c.appearanceText).join('\n  ')
-    enhanced = enhanced + `\n\n[Character Reference - MUST maintain consistency]\n  ${charDescriptions}\n\n`
+    enhanced += `\n\n[角色一致性硬约束]\n  ${charDescriptions}\n  必须严格沿用参考图中的同一人物身份、脸型、发型、发量、服装、配饰、体型比例。禁止换脸、换发型、换衣服、改变年龄感、额外增加主角。`
   }
-  enhanced = enhanced + `\n\nStyle: ${styleStr}, Korean manhwa, cinematic lighting, high quality, 8k resolution, consistent character design, same character appearance throughout the scene`
+
+  const sceneParts = [
+    scene?.name,
+    scene?.location || shot.location,
+    scene?.sceneTime || shot.sceneTime,
+    scene?.description,
+  ].filter(Boolean)
+  if (sceneParts.length > 0) {
+    enhanced += `\n\n[场景一致性硬约束]\n  场景锚点：${sceneParts.join('，')}。\n  必须严格沿用场景参考图的空间布局、墙面/桌椅/屏幕/灯光位置、色温和构图基调。同一地点不得随机变成其他房间或开放办公区。`
+  }
+
+  const cameraText = typeof shot.camera === 'object' && shot.camera ? JSON.stringify(shot.camera) : ''
+  const visualText = typeof shot.visual === 'object' && shot.visual ? JSON.stringify(shot.visual) : ''
+  enhanced += `\n\n[镜头执行]\n  镜头 #${shot.shotNo}${shot.shotName ? `：${shot.shotName}` : ''}。动作：${shot.action || shot.details || basePrompt}。情绪：${shot.emotion || '克制、明确'}。镜头：${cameraText || '稳定短剧镜头'}。视觉：${visualText || '清晰叙事画面'}。`
+
+  enhanced += `\n\n[画面规则]\n  竖屏 ${styleStr} 漫剧成片首帧，单一连续镜头，不要漫画分格，不要拼贴，不要海报排版。\n  不生成字幕、水印、logo、随机 UI 文字或乱码中文；如果需要表现屏幕信息，只使用清晰图表、进度条、红色警示图标、文件夹/按钮等无文字视觉符号。\n  手部只做简单可信姿势，脸部不夸张变形，背景人物如无必要必须虚化且不抢主角。\n\nStyle: ${styleStr}, Korean manhwa, cinematic lighting, high quality, consistent character design, stable environment identity`
   return enhanced
+}
+
+function selectReferenceImageUrls(characterUrls: string[], sceneUrls: string[]): string[] {
+  const ordered = [
+    ...characterUrls.slice(0, 2),
+    ...sceneUrls.slice(0, 2),
+    ...characterUrls.slice(2),
+    ...sceneUrls.slice(2),
+  ]
+  const unique: string[] = []
+  const seen = new Set<string>()
+  for (const url of ordered) {
+    if (!url || seen.has(url)) continue
+    seen.add(url)
+    unique.push(url)
+    if (unique.length >= 4) break
+  }
+  return unique
 }
 
 /**
@@ -298,7 +350,7 @@ export async function handleShotImages(taskId: string): Promise<void> {
     const aspectRatio = (project.aspectRatio || '9:16') as '9:16'
     const style = project.artStyle || '韩漫'
     const numOutputs = 4
-    const baseNegative = 'ugly, deformed, bad anatomy, bad proportions, low quality, blurry, pixelated, distorted face, extra fingers, missing fingers, asymmetric eyes, watermark, text, logo'
+    const baseNegative = 'ugly, deformed, bad anatomy, bad proportions, low quality, blurry, pixelated, distorted face, identity change, different hairstyle, different outfit, inconsistent background, unstable room layout, extra people, extra fingers, missing fingers, asymmetric eyes, bad hands, warped body, split screen, comic panel grid, poster layout, watermark, text, logo, random UI text, garbled Chinese characters'
 
     const allResults: Array<{ shotId: string; shotNo: number; images: unknown[] }> = []
 
@@ -321,7 +373,18 @@ export async function handleShotImages(taskId: string): Promise<void> {
       const imgPrompt = shot.imagePrompts[0]
       const basePrompt = imgPrompt?.enPrompt || imgPrompt?.zhPrompt || shot.action || ''
 
-      const prompt = buildEnhancedPrompt(basePrompt, shot.characters, style, charAppearanceByName)
+      const prompt = buildEnhancedPrompt(basePrompt, {
+        shotNo: shot.shotNo,
+        shotName: shot.shotName,
+        characters: shot.characters,
+        action: shot.action,
+        details: shot.details,
+        camera: shot.camera,
+        visual: shot.visual,
+        location: shot.location,
+        sceneTime: shot.sceneTime,
+        emotion: shot.emotion,
+      }, style, charAppearanceByName, shot.scene)
       const negative = (imgPrompt?.negativePrompt || baseNegative)
 
       const references = matchReferences(shot.characters, {
@@ -364,10 +427,7 @@ export async function handleShotImages(taskId: string): Promise<void> {
         }))
       )).filter((url): url is string => !!url)
 
-      const referenceImageUrls = [
-        ...sceneReferenceUrls.slice(0, 2),
-        ...characterReferenceUrls,
-      ].slice(0, 4)
+      const referenceImageUrls = selectReferenceImageUrls(characterReferenceUrls, sceneReferenceUrls)
 
       if (referenceImageUrls.length > 0) {
         genReq.referenceImages = referenceImageUrls

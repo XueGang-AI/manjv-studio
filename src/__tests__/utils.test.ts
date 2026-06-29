@@ -5,11 +5,15 @@ describe('镜头时长工具', () => {
   it('按 Seedance 1.5 模型把单镜头限制到 12 秒', () => {
     expect(getMaxShotDuration('doubao-seedance-1-5-pro-251215')).toBe(12)
     expect(snapShotDuration(15, 'doubao-seedance-1-5-pro-251215')).toBe(12)
+    expect(getMaxShotDuration('doubao-seedance-1.5-pro')).toBe(12)
+    expect(snapShotDuration(15, 'doubao-seedance-1.5-pro')).toBe(12)
   })
 
   it('按 Seedance 2.0 模型允许单镜头 15 秒', () => {
     expect(getMaxShotDuration('doubao-seedance-2-0-260128')).toBe(15)
     expect(snapShotDuration(15, 'doubao-seedance-2-0-260128')).toBe(15)
+    expect(getMaxShotDuration('doubao-seedance-2.0')).toBe(15)
+    expect(snapShotDuration(15, 'doubao-seedance-2.0')).toBe(15)
   })
 
   it('把 60 秒分镜归一化为连续时间轴，且每镜头不超过 12 秒', () => {

@@ -22,6 +22,19 @@ export interface ShotVideosInput {
   episodeId: string
 }
 
+type ShotVideoPromptContext = {
+  shotNo: number
+  shotName?: string | null
+  action?: string | null
+  details?: string | null
+  camera?: unknown
+  visual?: unknown
+  emotion?: string | null
+  location?: string | null
+  sceneTime?: string | null
+  dialogue?: string | null
+}
+
 /** 异步视频任务轮询间隔 (ms) */
 const REMOTE_POLL_INTERVAL = 10_000
 /** 异步视频任务轮询最大等待时间 (ms) — 30 分钟 */
@@ -151,14 +164,48 @@ export async function handleShotVideos(taskId: string): Promise<void> {
       const referenceImageUrls = await resolveStructuredReferenceImagesForModel(inheritedReferenceImages, 4)
       const sentReferenceImageUrls = inputImageUrl ? [] : referenceImageUrls
 
+      const motionStrength = normalizeMotionStrength(
+        (vidPrompt?.motionStrength as 'low' | 'medium' | 'high') || 'medium',
+        {
+          shotNo: shot.shotNo,
+          shotName: shot.shotName,
+          action: shot.action,
+          details: shot.details,
+          camera: shot.camera,
+          visual: shot.visual,
+          emotion: shot.emotion,
+          location: shot.location,
+          sceneTime: shot.sceneTime,
+          dialogue: shot.dialogue,
+        },
+      )
+      prompt = buildSeedanceConsistencyPrompt(prompt, {
+        shotNo: shot.shotNo,
+        shotName: shot.shotName,
+        action: shot.action,
+        details: shot.details,
+        camera: shot.camera,
+        visual: shot.visual,
+        emotion: shot.emotion,
+        location: shot.location,
+        sceneTime: shot.sceneTime,
+        dialogue: shot.dialogue,
+      }, duration, motionStrength)
+
+      const negativePrompt = [
+        vidPrompt?.negativePrompt,
+        'identity change, face morphing, different hairstyle, different outfit, age change, unstable background, room layout change, camera cut, scene jump, extra main character, warped hands, bad fingers, body distortion, flickering, fake subtitles, garbled Chinese text, watermark, logo',
+      ].filter(Boolean).join(', ')
+
       const genReq: VideoGenerationRequest = {
         taskType: 'image_to_video',
         prompt,
+        negativePrompt,
         inputImage: inputImageUrl,
         referenceImages: sentReferenceImageUrls,
         duration,
         aspectRatio,
-        motionStrength: (vidPrompt?.motionStrength as 'low' | 'medium' | 'high') || 'medium',
+        motionStrength,
         fps: 24,
         voiceText: (shot.dialogue as string) || undefined,
         generateAudio: true,
@@ -369,4 +416,59 @@ export async function handleShotVideos(taskId: string): Promise<void> {
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function buildSeedanceConsistencyPrompt(
+  basePrompt: string,
+  shot: ShotVideoPromptContext,
+  duration: number,
+  motionStrength: 'low' | 'medium' | 'high',
+): string {
+  const cameraText = typeof shot.camera === 'object' && shot.camera ? JSON.stringify(shot.camera) : ''
+  const visualText = typeof shot.visual === 'object' && shot.visual ? JSON.stringify(shot.visual) : ''
+  const storyAction = shot.action || shot.details || basePrompt
+  const dialogue = shot.dialogue ? `对白/旁白只表达为自然口型或音频，不要生成屏幕字幕：${shot.dialogue}` : '无屏幕字幕。'
+
+  return [
+    basePrompt,
+    '',
+    '[Seedance 一致性硬约束]',
+    'Use the input image as the exact first frame and the only visual anchor. Preserve the same character identity, face shape, hairstyle, outfit, accessories, body proportions, lighting, color palette, and environment layout for the entire clip.',
+    'Do not change the character into another person. Do not change hair, clothes, age, face, room structure, desk/screen positions, or background props. Do not add new main characters.',
+    'No cutaway, no scene transition, no camera jump, no comic panels, no poster layout. Keep one continuous shot.',
+    'Do not create readable on-screen text, fake subtitles, garbled Chinese characters, watermarks, or logos. If a screen is visible, show abstract UI blocks, warning icons, charts, or progress bars only.',
+    '',
+    '[镜头动作]',
+    `镜头 #${shot.shotNo}${shot.shotName ? `：${shot.shotName}` : ''}，时长 ${duration}s，动作强度 ${motionStrength}。`,
+    `地点：${[shot.location, shot.sceneTime].filter(Boolean).join(' · ') || '延续首帧场景'}。`,
+    `动作：${storyAction}。情绪：${shot.emotion || '克制、清晰'}。`,
+    `镜头：${cameraText || 'very subtle push-in or stable handheld micro motion'}。视觉：${visualText || 'stable cinematic manhwa frame'}。`,
+    dialogue,
+    'Motion should be subtle and readable: slight head turn, eye movement, breathing, hand movement, screen glow, gentle camera push-in. Avoid large body motion that changes anatomy.',
+  ].join('\n')
+}
+
+function normalizeMotionStrength(
+  requested: 'low' | 'medium' | 'high',
+  shot: ShotVideoPromptContext,
+): 'low' | 'medium' | 'high' {
+  const text = [
+    shot.shotName,
+    shot.action,
+    shot.details,
+    shot.emotion,
+    shot.location,
+    shot.sceneTime,
+    typeof shot.camera === 'object' && shot.camera ? JSON.stringify(shot.camera) : '',
+  ].filter(Boolean).join(' ')
+
+  if (/特写|近景|凝视|盯着|看屏幕|思考|对话|会议|汇报|投屏|证据|暂停按钮/.test(text)) {
+    return 'low'
+  }
+
+  if (requested === 'high' && !/奔跑|追逐|打斗|爆炸|冲撞|摔倒|逃离/.test(text)) {
+    return 'medium'
+  }
+
+  return requested
 }

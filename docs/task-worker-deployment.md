@@ -71,7 +71,8 @@ npm run dev:all      # 同时启动 Next.js + Worker（Ctrl+C 同时终止）
 ### 配置
 
 ```env
-REDIS_URL=redis://localhost:6379
+REDIS_URL=redis://127.0.0.1:16379
+REDIS_KEY_PREFIX=manjv_studio:
 ```
 
 不设置 `REDIS_URL` 或 Redis 不可用时，系统自动降级到 DB 轮询，无需额外配置。
@@ -108,13 +109,14 @@ Redis 断开后，所有连接自动重连，无需重启 Web 或 Worker 进程�
 ### 必需
 
 ```env
-DATABASE_URL=postgresql://user:pass@host:5432/dbname
+DATABASE_URL=postgresql://user:pass@127.0.0.1:15432/manjv_studio?schema=public
 ```
 
 ### 推荐
 
 ```env
-REDIS_URL=redis://localhost:6379
+REDIS_URL=redis://127.0.0.1:16379
+REDIS_KEY_PREFIX=manjv_studio:
 ```
 
 ### Worker 可选
@@ -218,7 +220,7 @@ Worker 收到 SIGTERM/SIGINT 后：
 ### 综合健康端点
 
 ```bash
-curl http://localhost:3000/api/worker/health
+curl http://localhost:3100/api/worker/health
 ```
 
 返回示例：

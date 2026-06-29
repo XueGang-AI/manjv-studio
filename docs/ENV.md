@@ -6,10 +6,11 @@
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| `DATABASE_URL` | PostgreSQL 连接串 | `postgresql://xuegang@localhost:5432/manjv_studio?schema=public` |
-| `REDIS_URL` | Redis 连接串；不可用时 SSE 降级 DB 轮询 | `redis://localhost:6379` |
+| `DATABASE_URL` | PostgreSQL 连接串 | `postgresql://xuegang@127.0.0.1:15432/manjv_studio?schema=public` |
+| `REDIS_URL` | Redis 连接串；不可用时 SSE 降级 DB 轮询 | `redis://127.0.0.1:16379` |
+| `REDIS_KEY_PREFIX` | 共享 Redis 的 key / channel 前缀 | `manjv_studio:` |
 | `NODE_ENV` | 运行环境 | `development` |
-| `NEXT_PUBLIC_APP_URL` | 前端访问地址 | `http://localhost:3000` |
+| `NEXT_PUBLIC_APP_URL` | 前端访问地址 | `http://localhost:3100` |
 
 ## 模型模式
 
@@ -29,14 +30,14 @@
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| `ARK_API_BASE_URL` | Ark API 地址 | `https://ark.cn-beijing.volces.com/api/v3` |
+| `ARK_API_BASE_URL` | Ark API 地址配置基准；运行请求前会规范化为 `/api/plan/v3` 前缀 | `https://ark.cn-beijing.volces.com/api/plan` |
 | `ARK_API_KEY` | Ark API Key | 必填 |
-| `ARK_TEXT_MODEL` | 文本模型 | `doubao-seed-character-251128` |
-| `ARK_IMAGE_MODEL` | 图片模型 | `doubao-seedream-5-0-260128` |
-| `ARK_VIDEO_MODEL` | 视频模型 | `doubao-seedance-2-0-260128` |
+| `ARK_TEXT_MODEL` | 文本模型 | `doubao-seed-2.0-pro` |
+| `ARK_IMAGE_MODEL` | 图片模型 | `doubao-seedream-5.0-lite` |
+| `ARK_VIDEO_MODEL` | 视频模型；Medium Agent Plan 默认使用 Seedance 1.5 Pro | `doubao-seedance-1.5-pro` |
 | `ARK_VIDEO_RESOLUTION` | 视频分辨率 | `720p` |
 
-文本模型走 OpenAI 兼容 `/chat/completions`；图片和视频走 Ark 专用接口。视频模型为异步任务，创建后由 Worker 轮询。
+文本模型走 OpenAI 兼容 `/chat/completions`；图片和视频走 Ark 专用接口。视频模型为异步任务，创建后由 Worker 轮询。配置中使用 `https://ark.cn-beijing.volces.com/api/plan`，代码会在实际请求前规范化为 `https://ark.cn-beijing.volces.com/api/plan/v3`，因此脚本和运行时不要再硬编码旧的普通 `/api/v3` 默认值。Seedance 2.0 是高套餐/开通后可选能力，当前 Medium Agent Plan 下不可作为默认视频模型。
 
 ## Worker
 
@@ -54,7 +55,7 @@ Worker 是独立进程，入口已主动加载 `.env`。生产部署需要单独
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
 | `UPLOAD_DIR` | 本地上传与生成产物目录 | `./uploads` |
-| `PUBLIC_ASSET_BASE_URL` | 公共资源访问前缀 | `http://localhost:3000/assets` |
+| `PUBLIC_ASSET_BASE_URL` | 公共资源访问前缀 | `http://localhost:3100/assets` |
 | `FFMPEG_PATH` | FFmpeg 可执行文件路径 | `ffmpeg` |
 | `FFPROBE_PATH` | ffprobe 可执行文件路径 | `ffprobe` |
 

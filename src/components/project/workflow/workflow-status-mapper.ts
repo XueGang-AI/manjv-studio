@@ -82,8 +82,8 @@ export interface WorkflowStepDef {
 }
 
 /**
- * 构建项目工作流步骤定义（8 步，顺序固定）。
- * 路由与原 StepNavigator 完全一致，不修改业务顺序。
+ * 构建项目工作流步骤定义（9 步，顺序固定）。
+ * 路由沿用项目工作台约定，场景参考图作为独立前置步骤。
  */
 export function buildWorkflowSteps(projectId: string, episodeId = '1'): WorkflowStepDef[] {
   const base = `/projects/${projectId}`
@@ -130,6 +130,14 @@ export function buildWorkflowSteps(projectId: string, episodeId = '1'): Workflow
       unlockStatus: 'CHARACTER_IMAGE_CONFIRMED',
       generatingStatus: 'STORYBOARD_GENERATING',
       matchPath: (p) => p.includes('storyboard'),
+    },
+    {
+      id: 'scene-references',
+      label: '场景参考图',
+      href: `${episodeBase}/scene-references`,
+      confirmStatus: 'SHOT_IMAGE_GENERATING',
+      unlockStatus: 'STORYBOARD_CONFIRMED',
+      matchPath: (p) => p.includes('scene-references'),
     },
     {
       id: 'shot-images',
@@ -181,6 +189,8 @@ export interface MapWorkflowOptions {
    * 传入的 stepId 必须存在于步骤定义中，否则忽略。
    */
   errorStepId?: string
+  /** 由任务状态或页面上下文派生的步骤状态覆盖。 */
+  statusOverrides?: Partial<Record<string, WorkflowStatus>>
 }
 
 /**
@@ -219,14 +229,17 @@ export function mapWorkflowSteps(
   return preliminary.map((b, i) => {
     const { step, completed, locked } = b
     const isCurrent = step.matchPath(pathname)
+    const statusOverride = options.statusOverrides?.[step.id]
 
     let status: WorkflowStatus
-    if (completed) {
-      status = 'completed'
-    } else if (options.errorStepId && step.id === options.errorStepId) {
+    if (options.errorStepId && step.id === options.errorStepId) {
       // error 优先于 locked/generating/active：
       // failed 任务证明该步曾被触达，需用户处理，即使"逻辑上"尚未解锁。
       status = 'error'
+    } else if (statusOverride) {
+      status = statusOverride
+    } else if (completed) {
+      status = 'completed'
     } else if (locked) {
       status = 'locked'
     } else if (step.generatingStatus && currentStatus === step.generatingStatus) {

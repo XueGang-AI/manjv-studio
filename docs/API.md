@@ -1,6 +1,6 @@
 # API 文档
 
-Base URL: `http://localhost:3000/api`
+Base URL: `http://localhost:3100/api`
 
 所有接口统一返回：
 

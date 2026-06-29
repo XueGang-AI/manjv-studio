@@ -6,9 +6,18 @@
 import 'dotenv/config'
 import fs from 'fs'
 import { execSync } from 'child_process'
+import {
+  DEFAULT_ARK_API_BASE_URL,
+  DEFAULT_ARK_IMAGE_MODEL,
+  DEFAULT_ARK_TEXT_MODEL,
+  DEFAULT_ARK_VIDEO_MODEL,
+  normalizeArkBaseUrl,
+} from '../src/server/model-adapters/model-config'
 
-const BASE = process.env.E2E_BASE_URL || 'http://localhost:3000'
-const VID_BASE = process.env.ARK_API_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3'
+const BASE = process.env.E2E_BASE_URL || 'http://localhost:3100'
+const VID_BASE = normalizeArkBaseUrl(
+  process.env.ARK_VIDEO_API_BASE_URL || process.env.ARK_API_BASE_URL || DEFAULT_ARK_API_BASE_URL
+)
 const VID_KEY = process.env.ARK_API_KEY || ''
 
 const log = (msg: string) => console.log(`\x1b[36m[PROTO]\x1b[0m ${msg}`)
@@ -133,9 +142,9 @@ async function downloadFile(url: string, localPath: string): Promise<string> {
 
 async function main() {
   console.log('\n🎬 真实 API 15s 短视频原型生成\n')
-  console.log(`Text model:  ${process.env.ARK_TEXT_MODEL || 'doubao-seed-character-251128'}`)
-  console.log(`Image model: ${process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5-0-260128'}`)
-  console.log(`Video model: ${process.env.ARK_VIDEO_MODEL || 'doubao-seedance-2-0-260128'}`)
+  console.log(`Text model:  ${process.env.ARK_TEXT_MODEL || DEFAULT_ARK_TEXT_MODEL}`)
+  console.log(`Image model: ${process.env.ARK_IMAGE_MODEL || DEFAULT_ARK_IMAGE_MODEL}`)
+  console.log(`Video model: ${process.env.ARK_VIDEO_MODEL || DEFAULT_ARK_VIDEO_MODEL}`)
   console.log()
 
   const s: State = {

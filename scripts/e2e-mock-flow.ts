@@ -6,7 +6,7 @@
 import { execSync } from 'child_process'
 import fs from 'fs'
 
-const BASE = process.env.E2E_BASE_URL || 'http://localhost:3000'
+const BASE = process.env.E2E_BASE_URL || 'http://localhost:3100'
 
 const log = (msg: string) => console.log(`\x1b[36m[E2E]\x1b[0m ${msg}`)
 const ok = (msg: string) => console.log(`\x1b[32m✅ ${msg}\x1b[0m`)

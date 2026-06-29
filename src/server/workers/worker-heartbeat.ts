@@ -2,7 +2,7 @@
 // Worker Heartbeat — 进程存活心跳
 // ============================================
 //
-// Worker 每 10 秒写 Redis key `worker:heartbeat:<workerId>`，
+// Worker 每 10 秒写 Redis key `{REDIS_KEY_PREFIX}worker:heartbeat:<workerId>`，
 // TTL 30 秒。Health API 读取 heartbeat 判断 Worker 进程存活。
 //
 // 安全约束：
@@ -13,8 +13,9 @@
 // task-events 的 isRedisAvailable 可用于检查 Publisher 侧的 Redis 状态，
 // 但 heartbeat 使用独立的 Redis 连接，不依赖 task-events 的连接状态。
 
-/** Heartbeat Redis key 前缀 */
-const HEARTBEAT_KEY_PREFIX = 'worker:heartbeat:'
+/** Heartbeat Redis key 命名空间 */
+const HEARTBEAT_KEY_NAMESPACE = 'worker:heartbeat:'
+const DEFAULT_REDIS_KEY_PREFIX = 'manjv_studio:'
 /** Heartbeat 写入间隔 ms */
 const HEARTBEAT_INTERVAL = 10_000
 /** Heartbeat TTL ms（必须是 interval 的 2-3 倍，容忍 2-3 次写入失败） */
@@ -23,6 +24,18 @@ const HEARTBEAT_TTL = 30_000
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null
 let redisClient: import('ioredis').Redis | null = null
 let redisInitPromise: Promise<import('ioredis').Redis | null> | null = null
+
+function redisKeyPrefix(): string {
+  return process.env.REDIS_KEY_PREFIX || DEFAULT_REDIS_KEY_PREFIX
+}
+
+function heartbeatKey(workerId: string): string {
+  return `${redisKeyPrefix()}${HEARTBEAT_KEY_NAMESPACE}${workerId}`
+}
+
+function heartbeatKeyPattern(): string {
+  return `${redisKeyPrefix()}${HEARTBEAT_KEY_NAMESPACE}*`
+}
 
 export interface WorkerHeartbeatData {
   /** Worker 标识 */
@@ -110,7 +123,7 @@ async function writeHeartbeat(workerId: string, status: 'running' | 'shutting_do
       updatedAt: new Date().toISOString(),
     }
 
-    const key = `${HEARTBEAT_KEY_PREFIX}${workerId}`
+    const key = heartbeatKey(workerId)
     await redis.set(key, JSON.stringify(data), 'PX', HEARTBEAT_TTL)
   } catch {
     // 写入失败不影响 Worker 运行
@@ -124,7 +137,7 @@ async function deleteHeartbeat(workerId: string): Promise<void> {
   try {
     const redis = await getHeartbeatRedis()
     if (!redis) return
-    await redis.del(`${HEARTBEAT_KEY_PREFIX}${workerId}`)
+    await redis.del(heartbeatKey(workerId))
   } catch {
     // 删除失败不影响
   }
@@ -187,7 +200,7 @@ export async function getWorkerHeartbeat(workerId: string): Promise<WorkerHeartb
     const redis = await getHeartbeatRedis()
     if (!redis) return null
 
-    const data = await redis.get(`${HEARTBEAT_KEY_PREFIX}${workerId}`)
+    const data = await redis.get(heartbeatKey(workerId))
     if (!data) return null
 
     return JSON.parse(data) as WorkerHeartbeatData
@@ -204,7 +217,7 @@ export async function getAllWorkerHeartbeats(): Promise<WorkerHeartbeatData[]> {
     const redis = await getHeartbeatRedis()
     if (!redis) return []
 
-    const keys = await redis.keys(`${HEARTBEAT_KEY_PREFIX}*`)
+    const keys = await redis.keys(heartbeatKeyPattern())
     if (keys.length === 0) return []
 
     const values = await redis.mget(...keys)
@@ -246,7 +259,7 @@ export async function checkWorkerHealth(): Promise<{
 
     try {
       await client.connect()
-      const keys = await client.keys(`${HEARTBEAT_KEY_PREFIX}*`)
+      const keys = await client.keys(heartbeatKeyPattern())
 
       if (keys.length === 0) {
         return { status: 'unknown', workers: [], note: 'No worker heartbeats found' }

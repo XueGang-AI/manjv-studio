@@ -13,6 +13,7 @@ import {
   getArkBaseUrl,
   getArkImageModel,
   getArkTextModel,
+  getArkVideoBaseUrl,
   getArkVideoModel,
   shouldUseMockModel,
 } from './model-config'
@@ -50,7 +51,7 @@ export class AdapterFactory {
     return new ArkVideoAdapter({
       model: getArkVideoModel(),
       apiKey: getArkApiKey(),
-      baseUrl: getArkBaseUrl(),
+      baseUrl: getArkVideoBaseUrl(),
     })
   }
 }

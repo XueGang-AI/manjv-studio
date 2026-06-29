@@ -10,6 +10,8 @@
 # - Ctrl+C 同时终止两个进程
 # - 任一子进程异常退出时终止另一个
 
+WEB_PORT="${PORT:-3100}"
+
 # 清理函数
 cleanup() {
   echo ""
@@ -33,14 +35,14 @@ cleanup() {
 trap cleanup SIGINT SIGTERM EXIT
 
 # 启动 Worker
-npx tsx src/server/workers/task.worker.ts &
+npm run worker &
 WORKER_PID=$!
 echo "[dev:all] Worker PID: $WORKER_PID"
 
 # 启动 Web
-npx next dev &
+npx next dev -p "$WEB_PORT" &
 WEB_PID=$!
-echo "[dev:all] Web PID: $WEB_PID"
+echo "[dev:all] Web PID: $WEB_PID (port=$WEB_PORT)"
 
 # 等待子进程
 while true; do

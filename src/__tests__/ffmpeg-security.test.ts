@@ -59,7 +59,7 @@ describe('validateRemoteUrl', () => {
   })
 
   it('rejects localhost', () => {
-    const result = validateRemoteUrl('http://localhost:3000/video.mp4')
+    const result = validateRemoteUrl('http://localhost:3100/video.mp4')
     expect(result.valid).toBe(false)
     if (!result.valid) expect(result.reason).toContain('内网')
   })

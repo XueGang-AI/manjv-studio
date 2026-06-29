@@ -2,10 +2,10 @@
 
 AI 漫剧全流程生产平台 —— 从故事方案到成片 MP4，面向中国短视频平台（抖音/快手）的自动化创作流水线。
 
-固定使用 Ark / 豆包真实模型链路，开发测试可切换 Mock，8 步工作流全部实现：
+固定使用 Ark / 豆包真实模型链路，开发测试可切换 Mock，9 步工作流全部实现：
 
 ```
-创建项目 → 故事方案 → 角色设定 → 角色图 → 分镜脚本 → 分镜图 → 视频片段 → FFmpeg 成片 MP4
+创建项目 → 故事方案 → 角色设定 → 角色图 → 分镜脚本 → 场景参考图 → 分镜图 → 视频片段 → FFmpeg 成片 MP4
 ```
 
 ## 技术栈
@@ -67,7 +67,7 @@ pending → running → success
 ```bash
 cp .env.example .env            # 填写 AI Provider 凭证；演示可设 USE_MOCK_MODEL=true
 docker compose up -d --build    # 构建并后台启动
-open http://localhost:3000
+open http://localhost:3100
 
 docker compose logs -f web      # 查看启动 / 初始化日志
 docker compose down -v          # 停止并清除数据（删除卷）
@@ -81,11 +81,12 @@ docker compose down -v          # 停止并清除数据（删除卷）
 #### 前置依赖
 
 ```bash
-brew install postgresql@16 redis ffmpeg
-brew services start postgresql@16
-brew services start redis
-createdb manjv_studio
+brew install ffmpeg
+pg_isready -h 127.0.0.1 -p 15432 -d manjv_studio
+redis-cli -h 127.0.0.1 -p 16379 ping
 ```
+
+本地开发默认使用通用 PostgreSQL / Redis 服务：`127.0.0.1:15432/manjv_studio`、`127.0.0.1:16379`，不再默认占用本机标准数据库与缓存端口。
 
 ### 安装与初始化
 
@@ -125,6 +126,8 @@ npm run test:e2e              # Mock 全流程 E2E（22 步）
 npm run test:e2e:real         # 真实 AI API 最小闭环
 ```
 
+已验收的真实 API 基线：`2026-06-28` 使用当前 Medium Agent Plan 默认视频模型 `doubao-seedance-1.5-pro` 完成 90 秒《古城最后一盏花灯》MP4 质检并由 QA 判定可接受通过。最终视频产物路径为 `uploads/final_videos/86e9a74a-d85f-4712-9fbe-619358ef74e0_ep1_1782644453931.mp4`；该媒体文件属于生成产物，不纳入 Git 提交。
+
 AI Provider 连通性探针：
 
 ```bash
@@ -155,9 +158,9 @@ adapterFactory.getVideoAdapter(provider)  // IVideoAdapter
 src/
 ├── app/                      # Next.js App Router
 │   ├── api/                  # API Routes
-│   ├── projects/             # 项目工作台页面（8 步工作流）
+│   ├── projects/             # 项目工作台页面（9 步工作流）
 │   └── preview/              # 视觉实验页面（非生产路由）
-├── components/               # UI 组件（layout / project / ui / shot-* / storyboard / final-preview）
+├── components/               # UI 组件（layout / project / ui / scene-references / shot-* / storyboard / final-preview）
 ├── hooks/                    # React Hooks
 ├── lib/                      # utils / prisma client / validators
 └── server/

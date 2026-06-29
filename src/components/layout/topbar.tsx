@@ -19,6 +19,7 @@ const BREADCRUMB_LABELS: Record<string, string> = {
   'character-images': '角色图',
   episodes: '剧集',
   storyboard: '分镜脚本',
+  'scene-references': '场景参考图',
   'shot-images': '分镜图',
   'shot-videos': '视频片段',
   'final-preview': '成片预览',
