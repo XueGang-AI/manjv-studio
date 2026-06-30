@@ -74,7 +74,7 @@ export default function ProjectDetailLayout({
         statusOverrides={statusOverrides}
       />
       <WorkflowShell>
-        <WorkflowShell.Main className="p-6 bg-[var(--bg-base)]">
+        <WorkflowShell.Main className="bg-[var(--bg-base)]">
           {children}
         </WorkflowShell.Main>
         {/* RightPanel slot reserved for future contextual panels. */}
