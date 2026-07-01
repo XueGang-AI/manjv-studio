@@ -14,6 +14,7 @@ AI 漫剧全流程生产平台 —— 从故事方案到成片 MP4，面向中�
 - **Prisma 7** + PostgreSQL 16（任务状态唯一真相源）
 - **Redis**（ioredis，Pub/Sub 事件通知层，可选，不可用时降级 DB 轮询）
 - **FFmpeg 8**（视频合成，libx264 + aac）
+- **MediaStorage**（本地开发 local-fs；生产推荐 Aliyun OSS 私有桶 + 动态签名 URL）
 - **Vitest**（单元测试）
 
 ## 系统架构
@@ -29,6 +30,7 @@ Next.js Web 进程（API Routes + Pages）
 Worker 进程（独立，task.worker.ts）
   ↕ AI Adapters（Ark / Mock）
   ↕ FFmpeg（视频合成）
+  ↕ MediaStorage（图片 / 视频片段 / 成片 / 发布包）
 ```
 
 ### 关键设计
@@ -38,6 +40,7 @@ Worker 进程（独立，task.worker.ts）
 - **Worker 独立进程**：不经过 Next.js，入口 `src/server/workers/task.worker.ts`，独立加载 `.env`。
 - **原子任务领取**：`claimTask` 使用条件更新 `WHERE status IN ('pending','retrying')`，PostgreSQL 行级锁防止多 Worker 重复执行同一任务。
 - **崩溃恢复**：Worker 启动时及运行期间每 30 秒扫描超时的 `running`/`retrying` 任务，重置为 `pending` 重试或标记 `failed`。
+- **媒体对象键是长期身份**：图片、视频片段、最终成片和发布包都写入媒体存储，数据库保存 `storageObjectKey` / `storageProvider`；API 读取时再生成可访问 URL，生产不依赖供应商临时 URL 或本地 `uploads/final_videos`。
 
 ## 任务链路
 
@@ -82,11 +85,11 @@ docker compose down -v          # 停止并清除数据（删除卷）
 
 ```bash
 brew install ffmpeg
-pg_isready -h 127.0.0.1 -p 15432 -d manjv_studio
+pg_isready -h 127.0.0.1 -p 15432 -U manjv -d manjv_studio
 redis-cli -h 127.0.0.1 -p 16379 ping
 ```
 
-本地开发默认使用通用 PostgreSQL / Redis 服务：`127.0.0.1:15432/manjv_studio`、`127.0.0.1:16379`，不再默认占用本机标准数据库与缓存端口。
+本地开发默认使用通用 PostgreSQL / Redis 服务：`postgresql://manjv:manjv@127.0.0.1:15432/manjv_studio?schema=public`、`redis://127.0.0.1:16379`，不再默认占用本机标准数据库与缓存端口。
 
 ### 安装与初始化
 
@@ -123,14 +126,15 @@ npm run worker                # Worker（需单独进程）
 ```bash
 npm test                      # 单元测试（Vitest）
 npm run test:e2e              # Mock 全流程 E2E（22 步）
-npm run test:e2e:real         # 真实 AI API 最小闭环
+npm run test:e2e:real         # 真实 AI API + OSS 全链路：《蓝染球衣上场那天》
+npm run test:e2e:real:minimal # 真实 AI API 最小探针（本地 probes 输出，不作为上线验收）
 ```
 
-已验收的真实 API 基线：`2026-06-28` 使用当前 Medium Agent Plan 默认视频模型 `doubao-seedance-1.5-pro` 完成 90 秒《古城最后一盏花灯》MP4 质检并由 QA 判定可接受通过。最终视频产物路径为 `uploads/final_videos/86e9a74a-d85f-4712-9fbe-619358ef74e0_ep1_1782644453931.mp4`；该媒体文件属于生成产物，不纳入 Git 提交。
+当前真实全链路验收脚本使用《蓝染球衣上场那天》，会检查角色图、场景参考图、分镜图、视频片段、最终成片和发布包均写入 `MEDIA_STORAGE_PROVIDER=aliyun-oss`，并拒绝 `/api/local-media`、`/api/media` 或 `uploads/` 形式的正式产物 URL。`2026-06-28` 的《古城最后一盏花灯》本地路径记录仅作为历史基线保留，不代表当前存储架构。
 
 ### Seedance 1.5 Pro 质量优化闭环
 
-当前视频模型继续使用 `doubao-seedance-1.5-pro`。分镜图和视频片段页面支持问题驱动重跑，问题类型包括人物漂移、发型不一致、场景漂移、手机伪 UI/文字、动作过大/手部变形、音频问题和其他。重跑请求会把 `issueTypes`、`fixNote`、`motionStrength`、`clientRequestId` 传给后端，后端统一叠加共享角色/场景/Seedance 一致性约束。
+当前视频模型继续使用 `doubao-seedance-1-5-pro-251215`。分镜图和视频片段页面支持问题驱动重跑，问题类型包括人物漂移、发型不一致、场景漂移、手机伪 UI/文字、动作过大/手部变形、音频问题和其他。重跑请求会把 `issueTypes`、`fixNote`、`motionStrength`、`clientRequestId` 传给后端，后端统一叠加共享角色/场景/Seedance 一致性约束。
 
 单镜头分镜图重生成采用候选追加模式：新图生成成功后追加候选，不删除旧确认图；用户确认候选后才替换确认态。视频重生成继续保留旧视频候选，并通过 `clientRequestId` 避免网络重试重复提交远端任务。
 

@@ -288,6 +288,9 @@ export default function FinalPreviewPage() {
                 <Info label="时长" value={formatDuration(latest.duration)} />
                 <Info label="分辨率/画幅" value={latest.aspectRatio || '-'} />
                 <Info label="帧率" value={latest.fps ? `${latest.fps} fps` : '-'} />
+                <Info label="存储 Provider" value={latest.storageProvider || '-'} />
+                <Info label="OSS Object" value={latest.storageObjectKey || '-'} />
+                <Info label="发布包" value={latest.assetPackageObjectKey || '未生成'} />
                 <Info label="生成时间" value={formatDateTime(latest.createdAt)} />
               </div>
             ) : (
@@ -298,7 +301,7 @@ export default function FinalPreviewPage() {
           <Panel title="导出发布包">
             <div className="space-y-3">
               <div className="rounded-[var(--radius-md)] bg-[var(--bg-panel)] p-3 text-xs leading-5 text-[var(--color-text-muted)]">
-                发布包会生成 manifest，并写回最新 FinalVideo 的 `assetPackageUrl`。
+                发布包会生成 manifest，上传到当前媒体存储，并写回最新 FinalVideo 的 `assetPackageUrl` 和 object key。
               </div>
               <Button className="w-full" variant="aurora" disabled={!latest || packaging} onClick={handleGeneratePackage} icon={packaging ? <Loader2 size={14} className="animate-spin" /> : <FileJson size={14} />}>
                 {packaging ? '生成中...' : '生成发布包'}

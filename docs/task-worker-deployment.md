@@ -364,7 +364,7 @@ Worker 作为独立进程运行，**不会自动加载 `.env`**。入口文件�
 | SCENE_REFERENCES | 原子领取 + 状态检查 + 已有场景参考图跳过 | 同步图片 API，已有 SceneImage 的场景跳过 |
 | SHOT_IMAGES | 原子领取 + 状态检查 + 已有图片跳过 | 同步图片 API，已有 ShotImage 的镜头跳过 |
 | SHOT_VIDEOS | 原子领取 + 状态检查 + `remoteTaskId` 持久化 | 异步视频 API，已有 `remoteTaskId` 的镜头跳过创建 |
-| FINAL_RENDER | 原子领取 + 状态检查 + output 检查 | FFmpeg 本地执行 |
+| FINAL_RENDER | 原子领取 + 状态检查 + output 检查 | FFmpeg 本地临时执行，成片上传媒体存储 |
 
 **SHOT_VIDEOS 幂等性**：
 - 镜头已有 ShotVideo 且带 remoteTaskId → 跳过创建，直接进入轮询

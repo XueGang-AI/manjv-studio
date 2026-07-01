@@ -1,6 +1,6 @@
 // ============================================
 // Ark Video Model Probe — Poll Task by ID
-// Model: doubao-seedance-1.5-pro
+// Model: configured Ark video model
 // Usage: npx tsx scripts/probes/poll-ark-video-task.ts --task-id <id>
 // ============================================
 import 'dotenv/config'

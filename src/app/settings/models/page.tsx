@@ -4,9 +4,9 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 
 const MODEL_CONFIGS = [
-  { name: 'doubao-seed-2.0-pro', type: 'TEXT', status: '环境变量', description: '故事分析、角色设定、分镜脚本' },
-  { name: 'doubao-seedream-5.0-lite', type: 'IMAGE', status: '环境变量', description: '角色图、场景图、分镜图' },
-  { name: 'doubao-seedance-1.5-pro', type: 'VIDEO', status: 'Medium 默认', description: '分镜图动态化和视频片段生成' },
+  { name: 'doubao-seed-2-0-pro-260215', type: 'TEXT', status: '环境变量', description: '故事分析、角色设定、分镜脚本' },
+  { name: 'doubao-seedream-5-0-260128', type: 'IMAGE', status: '环境变量', description: '角色图、场景图、分镜图' },
+  { name: 'doubao-seedance-1-5-pro-251215', type: 'VIDEO', status: 'Medium 默认', description: '分镜图动态化和视频片段生成' },
 ]
 
 export default function ModelsPage() {

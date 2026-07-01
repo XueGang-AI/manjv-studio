@@ -14,6 +14,7 @@ import { snapShotDuration } from '@/lib/utils'
 import { taskService } from '@/server/queues/task-queue.service'
 import { emitTaskEvent, taskToUpdateEvent } from '../task-events'
 import { resolveImageUrlForModel, resolveStructuredReferenceImagesForModel } from '@/server/services/media-reference-url'
+import { persistVideoFromUrl, resolveMediaReadUrl } from '@/server/services/media-persist'
 import {
   buildSeedanceConsistencyPrompt,
   buildSeedanceNegativePrompt,
@@ -330,7 +331,25 @@ export async function handleShotVideos(taskId: string): Promise<void> {
             remoteResponseJson: pollResult.response as object,
             lastPolledAt: new Date(),
           }
-          if (pollResult.videoUrl) updateData.videoUrl = pollResult.videoUrl
+          if (pollResult.videoUrl) {
+            if (video.storageObjectKey) {
+              updateData.videoUrl = await resolveMediaReadUrl(video.storageObjectKey, video.videoUrl)
+            } else {
+              try {
+                const persisted = await persistVideoFromUrl(
+                  pollResult.videoUrl,
+                  projectId,
+                  `episodes/${episodeId}/shots/${video.shotId}`,
+                )
+                updateData.videoUrl = persisted.readUrl
+                updateData.storageObjectKey = persisted.storageObjectKey
+                updateData.storageProvider = persisted.storageProvider
+                updateData.sourceVideoUrl = persisted.sourceUrl
+              } catch (persistError) {
+                throw new Error(`视频片段转存失败：${(persistError as Error).message}`)
+              }
+            }
+          }
           if (pollResult.duration) updateData.duration = pollResult.duration
 
           await prisma.shotVideo.update({
@@ -338,6 +357,9 @@ export async function handleShotVideos(taskId: string): Promise<void> {
             data: updateData,
           })
         } catch (err) {
+          if ((err as Error).message.startsWith('视频片段转存失败')) {
+            throw err
+          }
           console.error(`[worker:shot-videos] Poll failed for ${video.remoteTaskId}:`, err)
         }
       }

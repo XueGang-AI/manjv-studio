@@ -177,9 +177,9 @@ adapterFactory.getVideoAdapter(provider)  // IVideoAdapter
 
 ### Ark（火山引擎/豆包）
 
-- 文本模型 `doubao-seed-2.0-pro`：OpenAI 兼容 `/chat/completions`
-- 图片模型 `doubao-seedream-5.0-lite`
-- 视频模型 `doubao-seedance-1.5-pro`：当前 Medium Agent Plan 默认视频模型，异步任务（创建 → 轮询 → 下载），图生视频时长按 4~12s 整数约束。Seedance 2.0 是高套餐/开通后可选能力，不作为 Medium 默认值
+- 文本模型 `doubao-seed-2-0-pro-260215`：OpenAI 兼容 `/chat/completions`
+- 图片模型 `doubao-seedream-5-0-260128`
+- 视频模型 `doubao-seedance-1-5-pro-251215`：当前 Medium Agent Plan 默认视频模型，异步任务（创建 → 轮询 → 下载），图生视频时长按 4~12s 整数约束。Seedance 2.0 是高套餐/开通后可选能力，不作为 Medium 默认值
 - 环境变量：`ARK_API_KEY` + `ARK_API_BASE_URL`（默认配置为 `https://ark.cn-beijing.volces.com/api/plan`，运行请求前规范化为 `/api/plan/v3` 前缀）
 - Ark 视频 URL 位于轮询响应 `content.video_url` 路径
 

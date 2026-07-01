@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { toLocalMediaReadUrl } from '@/server/services/local-media-read-url'
+import { resolveMediaReadUrl } from '@/server/services/media-persist'
 
 export async function GET(
   request: NextRequest,
@@ -24,10 +25,17 @@ export async function GET(
     })
 
     const allVideosConfirmed = shots.every(s => s.shotVideos.length > 0)
-    const readableFinalVideos = finalVideos.map(video => ({
+    const readableFinalVideos = await Promise.all(finalVideos.map(async video => ({
       ...video,
-      videoUrl: toLocalMediaReadUrl(video.videoUrl),
-    }))
+      videoUrl: await resolveMediaReadUrl(
+        video.storageObjectKey,
+        toLocalMediaReadUrl(video.videoUrl) || video.videoUrl,
+      ),
+      assetPackageUrl: await resolveMediaReadUrl(
+        video.assetPackageObjectKey,
+        toLocalMediaReadUrl(video.assetPackageUrl) || video.assetPackageUrl,
+      ),
+    })))
 
     return NextResponse.json({
       success: true,

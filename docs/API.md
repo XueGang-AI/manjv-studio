@@ -100,7 +100,20 @@ Base URL: `http://localhost:3100/api`
 | 自动化 | POST | `/api/projects/:id/episodes/:episodeId/automation/auto-confirm` | QC 达标后自动确认当前阶段产物 |
 | 发布包 | POST | `/api/projects/:id/episodes/:episodeId/release-package/generate` | 生成发布 manifest 并写回成片记录 |
 
-视频远端任务检查会轮询 Ark Video API，并更新 `remoteStatus`、`remoteProgress`、`videoUrl` 等字段。
+视频远端任务检查会轮询 Ark Video API，并更新 `remoteStatus`、`remoteProgress` 等字段。远端返回 `videoUrl` 后，服务端会先转存到当前媒体存储，再写入 `videoUrl`（read URL）、`storageObjectKey`、`storageProvider` 和 `sourceVideoUrl`；已有 `storageObjectKey` 的记录会在读取时动态刷新 read URL。
+
+### 媒体存储字段
+
+角色图、场景参考图、分镜图、视频片段和最终成片都使用统一媒体存储语义：
+
+| 字段 | 说明 |
+|------|------|
+| `storageObjectKey` | 正式产物长期对象键，如 `projects/<projectId>/videos/...` 或 `projects/<projectId>/final_videos/...` |
+| `storageProvider` | 写入 Provider，生产应为 `aliyun-oss` |
+| `sourceUrl` / `sourceVideoUrl` | 脱敏后的供应商来源 URL，仅用于审计，不作为读取入口 |
+| `imageUrl` / `videoUrl` | API 当前响应的 read URL；OSS/S3 场景下通常是短期签名 URL |
+
+`GET /api/projects/:id/episodes/:episodeId/final-preview` 返回的 `latest` 会额外包含 `assetPackageUrl`、`assetPackageObjectKey`、`assetPackageStorageProvider`。发布包生成接口返回 `packageUrl`、`packageObjectKey`、`packageStorageProvider`。
 
 ### 单镜头问题驱动重生成
 
@@ -153,4 +166,4 @@ QC issue 输出保留旧字段 `level/field/problem/suggestion`，并补充 `sho
 |------|------|------|
 | GET | `/api/health` | Web/API 健康检查 |
 | GET | `/api/worker/health` | DB、Redis、Worker heartbeat 综合健康检查 |
-| GET | `/api/media/:key...` | 本地媒体访问代理 |
+| GET | `/api/media/:key...` | local-fs 开发媒体读取代理；生产 OSS/S3 不依赖该路由 |

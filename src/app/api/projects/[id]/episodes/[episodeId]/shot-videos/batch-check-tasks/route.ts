@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { adapterFactory } from '@/server/model-adapters/adapter.factory'
+import { persistVideoFromUrl, resolveMediaReadUrl } from '@/server/services/media-persist'
 
 /**
  * POST — 批量轮询该 episode 下所有未完成的远端视频任务
@@ -81,7 +82,21 @@ export async function POST(
             remoteResponseJson: pollResult.response as object,
             lastPolledAt: new Date(),
           }
-          if (pollResult.videoUrl) updateData.videoUrl = pollResult.videoUrl
+          if (pollResult.videoUrl) {
+            if (video.storageObjectKey) {
+              updateData.videoUrl = await resolveMediaReadUrl(video.storageObjectKey, video.videoUrl)
+            } else {
+              const persisted = await persistVideoFromUrl(
+                pollResult.videoUrl,
+                projectId,
+                `episodes/${episodeId}/shots/${video.shotId}`,
+              )
+              updateData.videoUrl = persisted.readUrl
+              updateData.storageObjectKey = persisted.storageObjectKey
+              updateData.storageProvider = persisted.storageProvider
+              updateData.sourceVideoUrl = persisted.sourceUrl
+            }
+          }
           if (pollResult.duration) updateData.duration = pollResult.duration
 
           await prisma.shotVideo.update({
@@ -96,7 +111,7 @@ export async function POST(
             videoId: video.id,
             remoteTaskId: video.remoteTaskId!,
             remoteStatus: pollResult.status,
-            videoUrl: pollResult.videoUrl || video.videoUrl || undefined,
+            videoUrl: String(updateData.videoUrl || video.videoUrl || ''),
             duration: pollResult.duration || video.duration || undefined,
             error: pollResult.error || undefined,
           }

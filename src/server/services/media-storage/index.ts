@@ -20,6 +20,7 @@ import { getMediaStorage } from './factory'
 import { resolveLocalPath as localResolveLocalPath } from './local-storage'
 import type {
   IngestFromUrlInput,
+  PutObjectInput,
   CreateReadUrlInput,
   StoredMedia,
   MediaObjectMetadata,
@@ -35,6 +36,9 @@ export const mediaStorage = {
   },
   ingestFromUrl(input: IngestFromUrlInput): Promise<StoredMedia> {
     return getMediaStorage().ingestFromUrl(input)
+  },
+  putObject(input: PutObjectInput): Promise<StoredMedia> {
+    return getMediaStorage().putObject(input)
   },
   createReadUrl(input: CreateReadUrlInput): Promise<string> {
     return getMediaStorage().createReadUrl(input)

@@ -1,6 +1,6 @@
 // ============================================
 // Ark Image Model Probe
-// Tests doubao-seedream-5.0-lite via
+// Tests the configured Ark image model via
 // POST https://ark.cn-beijing.volces.com/api/plan/v3/images/generations
 // ============================================
 import { config } from 'dotenv'

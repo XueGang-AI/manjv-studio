@@ -17,7 +17,7 @@ const PROMPTS_DIR = path.resolve(__dirname, '../prompts')
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({
-    connectionString: process.env.DATABASE_URL || 'postgresql://xuegang@127.0.0.1:15432/manjv_studio?schema=public',
+    connectionString: process.env.DATABASE_URL || 'postgresql://manjv:manjv@127.0.0.1:15432/manjv_studio?schema=public',
   }),
 })
 

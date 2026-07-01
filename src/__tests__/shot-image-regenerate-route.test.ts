@@ -23,7 +23,7 @@ vi.mock('@/server/model-adapters/adapter.factory', () => ({
   },
 }))
 vi.mock('@/server/model-adapters/model-config', () => ({
-  getRuntimeModelName: vi.fn(() => 'doubao-seedream-5.0-lite'),
+  getRuntimeModelName: vi.fn(() => 'doubao-seedream-5-0-260128'),
 }))
 vi.mock('@/server/services/media-reference-url', () => ({
   resolveImageUrlForModel: mocks.resolveImageUrlForModel,

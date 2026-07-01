@@ -13,7 +13,7 @@ import {
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({
-    connectionString: process.env.DATABASE_URL || 'postgresql://xuegang@127.0.0.1:15432/manjv_studio?schema=public',
+    connectionString: process.env.DATABASE_URL || 'postgresql://manjv:manjv@127.0.0.1:15432/manjv_studio?schema=public',
   }),
 })
 
@@ -86,7 +86,14 @@ async function main() {
   for (const config of modelConfigs) {
     await prisma.modelConfig.upsert({
       where: { name: config.name },
-      update: {},
+      update: {
+        type: config.type,
+        modelName: config.modelName,
+        baseUrl: config.baseUrl,
+        isDefault: config.isDefault,
+        params: config.params,
+        ...(process.env.ARK_API_KEY ? { apiKey: process.env.ARK_API_KEY } : {}),
+      },
       create: config,
     })
   }

@@ -8,9 +8,9 @@ export type RuntimeModelType = 'text' | 'image' | 'video'
 export const RUNTIME_MODEL_PROVIDER: RuntimeModelProvider = 'ark'
 
 export const DEFAULT_ARK_API_BASE_URL = 'https://ark.cn-beijing.volces.com/api/plan'
-export const DEFAULT_ARK_TEXT_MODEL = 'doubao-seed-2.0-pro'
-export const DEFAULT_ARK_IMAGE_MODEL = 'doubao-seedream-5.0-lite'
-export const DEFAULT_ARK_VIDEO_MODEL = 'doubao-seedance-1.5-pro'
+export const DEFAULT_ARK_TEXT_MODEL = 'doubao-seed-2-0-pro-260215'
+export const DEFAULT_ARK_IMAGE_MODEL = 'doubao-seedream-5-0-260128'
+export const DEFAULT_ARK_VIDEO_MODEL = 'doubao-seedance-1-5-pro-251215'
 
 export function shouldUseMockModel(): boolean {
   if (process.env.NODE_ENV === 'production' && process.env.USE_MOCK_MODEL === 'true') {

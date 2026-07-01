@@ -2,7 +2,7 @@
  * objectKey 生成（Phase 7）
  * --------------------------------------------
  * 对象键不使用用户原始文件名，避免冲突和路径问题。
- * 结构：projects/{projectId}/{mediaType}/{keyPrefix?}/{uuid}.{ext}
+ * 结构：projects/{projectId}/{images|videos|final_videos|release_packages}/{keyPrefix?}/{uuid}.{ext}
  */
 import crypto from 'crypto'
 import type { MediaType } from './types'
@@ -17,8 +17,19 @@ export function extFromContentType(contentType: string, mediaType: MediaType): s
     'video/mp4': 'mp4',
     'video/quicktime': 'mov',
     'video/webm': 'webm',
+    'application/json': 'json',
   }
-  return map[base] || (mediaType === 'image' ? 'jpg' : 'mp4')
+  if (map[base]) return map[base]
+  if (mediaType === 'image') return 'jpg'
+  if (mediaType === 'release_package') return 'json'
+  return 'mp4'
+}
+
+function rootForMediaType(mediaType: MediaType): string {
+  if (mediaType === 'image') return 'images'
+  if (mediaType === 'final_video') return 'final_videos'
+  if (mediaType === 'release_package') return 'release_packages'
+  return 'videos'
 }
 
 export function generateObjectKey(
@@ -29,5 +40,5 @@ export function generateObjectKey(
 ): string {
   const uuid = crypto.randomBytes(8).toString('hex')
   const prefix = keyPrefix ? `${keyPrefix.replace(/^\/+|\/+$/g, '')}/` : ''
-  return `projects/${projectId}/${mediaType === 'image' ? 'images' : 'videos'}/${prefix}${uuid}.${ext}`
+  return `projects/${projectId}/${rootForMediaType(mediaType)}/${prefix}${uuid}.${ext}`
 }

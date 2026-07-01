@@ -20,6 +20,7 @@
 import { mediaStorage, type MediaType } from './media-storage'
 import { sanitizeSourceUrl } from './media-storage/sanitize-url'
 import { getPersistPolicy, isProduction } from './media-storage/persist-policy'
+import fs from 'fs'
 
 export interface PersistOutcome {
   storageObjectKey: string | null
@@ -154,6 +155,7 @@ export async function persistVideoFromUrl(
   sourceUrl: string,
   projectId: string,
   keyPrefix?: string,
+  mediaType: Extract<MediaType, 'video' | 'final_video'> = 'video',
 ): Promise<PersistImageResult> {
   if (!sourceUrl) {
     throw new Error('来源视频 URL 为空')
@@ -161,7 +163,7 @@ export async function persistVideoFromUrl(
   const stored = await mediaStorage.ingestFromUrl({
     sourceUrl,
     projectId,
-    mediaType: 'video' as MediaType,
+    mediaType,
     keyPrefix,
   })
   const readUrl = await mediaStorage.createReadUrl({
@@ -172,6 +174,65 @@ export async function persistVideoFromUrl(
     storageObjectKey: stored.objectKey,
     storageProvider: stored.provider,
     sourceUrl: sanitizeSourceUrl(sourceUrl),
+    readUrl,
+    checksum: stored.checksum,
+    sizeBytes: stored.sizeBytes,
+    contentType: stored.contentType,
+  }
+}
+
+export async function persistLocalVideoFile(
+  filePath: string,
+  projectId: string,
+  keyPrefix?: string,
+  mediaType: Extract<MediaType, 'video' | 'final_video'> = 'video',
+): Promise<PersistImageResult> {
+  if (!filePath || !fs.existsSync(filePath)) {
+    throw new Error('本地视频文件不存在，无法转存')
+  }
+  const buffer = fs.readFileSync(filePath)
+  const stored = await mediaStorage.putObject({
+    body: buffer,
+    projectId,
+    mediaType,
+    contentType: 'video/mp4',
+    keyPrefix,
+  })
+  const readUrl = await mediaStorage.createReadUrl({
+    objectKey: stored.objectKey,
+    expiresInSeconds: 86400,
+  })
+  return {
+    storageObjectKey: stored.objectKey,
+    storageProvider: stored.provider,
+    sourceUrl: '',
+    readUrl,
+    checksum: stored.checksum,
+    sizeBytes: stored.sizeBytes,
+    contentType: stored.contentType,
+  }
+}
+
+export async function persistReleasePackageJson(
+  json: string,
+  projectId: string,
+  keyPrefix?: string,
+): Promise<PersistImageResult> {
+  const stored = await mediaStorage.putObject({
+    body: Buffer.from(json, 'utf-8'),
+    projectId,
+    mediaType: 'release_package',
+    contentType: 'application/json',
+    keyPrefix,
+  })
+  const readUrl = await mediaStorage.createReadUrl({
+    objectKey: stored.objectKey,
+    expiresInSeconds: 86400,
+  })
+  return {
+    storageObjectKey: stored.objectKey,
+    storageProvider: stored.provider,
+    sourceUrl: '',
     readUrl,
     checksum: stored.checksum,
     sizeBytes: stored.sizeBytes,

@@ -264,7 +264,7 @@ async function main() {
 
   // 16. FFmpeg merge (single shot = normalize to 1080x1920)
   log('Step 16: FFmpeg 合成最终 MP4')
-  const finalDir = 'uploads/final_videos'
+  const finalDir = 'uploads/probes/final_videos'
   fs.mkdirSync(finalDir, { recursive: true })
   s.finalVideoPath = `${finalDir}/real-final-${s.projectId}.mp4`
 

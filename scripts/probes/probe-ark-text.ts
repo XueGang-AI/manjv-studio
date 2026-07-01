@@ -1,6 +1,6 @@
 // ============================================
 // Ark Text Model Probe
-// Tests doubao-seed-2.0-pro via
+// Tests the configured Ark text model via
 // POST https://ark.cn-beijing.volces.com/api/plan/v3/chat/completions
 // ============================================
 import { config } from 'dotenv'

@@ -1,6 +1,6 @@
 // ============================================
 // ArkVideoAdapter — 豆包 Seedance 视频适配器
-// Model: doubao-seedance-1.5-pro
+// Model: doubao-seedance-1-5-pro-251215
 // Create: POST {baseUrl}/contents/generations/tasks
 // Poll: GET {baseUrl}/contents/generations/tasks/{task_id}
 // Format: content_array
@@ -24,7 +24,7 @@ export interface ArkVideoAdapterOptions {
   baseUrl: string
 }
 
-const DEFAULT_MODEL = 'doubao-seedance-1.5-pro'
+const DEFAULT_MODEL = 'doubao-seedance-1-5-pro-251215'
 const DEFAULT_RESOLUTION = '720p'
 
 export class ArkVideoAdapter extends BaseVideoAdapter {

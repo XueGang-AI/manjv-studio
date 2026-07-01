@@ -41,9 +41,9 @@ afterEach(() => {
 describe('Ark 运行模型配置', () => {
   it('默认配置使用 Ark plan base URL 与新模型', () => {
     expect(DEFAULT_ARK_API_BASE_URL).toBe('https://ark.cn-beijing.volces.com/api/plan')
-    expect(DEFAULT_ARK_TEXT_MODEL).toBe('doubao-seed-2.0-pro')
-    expect(DEFAULT_ARK_IMAGE_MODEL).toBe('doubao-seedream-5.0-lite')
-    expect(DEFAULT_ARK_VIDEO_MODEL).toBe('doubao-seedance-1.5-pro')
+    expect(DEFAULT_ARK_TEXT_MODEL).toBe('doubao-seed-2-0-pro-260215')
+    expect(DEFAULT_ARK_IMAGE_MODEL).toBe('doubao-seedream-5-0-260128')
+    expect(DEFAULT_ARK_VIDEO_MODEL).toBe('doubao-seedance-1-5-pro-251215')
 
     expect(getRuntimeModelName('text')).toBe(DEFAULT_ARK_TEXT_MODEL)
     expect(getRuntimeModelName('image')).toBe(DEFAULT_ARK_IMAGE_MODEL)

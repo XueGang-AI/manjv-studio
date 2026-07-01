@@ -357,7 +357,7 @@ export default function ProjectWorkbenchPage() {
                             镜头 {selectedShot?.shot?.shotNo || '-'}　{selectedShot?.shot?.shotName || '分镜审查'}
                           </div>
                           <div className="mt-1 text-[11px] text-[var(--color-text-muted)]">
-                            {selectedShot?.shot?.startTime ?? '-'}s - {selectedShot?.shot?.endTime ?? '-'}s · {confirmedImage?.modelName || 'doubao-seedream-5.0-lite'}
+                            {selectedShot?.shot?.startTime ?? '-'}s - {selectedShot?.shot?.endTime ?? '-'}s · {confirmedImage?.modelName || 'doubao-seedream-5-0-260128'}
                           </div>
                         </div>
                         <StatusPill status={selectedShot?.confirmed ? 'success' : 'pending'} label={selectedShot?.confirmed ? '已确认' : '待确认'} />

@@ -1,5 +1,5 @@
 // ============================================
-// Ark Seedream 5.0 Image Adapter (doubao-seedream-5.0-lite)
+// Ark Seedream 5.0 Image Adapter (doubao-seedream-5-0-260128)
 // POST {baseUrl}/images/generations
 // ============================================
 import { BaseImageAdapter, createAdapterError } from '../base.adapter'

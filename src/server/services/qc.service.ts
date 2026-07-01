@@ -4,7 +4,16 @@
 import fs from 'fs'
 import path from 'path'
 import prisma from '@/lib/prisma'
-import { FFMPEG_PATH, UPLOAD_DIR, probeVideo, spawnSafe } from './ffmpeg-utils'
+import {
+  FFMPEG_PATH,
+  UPLOAD_DIR,
+  createTaskTempDir,
+  downloadVideo,
+  probeVideo,
+  safeCleanupDir,
+  spawnSafe,
+} from './ffmpeg-utils'
+import { resolveMediaReadUrl } from './media-persist'
 
 type JsonValue = import('@prisma/client').Prisma.InputJsonValue
 
@@ -415,7 +424,31 @@ export class QCService {
     if (!fv.duration) issues.push({ level: 'medium', field: 'duration', problem: '缺少时长信息', suggestion: '', issueType: 'final_duration_missing', severity: 'P2', recommendedAction: 'rerender_final' })
     if (!fv.fps) issues.push({ level: 'low', field: 'fps', problem: '缺少帧率信息', suggestion: '' })
 
-    const localPath = this.resolveLocalFinalVideoPath(fv.videoUrl)
+    let localPath = this.resolveLocalFinalVideoPath(fv.videoUrl)
+    const tempRoot = path.join(UPLOAD_DIR, 'qc_temp')
+    let tempDir: string | null = null
+    if (!localPath && fv.storageObjectKey) {
+      try {
+        fs.mkdirSync(tempRoot, { recursive: true })
+        tempDir = createTaskTempDir(tempRoot)
+        const readUrl = await resolveMediaReadUrl(fv.storageObjectKey, fv.videoUrl)
+        if (readUrl && /^https?:\/\//i.test(readUrl)) {
+          const downloaded = await downloadVideo(readUrl, tempDir)
+          localPath = downloaded.localPath
+        }
+      } catch (error) {
+        issues.push({
+          level: 'high',
+          field: 'final_video.media',
+          problem: `成片存储对象无法下载校验：${(error as Error).message}`,
+          suggestion: '检查 OSS 对象、签名 URL 和存储配置后重新运行 QC',
+          issueType: 'final_media_unavailable',
+          severity: 'P1',
+          recommendedAction: 'rerender_final',
+        })
+      }
+    }
+    try {
     if (localPath) {
       const media = await this.analyzeFinalVideoMedia(localPath)
       if (!media.valid) {
@@ -473,6 +506,9 @@ export class QCService {
           recommendedAction: 'rerun_shot_video',
         })
       }
+    }
+    } finally {
+      if (tempDir) safeCleanupDir(tempDir, tempRoot)
     }
 
     const score = Math.max(0, 100 - issues.filter(i=>i.level==='high').length*20 - issues.filter(i=>i.level==='medium').length*10)

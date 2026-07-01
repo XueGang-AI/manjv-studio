@@ -1,6 +1,6 @@
 // ============================================
 // Ark Video Model Probe — Create Video Tasks
-// Model: doubao-seedance-1.5-pro
+// Model: configured Ark video model
 // Usage: npx tsx scripts/probes/probe-ark-video.ts
 // ============================================
 import 'dotenv/config'
