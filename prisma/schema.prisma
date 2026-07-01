@@ -427,19 +427,24 @@ model VoiceScript {
 // 最终成片
 // ============================================
 model FinalVideo {
-  id              String   @id @default(uuid())
-  episodeId       String   @map("episode_id")
-  projectId       String   @map("project_id")
-  videoUrl        String?  @map("video_url")
-  coverUrl        String?  @map("cover_url")
-  subtitleUrl     String?  @map("subtitle_url")
-  assetPackageUrl String?  @map("asset_package_url")
-  duration        Float?
-  aspectRatio     String?  @map("aspect_ratio")
-  fps             Int?
-  status          String   @default("PENDING")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id                          String   @id @default(uuid())
+  episodeId                   String   @map("episode_id")
+  projectId                   String   @map("project_id")
+  videoUrl                    String?  @map("video_url")
+  storageObjectKey            String?  @map("storage_object_key")
+  storageProvider             String?  @map("storage_provider")
+  sourceVideoUrl              String?  @map("source_video_url")
+  coverUrl                    String?  @map("cover_url")
+  subtitleUrl                 String?  @map("subtitle_url")
+  assetPackageUrl             String?  @map("asset_package_url")
+  assetPackageObjectKey       String?  @map("asset_package_object_key")
+  assetPackageStorageProvider String?  @map("asset_package_storage_provider")
+  duration                    Float?
+  aspectRatio                 String?  @map("aspect_ratio")
+  fps                         Int?
+  status                      String   @default("PENDING")
+  createdAt                   DateTime @default(now()) @map("created_at")
+  updatedAt                   DateTime @updatedAt @map("updated_at")
 
   episode Episode @relation(fields: [episodeId], references: [id])
   project Project @relation(fields: [projectId], references: [id])

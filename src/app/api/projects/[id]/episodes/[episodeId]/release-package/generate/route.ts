@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import fs from 'fs'
-import path from 'path'
 import prisma from '@/lib/prisma'
+import { persistReleasePackageJson, resolveMediaReadUrl } from '@/server/services/media-persist'
 
 /**
  * POST /api/projects/:id/episodes/:episodeId/release-package/generate
@@ -37,11 +36,6 @@ export async function POST(
       },
     })
 
-    const outputDir = path.join(process.cwd(), 'uploads', 'release_packages')
-    fs.mkdirSync(outputDir, { recursive: true })
-    const fileName = `${projectId}_ep${episode.episodeNo || 1}_release_manifest.json`
-    const packagePath = path.join(outputDir, fileName)
-
     const manifest = {
       generatedAt: new Date().toISOString(),
       project: {
@@ -59,33 +53,51 @@ export async function POST(
       },
       finalVideo: {
         id: finalVideo.id,
-        videoUrl: finalVideo.videoUrl,
+        videoUrl: await resolveMediaReadUrl(finalVideo.storageObjectKey, finalVideo.videoUrl),
+        storageObjectKey: finalVideo.storageObjectKey,
+        storageProvider: finalVideo.storageProvider,
         duration: finalVideo.duration,
         aspectRatio: finalVideo.aspectRatio,
         fps: finalVideo.fps,
       },
-      shots: shots.map(shot => ({
+      shots: await Promise.all(shots.map(async shot => ({
         id: shot.id,
         shotNo: shot.shotNo,
         shotName: shot.shotName,
         duration: (shot.endTime || 0) - (shot.startTime || 0),
-        imageUrl: shot.shotImages[0]?.imageUrl || null,
-        videoUrl: shot.shotVideos[0]?.videoUrl || null,
-      })),
+        imageStorageObjectKey: shot.shotImages[0]?.storageObjectKey || null,
+        videoStorageObjectKey: shot.shotVideos[0]?.storageObjectKey || null,
+        imageUrl: shot.shotImages[0]
+          ? await resolveMediaReadUrl(shot.shotImages[0].storageObjectKey, shot.shotImages[0].imageUrl)
+          : null,
+        videoUrl: shot.shotVideos[0]
+          ? await resolveMediaReadUrl(shot.shotVideos[0].storageObjectKey, shot.shotVideos[0].videoUrl)
+          : null,
+      }))),
     }
 
-    fs.writeFileSync(packagePath, JSON.stringify(manifest, null, 2), 'utf-8')
+    const persistedPackage = await persistReleasePackageJson(
+      JSON.stringify(manifest, null, 2),
+      projectId,
+      `episodes/${episodeId}`,
+    )
 
     const updated = await prisma.finalVideo.update({
       where: { id: finalVideo.id },
-      data: { assetPackageUrl: packagePath },
+      data: {
+        assetPackageUrl: persistedPackage.readUrl,
+        assetPackageObjectKey: persistedPackage.storageObjectKey,
+        assetPackageStorageProvider: persistedPackage.storageProvider,
+      },
     })
 
     return NextResponse.json({
       success: true,
       data: {
         finalVideoId: updated.id,
-        packageUrl: packagePath,
+        packageUrl: persistedPackage.readUrl,
+        packageObjectKey: persistedPackage.storageObjectKey,
+        packageStorageProvider: persistedPackage.storageProvider,
         manifest,
       },
     })

@@ -4,13 +4,19 @@
 import 'dotenv/config'
 import fs from 'fs'
 import { execSync } from 'child_process'
+import {
+  DEFAULT_ARK_API_BASE_URL,
+  DEFAULT_ARK_IMAGE_MODEL,
+  DEFAULT_ARK_VIDEO_MODEL,
+  normalizeArkBaseUrl,
+} from '../src/server/model-adapters/model-config'
 // Node 24 has built-in fetch
 
-const BASE = process.env.E2E_BASE_URL || 'http://localhost:3000'
+const BASE = process.env.E2E_BASE_URL || 'http://localhost:3100'
 const API_KEY = process.env.ARK_API_KEY || ''
-const ARK_BASE = process.env.ARK_API_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3'
-const IMG_MODEL = process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5-0-260128'
-const VID_MODEL = process.env.ARK_VIDEO_MODEL || 'doubao-seedance-2-0-260128'
+const ARK_BASE = normalizeArkBaseUrl(process.env.ARK_API_BASE_URL || DEFAULT_ARK_API_BASE_URL)
+const IMG_MODEL = process.env.ARK_IMAGE_MODEL || DEFAULT_ARK_IMAGE_MODEL
+const VID_MODEL = process.env.ARK_VIDEO_MODEL || DEFAULT_ARK_VIDEO_MODEL
 
 const log = (msg: string) => console.log(`\x1b[36m[REAL]\x1b[0m ${msg}`)
 const ok = (msg: string) => console.log(`\x1b[32m✅ ${msg}\x1b[0m`)
@@ -258,7 +264,7 @@ async function main() {
 
   // 16. FFmpeg merge (single shot = normalize to 1080x1920)
   log('Step 16: FFmpeg 合成最终 MP4')
-  const finalDir = 'uploads/final_videos'
+  const finalDir = 'uploads/probes/final_videos'
   fs.mkdirSync(finalDir, { recursive: true })
   s.finalVideoPath = `${finalDir}/real-final-${s.projectId}.mp4`
 

@@ -11,8 +11,14 @@ export interface ShotVideoBrief {
 export interface FinalVideoItem {
   id: string
   videoUrl: string | null
+  storageObjectKey: string | null
+  storageProvider: string | null
+  sourceVideoUrl: string | null
   coverUrl: string | null
   subtitleUrl: string | null
+  assetPackageUrl: string | null
+  assetPackageObjectKey: string | null
+  assetPackageStorageProvider: string | null
   duration: number | null
   aspectRatio: string | null
   fps: number | null

@@ -37,6 +37,8 @@ import { createAliyunOssStorageProvider } from '../server/services/media-storage
 import { readAliyunOssConfig } from '../server/services/media-storage/aliyun-oss-config'
 import { sanitizeSourceUrl, hasSensitiveQueryParams } from '../server/services/media-storage/sanitize-url'
 import { getPersistPolicy } from '../server/services/media-storage/persist-policy'
+import { extFromContentType, generateObjectKey } from '../server/services/media-storage/object-key'
+import { allowedTypesFor, maxBytesFor } from '../server/services/media-storage/types'
 
 const baseConfig = {
   bucket: 'manjv-studio',
@@ -186,5 +188,19 @@ describe('持久化策略', () => {
     process.env.NODE_ENV = 'production'
     expect(getPersistPolicy().allowEphemeralFallback).toBe(false)
     process.env.NODE_ENV = orig
+  })
+})
+
+describe('成片与发布包对象键', () => {
+  it('final_video 使用 final_videos 根目录', () => {
+    const key = generateObjectKey('project-1', 'final_video', 'mp4', 'episodes/episode-1')
+    expect(key).toMatch(/^projects\/project-1\/final_videos\/episodes\/episode-1\/[a-f0-9]{16}\.mp4$/)
+  })
+
+  it('release_package 使用 release_packages 根目录和 json 类型', () => {
+    const key = generateObjectKey('project-1', 'release_package', extFromContentType('application/json', 'release_package'), 'episodes/episode-1')
+    expect(key).toMatch(/^projects\/project-1\/release_packages\/episodes\/episode-1\/[a-f0-9]{16}\.json$/)
+    expect(allowedTypesFor('release_package').has('application/json')).toBe(true)
+    expect(maxBytesFor('release_package')).toBe(10 * 1024 * 1024)
   })
 })

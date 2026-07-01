@@ -2,10 +2,10 @@
 
 AI 漫剧全流程生产平台 —— 从故事方案到成片 MP4，面向中国短视频平台（抖音/快手）的自动化创作流水线。
 
-固定使用 Ark / 豆包真实模型链路，开发测试可切换 Mock，8 步工作流全部实现：
+固定使用 Ark / 豆包真实模型链路，开发测试可切换 Mock，9 步工作流全部实现：
 
 ```
-创建项目 → 故事方案 → 角色设定 → 角色图 → 分镜脚本 → 分镜图 → 视频片段 → FFmpeg 成片 MP4
+创建项目 → 故事方案 → 角色设定 → 角色图 → 分镜脚本 → 场景参考图 → 分镜图 → 视频片段 → FFmpeg 成片 MP4
 ```
 
 ## 技术栈
@@ -14,6 +14,7 @@ AI 漫剧全流程生产平台 —— 从故事方案到成片 MP4，面向中�
 - **Prisma 7** + PostgreSQL 16（任务状态唯一真相源）
 - **Redis**（ioredis，Pub/Sub 事件通知层，可选，不可用时降级 DB 轮询）
 - **FFmpeg 8**（视频合成，libx264 + aac）
+- **MediaStorage**（本地开发 local-fs；生产推荐 Aliyun OSS 私有桶 + 动态签名 URL）
 - **Vitest**（单元测试）
 
 ## 系统架构
@@ -29,6 +30,7 @@ Next.js Web 进程（API Routes + Pages）
 Worker 进程（独立，task.worker.ts）
   ↕ AI Adapters（Ark / Mock）
   ↕ FFmpeg（视频合成）
+  ↕ MediaStorage（图片 / 视频片段 / 成片 / 发布包）
 ```
 
 ### 关键设计
@@ -38,6 +40,7 @@ Worker 进程（独立，task.worker.ts）
 - **Worker 独立进程**：不经过 Next.js，入口 `src/server/workers/task.worker.ts`，独立加载 `.env`。
 - **原子任务领取**：`claimTask` 使用条件更新 `WHERE status IN ('pending','retrying')`，PostgreSQL 行级锁防止多 Worker 重复执行同一任务。
 - **崩溃恢复**：Worker 启动时及运行期间每 30 秒扫描超时的 `running`/`retrying` 任务，重置为 `pending` 重试或标记 `failed`。
+- **媒体对象键是长期身份**：图片、视频片段、最终成片和发布包都写入媒体存储，数据库保存 `storageObjectKey` / `storageProvider`；API 读取时再生成可访问 URL，生产不依赖供应商临时 URL 或本地 `uploads/final_videos`。
 
 ## 任务链路
 
@@ -67,7 +70,7 @@ pending → running → success
 ```bash
 cp .env.example .env            # 填写 AI Provider 凭证；演示可设 USE_MOCK_MODEL=true
 docker compose up -d --build    # 构建并后台启动
-open http://localhost:3000
+open http://localhost:3100
 
 docker compose logs -f web      # 查看启动 / 初始化日志
 docker compose down -v          # 停止并清除数据（删除卷）
@@ -81,11 +84,12 @@ docker compose down -v          # 停止并清除数据（删除卷）
 #### 前置依赖
 
 ```bash
-brew install postgresql@16 redis ffmpeg
-brew services start postgresql@16
-brew services start redis
-createdb manjv_studio
+brew install ffmpeg
+pg_isready -h 127.0.0.1 -p 15432 -U manjv -d manjv_studio
+redis-cli -h 127.0.0.1 -p 16379 ping
 ```
+
+本地开发默认使用通用 PostgreSQL / Redis 服务：`postgresql://manjv:manjv@127.0.0.1:15432/manjv_studio?schema=public`、`redis://127.0.0.1:16379`，不再默认占用本机标准数据库与缓存端口。
 
 ### 安装与初始化
 
@@ -122,8 +126,19 @@ npm run worker                # Worker（需单独进程）
 ```bash
 npm test                      # 单元测试（Vitest）
 npm run test:e2e              # Mock 全流程 E2E（22 步）
-npm run test:e2e:real         # 真实 AI API 最小闭环
+npm run test:e2e:real         # 真实 AI API + OSS 全链路：《蓝染球衣上场那天》
+npm run test:e2e:real:minimal # 真实 AI API 最小探针（本地 probes 输出，不作为上线验收）
 ```
+
+当前真实全链路验收脚本使用《蓝染球衣上场那天》，会检查角色图、场景参考图、分镜图、视频片段、最终成片和发布包均写入 `MEDIA_STORAGE_PROVIDER=aliyun-oss`，并拒绝 `/api/local-media`、`/api/media` 或 `uploads/` 形式的正式产物 URL。`2026-06-28` 的《古城最后一盏花灯》本地路径记录仅作为历史基线保留，不代表当前存储架构。
+
+### Seedance 1.5 Pro 质量优化闭环
+
+当前视频模型继续使用 `doubao-seedance-1-5-pro-251215`。分镜图和视频片段页面支持问题驱动重跑，问题类型包括人物漂移、发型不一致、场景漂移、手机伪 UI/文字、动作过大/手部变形、音频问题和其他。重跑请求会把 `issueTypes`、`fixNote`、`motionStrength`、`clientRequestId` 传给后端，后端统一叠加共享角色/场景/Seedance 一致性约束。
+
+单镜头分镜图重生成采用候选追加模式：新图生成成功后追加候选，不删除旧确认图；用户确认候选后才替换确认态。视频重生成继续保留旧视频候选，并通过 `clientRequestId` 避免网络重试重复提交远端任务。
+
+FFmpeg 成片阶段默认启用 loudnorm 响度归一化，保持原有两阶段输入标准化、无音频补静音和 concat/re-encode 兜底。QC 报告会输出 `issueType`、`severity`、`recommendedAction`，并检查参考图数量、手机屏幕禁用项、成片音轨、响度、黑屏和冻结风险。
 
 AI Provider 连通性探针：
 
@@ -155,9 +170,9 @@ adapterFactory.getVideoAdapter(provider)  // IVideoAdapter
 src/
 ├── app/                      # Next.js App Router
 │   ├── api/                  # API Routes
-│   ├── projects/             # 项目工作台页面（8 步工作流）
+│   ├── projects/             # 项目工作台页面（9 步工作流）
 │   └── preview/              # 视觉实验页面（非生产路由）
-├── components/               # UI 组件（layout / project / ui / shot-* / storyboard / final-preview）
+├── components/               # UI 组件（layout / project / ui / scene-references / shot-* / storyboard / final-preview）
 ├── hooks/                    # React Hooks
 ├── lib/                      # utils / prisma client / validators
 └── server/

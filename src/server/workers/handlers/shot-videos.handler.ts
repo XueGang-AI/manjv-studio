@@ -14,6 +14,12 @@ import { snapShotDuration } from '@/lib/utils'
 import { taskService } from '@/server/queues/task-queue.service'
 import { emitTaskEvent, taskToUpdateEvent } from '../task-events'
 import { resolveImageUrlForModel, resolveStructuredReferenceImagesForModel } from '@/server/services/media-reference-url'
+import { persistVideoFromUrl, resolveMediaReadUrl } from '@/server/services/media-persist'
+import {
+  buildSeedanceConsistencyPrompt,
+  buildSeedanceNegativePrompt,
+  normalizeMotionStrength,
+} from '@/server/services/shot-regeneration-quality'
 import type { VideoGenerationRequest } from '@/server/model-adapters/types'
 
 type JsonValue = import('@prisma/client').Prisma.InputJsonValue
@@ -151,14 +157,45 @@ export async function handleShotVideos(taskId: string): Promise<void> {
       const referenceImageUrls = await resolveStructuredReferenceImagesForModel(inheritedReferenceImages, 4)
       const sentReferenceImageUrls = inputImageUrl ? [] : referenceImageUrls
 
+      const motionStrength = normalizeMotionStrength(
+        (vidPrompt?.motionStrength as 'low' | 'medium' | 'high') || 'medium',
+        {
+          shotNo: shot.shotNo,
+          shotName: shot.shotName,
+          action: shot.action,
+          details: shot.details,
+          camera: shot.camera,
+          visual: shot.visual,
+          emotion: shot.emotion,
+          location: shot.location,
+          sceneTime: shot.sceneTime,
+          dialogue: shot.dialogue,
+        },
+      )
+      prompt = buildSeedanceConsistencyPrompt(prompt, {
+        shotNo: shot.shotNo,
+        shotName: shot.shotName,
+        action: shot.action,
+        details: shot.details,
+        camera: shot.camera,
+        visual: shot.visual,
+        emotion: shot.emotion,
+        location: shot.location,
+        sceneTime: shot.sceneTime,
+        dialogue: shot.dialogue,
+      }, duration, motionStrength)
+
+      const negativePrompt = buildSeedanceNegativePrompt(vidPrompt?.negativePrompt)
+
       const genReq: VideoGenerationRequest = {
         taskType: 'image_to_video',
         prompt,
+        negativePrompt,
         inputImage: inputImageUrl,
         referenceImages: sentReferenceImageUrls,
         duration,
         aspectRatio,
-        motionStrength: (vidPrompt?.motionStrength as 'low' | 'medium' | 'high') || 'medium',
+        motionStrength,
         fps: 24,
         voiceText: (shot.dialogue as string) || undefined,
         generateAudio: true,
@@ -294,7 +331,25 @@ export async function handleShotVideos(taskId: string): Promise<void> {
             remoteResponseJson: pollResult.response as object,
             lastPolledAt: new Date(),
           }
-          if (pollResult.videoUrl) updateData.videoUrl = pollResult.videoUrl
+          if (pollResult.videoUrl) {
+            if (video.storageObjectKey) {
+              updateData.videoUrl = await resolveMediaReadUrl(video.storageObjectKey, video.videoUrl)
+            } else {
+              try {
+                const persisted = await persistVideoFromUrl(
+                  pollResult.videoUrl,
+                  projectId,
+                  `episodes/${episodeId}/shots/${video.shotId}`,
+                )
+                updateData.videoUrl = persisted.readUrl
+                updateData.storageObjectKey = persisted.storageObjectKey
+                updateData.storageProvider = persisted.storageProvider
+                updateData.sourceVideoUrl = persisted.sourceUrl
+              } catch (persistError) {
+                throw new Error(`视频片段转存失败：${(persistError as Error).message}`)
+              }
+            }
+          }
           if (pollResult.duration) updateData.duration = pollResult.duration
 
           await prisma.shotVideo.update({
@@ -302,6 +357,9 @@ export async function handleShotVideos(taskId: string): Promise<void> {
             data: updateData,
           })
         } catch (err) {
+          if ((err as Error).message.startsWith('视频片段转存失败')) {
+            throw err
+          }
           console.error(`[worker:shot-videos] Poll failed for ${video.remoteTaskId}:`, err)
         }
       }

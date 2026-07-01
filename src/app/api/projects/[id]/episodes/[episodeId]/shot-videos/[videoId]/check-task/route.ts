@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { adapterFactory } from '@/server/model-adapters/adapter.factory'
+import { persistVideoFromUrl, resolveMediaReadUrl } from '@/server/services/media-persist'
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; episodeId: string; videoId: string }> }
 ) {
   try {
-    const { id: projectId, videoId } = await params
+    const { id: projectId, episodeId, videoId } = await params
 
     const video = await prisma.shotVideo.findFirst({
       where: { id: videoId, projectId },
@@ -44,7 +45,19 @@ export async function POST(
     }
 
     if (pollResult.videoUrl) {
-      updateData.videoUrl = pollResult.videoUrl
+      if (video.storageObjectKey) {
+        updateData.videoUrl = await resolveMediaReadUrl(video.storageObjectKey, video.videoUrl)
+      } else {
+        const persisted = await persistVideoFromUrl(
+          pollResult.videoUrl,
+          projectId,
+          `episodes/${episodeId}/shots/${video.shotId}`,
+        )
+        updateData.videoUrl = persisted.readUrl
+        updateData.storageObjectKey = persisted.storageObjectKey
+        updateData.storageProvider = persisted.storageProvider
+        updateData.sourceVideoUrl = persisted.sourceUrl
+      }
     }
     if (pollResult.duration) {
       updateData.duration = pollResult.duration
@@ -62,7 +75,7 @@ export async function POST(
         remoteTaskId: video.remoteTaskId,
         remoteStatus: pollResult.status,
         remoteProgress: pollResult.progress,
-        videoUrl: pollResult.videoUrl || video.videoUrl,
+        videoUrl: String(updateData.videoUrl || video.videoUrl || ''),
         duration: pollResult.duration || video.duration,
         lastPolledAt: updateData.lastPolledAt,
       },

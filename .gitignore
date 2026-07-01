@@ -55,6 +55,10 @@ yarn-error.log*
 # logs
 *.log
 
+# local agent working memory
+/agent_memory/
+/agents/
+
 # vercel
 .vercel
 

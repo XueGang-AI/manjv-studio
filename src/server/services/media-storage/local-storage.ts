@@ -159,6 +159,7 @@ export const localStorageProvider: MediaStorageProvider = {
     const contentTypeMap: Record<string, string> = {
       jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif',
       mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm',
+      json: 'application/json',
     }
     return {
       contentType: contentTypeMap[ext] || 'application/octet-stream',

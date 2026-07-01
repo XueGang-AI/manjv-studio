@@ -9,11 +9,11 @@ export default function ProjectsLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex h-screen bg-[var(--bg-base)]">
+    <div data-theme="production-workbench" className="flex h-screen overflow-hidden bg-[var(--bg-base)] text-[var(--color-text-primary)]">
       <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <TopBar />
-        <main className="flex-1 overflow-y-auto bg-[var(--bg-base)]">
+        <main className="workbench-grid-bg flex-1 overflow-y-auto bg-[var(--bg-base)]">
           {children}
         </main>
       </div>

@@ -13,7 +13,7 @@ import {
 import type { ProjectListItem } from '@/lib/types'
 
 /**
- * Map project status to workflow step index (0-7 out of 8 steps)
+ * 将项目状态映射到 9 步工作流进度。
  */
 function getStepInfo(status: string): { step: number; total: number } {
   const stepOrder = [
@@ -22,6 +22,7 @@ function getStepInfo(status: string): { step: number; total: number } {
     'CHARACTER_CONFIRMED',
     'CHARACTER_IMAGE_CONFIRMED',
     'STORYBOARD_CONFIRMED',
+    'SHOT_IMAGE_GENERATING',
     'SHOT_IMAGE_CONFIRMED',
     'SHOT_VIDEO_CONFIRMED',
     'FINAL_CONFIRMED',
@@ -42,8 +43,8 @@ function getStepInfo(status: string): { step: number; total: number } {
       }
     }
   }
-  if (status === 'FINAL_CONFIRMED' || status === 'RENDERED') step = 8
-  return { step: Math.min(step, 8), total: 8 }
+  if (status === 'FINAL_CONFIRMED' || status === 'RENDERED') step = 9
+  return { step: Math.min(step, 9), total: 9 }
 }
 
 /**

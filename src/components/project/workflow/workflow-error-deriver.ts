@@ -20,7 +20,8 @@
  * - 项目级任务（CHARACTER_IMAGES / STORYBOARD / STORY_PACKAGE / CHARACTERS）：scope = 'global'
  */
 
-import type { WorkflowStepDef } from './workflow-status-mapper'
+import type { WorkflowStatus, WorkflowStepDef } from './workflow-status-mapper'
+import { isStatusAfter } from './workflow-status-mapper'
 
 /** 任务类型 → 工作流步骤 id（以项目真实枚举为准） */
 const TASK_TYPE_TO_STEP: Record<string, string> = {
@@ -28,7 +29,7 @@ const TASK_TYPE_TO_STEP: Record<string, string> = {
   GENERATE_CHARACTERS: 'characters',
   GENERATE_CHARACTER_IMAGES: 'character-images',
   GENERATE_STORYBOARD: 'storyboard',
-  GENERATE_SCENE_REFERENCES: 'shot-images',
+  GENERATE_SCENE_REFERENCES: 'scene-references',
   GENERATE_SHOT_IMAGES: 'shot-images',
   GENERATE_SHOT_VIDEOS: 'shot-videos',
   RENDER_FINAL_VIDEO: 'final-preview',
@@ -113,4 +114,36 @@ export function deriveErrorStepId(
     if (failedSteps.has(step.id)) return step.id
   }
   return null
+}
+
+function latestTaskOfType(tasks: TaskBrief[], taskType: string, episodeId?: string): TaskBrief | null {
+  let latest: TaskBrief | null = null
+  for (const task of tasks) {
+    if (task.taskType !== taskType) continue
+    if (episodeId && task.episodeId && task.episodeId !== episodeId) continue
+    if (!latest || ts(task) > ts(latest)) latest = task
+  }
+  return latest
+}
+
+/**
+ * 从任务状态补充项目状态没有表达的步骤状态。
+ * 当前主要用于“场景参考图”：项目状态没有单独的 SCENE_REFERENCE_CONFIRMED，
+ * 因此需要通过 GENERATE_SCENE_REFERENCES 最新任务判断。
+ */
+export function deriveWorkflowStatusOverrides(
+  tasks: TaskBrief[],
+  currentStatus: string,
+  episodeId?: string,
+): Partial<Record<string, WorkflowStatus>> {
+  const overrides: Partial<Record<string, WorkflowStatus>> = {}
+  const sceneTask = latestTaskOfType(tasks, 'GENERATE_SCENE_REFERENCES', episodeId)
+
+  if (sceneTask?.status === 'success' || isStatusAfter(currentStatus, 'SHOT_IMAGE_GENERATING')) {
+    overrides['scene-references'] = 'completed'
+  } else if (sceneTask && ['pending', 'retrying', 'running'].includes(sceneTask.status)) {
+    overrides['scene-references'] = 'generating'
+  }
+
+  return overrides
 }

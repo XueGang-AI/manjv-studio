@@ -4,10 +4,10 @@
 
 ## 项目概述
 
-AI 漫剧全流程生产平台。8 步工作流已全部实现：
+AI 漫剧全流程生产平台。9 步工作流已全部实现：
 
 ```
-创建项目 → 故事方案 → 角色设定 → 角色图 → 分镜脚本 → 分镜图 → 视频片段 → FFmpeg 成片 MP4
+创建项目 → 故事方案 → 角色设定 → 角色图 → 分镜脚本 → 场景参考图 → 分镜图 → 视频片段 → FFmpeg 成片 MP4
 ```
 
 面向中国短视频平台（抖音/快手），真实生产只保留 Ark/豆包模型链路，Mock 仅用于非生产测试。
@@ -141,11 +141,11 @@ adapterFactory.getVideoAdapter(provider)  // IVideoAdapter
 
 ### 10. FFmpeg 成片
 
-`src/server/services/ffmpeg.service.ts` 使用两阶段法：先 `normalizeInput()` 将每个输入标准化到统一规格（letterbox padding 居中填充，不裁切人物；统一 H.264 / AAC 44100Hz / yuv420p / 固定帧率；无音频输入补静音音轨），再 concat（`-c copy`，失败回退 re-encode）。解决异构分辨率（如 496×864 + 1280×768）concat `exit=254` 问题。`ffmpeg-utils.ts` 提供 ffprobe 校验与安全 spawn。
+`src/server/services/ffmpeg.service.ts` 使用两阶段法：先 `normalizeInput()` 将每个输入标准化到统一规格（letterbox padding 居中填充，不裁切人物；统一 H.264 / AAC 44100Hz / yuv420p / 固定帧率；无音频输入补静音音轨），再 concat（`-c copy`，失败回退 re-encode），最后默认执行 loudnorm 响度归一化。解决异构分辨率（如 496×864 + 1280×768）concat `exit=254` 问题。`ffmpeg-utils.ts` 提供 ffprobe 校验与安全 spawn。
 
 ### 11. 自动 QC 与发布包
 
-规则 QC 由 `qcService` 执行。`/automation/auto-confirm` 在 QC 达标后自动确认角色图、分镜图、视频片段；缺少未来阶段产物时不阻断当前阶段自动确认。`/release-package/generate` 在成片完成后生成发布 manifest，并写回 `FinalVideo.assetPackageUrl`。
+规则 QC 由 `qcService` 执行。QC issue 输出 `issueType`、`severity`、`recommendedAction`，覆盖参考图数量、手机屏幕禁用项、成片音轨、响度、黑屏和冻结风险。`/automation/auto-confirm` 在 QC 达标后自动确认角色图、分镜图、视频片段；缺少未来阶段产物时不阻断当前阶段自动确认。`/release-package/generate` 在成片完成后生成发布 manifest，并写回 `FinalVideo.assetPackageUrl`。
 
 ## 不可破坏的约束
 
@@ -177,10 +177,10 @@ adapterFactory.getVideoAdapter(provider)  // IVideoAdapter
 
 ### Ark（火山引擎/豆包）
 
-- 文本模型 `doubao-seed-character-251128`：OpenAI 兼容 `/chat/completions`
+- 文本模型 `doubao-seed-2-0-pro-260215`：OpenAI 兼容 `/chat/completions`
 - 图片模型 `doubao-seedream-5-0-260128`
-- 视频模型 `doubao-seedance-2-0-260128`：异步任务（创建 → 轮询 → 下载），支持多 `image_url` 参考，时长按 4~15s 整数约束
-- 环境变量：`ARK_API_KEY` + `ARK_API_BASE_URL`（默认 `https://ark.cn-beijing.volces.com/api/v3`）
+- 视频模型 `doubao-seedance-1-5-pro-251215`：当前 Medium Agent Plan 默认视频模型，异步任务（创建 → 轮询 → 下载），图生视频时长按 4~12s 整数约束。Seedance 2.0 是高套餐/开通后可选能力，不作为 Medium 默认值
+- 环境变量：`ARK_API_KEY` + `ARK_API_BASE_URL`（默认配置为 `https://ark.cn-beijing.volces.com/api/plan`，运行请求前规范化为 `/api/plan/v3` 前缀）
 - Ark 视频 URL 位于轮询响应 `content.video_url` 路径
 
 ## 快速命令

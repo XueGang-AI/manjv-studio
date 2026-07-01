@@ -15,18 +15,20 @@ const SCENARIOS: Array<{
   pathname: string
   errorStepId?: string
 }> = [
-  { name: 'completed（步 1-7 已完成，步 8 active）', status: 'SHOT_VIDEO_CONFIRMED', pathname: '/projects/demo/episodes/1/final-preview' },
+  { name: 'completed（步 1-8 已完成，步 9 active）', status: 'SHOT_VIDEO_CONFIRMED', pathname: '/projects/demo/episodes/1/final-preview' },
   { name: 'generating（角色图生成中）', status: 'CHARACTER_IMAGE_GENERATING', pathname: '/projects/demo/character-images' },
+  { name: 'active（场景参考图待生成）', status: 'STORYBOARD_CONFIRMED', pathname: '/projects/demo/episodes/1/scene-references' },
   { name: 'generating（分镜图生成中）', status: 'SHOT_IMAGE_GENERATING', pathname: '/projects/demo/episodes/1/shot-images' },
   { name: 'generating（合成中）', status: 'RENDERING', pathname: '/projects/demo/episodes/1/final-preview' },
   { name: 'error（角色图步骤失败）', status: 'CHARACTER_CONFIRMED', pathname: '/projects/demo/character-images', errorStepId: 'character-images' },
+  { name: 'error（场景参考图步骤失败）', status: 'STORYBOARD_CONFIRMED', pathname: '/projects/demo/episodes/1/scene-references', errorStepId: 'scene-references' },
   { name: 'error（视频片段步骤失败）', status: 'SHOT_IMAGE_CONFIRMED', pathname: '/projects/demo/episodes/1/shot-videos', errorStepId: 'shot-videos' },
   { name: 'locked（DRAFT，仅步 1 可用）', status: 'DRAFT', pathname: '/projects/demo' },
 ]
 
 export default function WorkflowStatesPreviewPage() {
   const _pathname = usePathname()
-  const baseSteps = buildWorkflowSteps('demo')
+  const baseSteps = buildWorkflowSteps('demo', '1')
 
   return (
     <div className="min-h-screen bg-[var(--bg-base)] p-8 space-y-8">

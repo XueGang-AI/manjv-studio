@@ -71,7 +71,8 @@ npm run dev:all      # 同时启动 Next.js + Worker（Ctrl+C 同时终止）
 ### 配置
 
 ```env
-REDIS_URL=redis://localhost:6379
+REDIS_URL=redis://127.0.0.1:16379
+REDIS_KEY_PREFIX=manjv_studio:
 ```
 
 不设置 `REDIS_URL` 或 Redis 不可用时，系统自动降级到 DB 轮询，无需额外配置。
@@ -108,13 +109,14 @@ Redis 断开后，所有连接自动重连，无需重启 Web 或 Worker 进程�
 ### 必需
 
 ```env
-DATABASE_URL=postgresql://user:pass@host:5432/dbname
+DATABASE_URL=postgresql://user:pass@127.0.0.1:15432/manjv_studio?schema=public
 ```
 
 ### 推荐
 
 ```env
-REDIS_URL=redis://localhost:6379
+REDIS_URL=redis://127.0.0.1:16379
+REDIS_KEY_PREFIX=manjv_studio:
 ```
 
 ### Worker 可选
@@ -218,7 +220,7 @@ Worker 收到 SIGTERM/SIGINT 后：
 ### 综合健康端点
 
 ```bash
-curl http://localhost:3000/api/worker/health
+curl http://localhost:3100/api/worker/health
 ```
 
 返回示例：
@@ -288,8 +290,8 @@ Worker 在**启动时**和**运行期间每 30 秒**自动扫描超时的 `runni
 | GENERATE_STORYBOARD | 10 分钟 | Ark 文本调用，含镜头时长约束 |
 | GENERATE_SCENE_REFERENCES | 15 分钟 | Ark 图片调用，生成场景参考图 |
 | GENERATE_SHOT_IMAGES | 15 分钟 | Ark 图片调用，传入角色/场景参考 |
-| GENERATE_SHOT_VIDEOS | 35 分钟 | Seedance 2.0 远程任务创建与轮询 |
-| RENDER_FINAL_VIDEO | 10 分钟 | FFmpeg 合成 |
+| GENERATE_SHOT_VIDEOS | 35 分钟 | Seedance 1.5 Pro 远程任务创建与轮询 |
+| RENDER_FINAL_VIDEO | 10 分钟 | FFmpeg 合成与响度归一化 |
 
 超时任务处理：
 - `retryCount < maxRetries` → 重置为 `pending`，等待重新领取
@@ -362,7 +364,7 @@ Worker 作为独立进程运行，**不会自动加载 `.env`**。入口文件�
 | SCENE_REFERENCES | 原子领取 + 状态检查 + 已有场景参考图跳过 | 同步图片 API，已有 SceneImage 的场景跳过 |
 | SHOT_IMAGES | 原子领取 + 状态检查 + 已有图片跳过 | 同步图片 API，已有 ShotImage 的镜头跳过 |
 | SHOT_VIDEOS | 原子领取 + 状态检查 + `remoteTaskId` 持久化 | 异步视频 API，已有 `remoteTaskId` 的镜头跳过创建 |
-| FINAL_RENDER | 原子领取 + 状态检查 + output 检查 | FFmpeg 本地执行 |
+| FINAL_RENDER | 原子领取 + 状态检查 + output 检查 | FFmpeg 本地临时执行，成片上传媒体存储 |
 
 **SHOT_VIDEOS 幂等性**：
 - 镜头已有 ShotVideo 且带 remoteTaskId → 跳过创建，直接进入轮询

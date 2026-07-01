@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { toLocalMediaReadUrl } from '@/server/services/local-media-read-url'
+import { resolveMediaReadUrl } from '@/server/services/media-persist'
 
 export async function GET(
   request: NextRequest,
@@ -20,11 +21,14 @@ export async function GET(
       },
     })
 
-    const grouped = shots.map(shot => {
-      const videos = shot.shotVideos.map(video => ({
+    const grouped = await Promise.all(shots.map(async shot => {
+      const videos = await Promise.all(shot.shotVideos.map(async video => ({
         ...video,
-        videoUrl: toLocalMediaReadUrl(video.videoUrl),
-      }))
+        videoUrl: await resolveMediaReadUrl(
+          video.storageObjectKey,
+          toLocalMediaReadUrl(video.videoUrl) || video.videoUrl,
+        ),
+      })))
 
       return {
         shot: {
@@ -37,7 +41,7 @@ export async function GET(
         selectedVideo: videos.find(v => v.isSelected) || null,
         confirmed: videos.some(v => v.isConfirmed),
       }
-    })
+    }))
 
     const allConfirmed = grouped.length > 0 && grouped.every(g => g.confirmed)
 

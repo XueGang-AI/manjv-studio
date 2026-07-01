@@ -5,11 +5,12 @@
 ## 当前基线
 
 - 真实生产链路固定使用 Ark/豆包模型，Mock 仅用于开发和测试。
-- 8 步主流程已接入 Worker 任务系统：故事方案、角色设定、角色图、分镜脚本、场景参考图、分镜图、视频片段、最终成片。
+- 9 步主流程已接入 Worker 任务系统：项目信息、故事方案、角色设定、角色图、分镜脚本、场景参考图、分镜图、视频片段、最终成片。
 - 分镜图生成会传入匹配角色参考图和当前场景参考图。
 - 视频生成使用 Ark/Seedance，输入当前确认分镜图作为 `first_frame`。Ark 真实接口不允许 `first_frame` 与 `reference_image` 混用，因此角色/场景一致性必须在分镜图阶段完成并固化到首帧。
 - 场景资产层使用 `Scene` / `SceneImage`，分镜镜头通过 `Shot.sceneId` 绑定场景。
 - 规则 QC、自动确认、发布包 manifest 已具备最小闭环。
+- 2026-06-28 已完成 90 秒《古城最后一盏花灯》真实 API MP4 QA，当前 Medium Agent Plan 视频默认使用 `doubao-seedance-1-5-pro-251215`；Seedance 2.0 仅作为高套餐或开通后可选能力。
 
 ## 最终目标
 
@@ -53,7 +54,7 @@ MVP 必须稳定满足以下能力：
 | 视频片段 | 确认分镜图首帧 | 视频模板 + Ark/Seedance | `ShotVideo[]` | `remoteTaskId` 幂等持久化，`seedance_input_mode=first_frame` |
 | 自动 QC | 当前阶段产物 | `qcService` 规则 QC | `QcReport` | 达阈值后自动确认当前阶段 |
 | 最终成片 | 已确认视频片段 | FFmpeg | `FinalVideo` | 1080x1920 / H.264 / AAC |
-| 发布包 | 成片 + 元数据 | 无 | manifest JSON | `FinalVideo.assetPackageUrl` 写回 |
+| 发布包 | 成片 + 元数据 | 无 | manifest JSON | `FinalVideo.assetPackageUrl` + `assetPackageObjectKey` 写回 |
 
 ## 参考图策略
 

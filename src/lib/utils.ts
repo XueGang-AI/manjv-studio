@@ -93,7 +93,8 @@ export function snapShotDuration(requested: number, videoModelName: string): num
  * 返回视频生成模型单镜头最大时长（秒）。
  */
 export function getMaxShotDuration(videoModelName: string | null): number {
-  return (videoModelName || '').toLowerCase().includes('seedance-1-5') ? 12 : 15
+  const normalized = (videoModelName || '').toLowerCase()
+  return normalized.includes('seedance-1-5') || normalized.includes('seedance-1.5') ? 12 : 15
 }
 
 /**

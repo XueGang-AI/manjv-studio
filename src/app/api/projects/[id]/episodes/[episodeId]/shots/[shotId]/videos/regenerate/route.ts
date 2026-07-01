@@ -10,6 +10,15 @@ import { checkImageAccessible } from '@/server/services/media-resource-check'
 import { getReadUrl } from '@/server/services/media-persist'
 import { UPLOAD_DIR } from '@/server/services/ffmpeg-utils'
 import { resolveStructuredReferenceImagesForModel } from '@/server/services/media-reference-url'
+import {
+  buildIssueFixOverlay,
+  buildSeedanceConsistencyPrompt,
+  buildSeedanceNegativePrompt,
+  normalizeIssueTypes,
+  normalizeMotionStrength,
+  sanitizeFixNote,
+  type MotionStrength,
+} from '@/server/services/shot-regeneration-quality'
 
 type JsonValue = import('@prisma/client').Prisma.InputJsonValue
 
@@ -28,13 +37,21 @@ const INFLIGHT_REMOTE_STATUS = new Set([
 
 interface RegenerateBody {
   prompt?: unknown
+  issueTypes?: unknown
+  fixNote?: unknown
   motionStrength?: unknown
   clientRequestId?: unknown
 }
 
-function parseBody(body: unknown): { userPrompt: string; userMotion: 'low' | 'medium' | 'high' | undefined; clientRequestId: string | null } | { error: string } {
+function parseBody(body: unknown): {
+  userPrompt: string
+  issueTypes: ReturnType<typeof normalizeIssueTypes>
+  fixNote: string
+  userMotion: MotionStrength | undefined
+  clientRequestId: string | null
+} | { error: string } {
   if (body === null || typeof body !== 'object') {
-    return { userPrompt: '', userMotion: undefined, clientRequestId: null }
+    return { userPrompt: '', issueTypes: [], fixNote: '', userMotion: undefined, clientRequestId: null }
   }
   const b = body as RegenerateBody
 
@@ -47,12 +64,15 @@ function parseBody(body: unknown): { userPrompt: string; userMotion: 'low' | 'me
     userPrompt = trimmed
   }
 
-  let userMotion: 'low' | 'medium' | 'high' | undefined
+  const issueTypes = normalizeIssueTypes(b.issueTypes)
+  const fixNote = sanitizeFixNote(b.fixNote)
+
+  let userMotion: MotionStrength | undefined
   if (b.motionStrength !== undefined) {
     if (typeof b.motionStrength !== 'string' || !ALLOWED_MOTION.includes(b.motionStrength as (typeof ALLOWED_MOTION)[number])) {
       return { error: 'motionStrength 必须为 low / medium / high 之一' }
     }
-    userMotion = b.motionStrength as 'low' | 'medium' | 'high'
+    userMotion = b.motionStrength as MotionStrength
   }
 
   // clientRequestId：业务幂等键（Phase 6）。可选，字符串，trim 后非空。
@@ -69,7 +89,7 @@ function parseBody(body: unknown): { userPrompt: string; userMotion: 'low' | 'me
     clientRequestId = trimmed
   }
 
-  return { userPrompt, userMotion, clientRequestId }
+  return { userPrompt, issueTypes, fixNote, userMotion, clientRequestId }
 }
 
 function safeError(message: string, status = 500) {
@@ -115,7 +135,8 @@ export async function POST(
     }
     const parsed = parseBody(rawBody)
     if ('error' in parsed) return safeError(parsed.error, 400)
-    const { userPrompt, userMotion, clientRequestId } = parsed
+    const { userPrompt, issueTypes, fixNote, userMotion, clientRequestId } = parsed
+    const overlay = buildIssueFixOverlay({ issueTypes, fixNote })
 
     // ─── clientRequestId 业务幂等（Phase 6）───
     // 同一 clientRequestId 重复请求返回已有尝试，不重复提交远端任务/不重复收费。
@@ -134,6 +155,9 @@ export async function POST(
             count: 1,
             isAsync: true,
             reused: true,
+            candidateId: existing.id,
+            appliedFixes: overlay.appliedFixes,
+            requiresImageRerun: overlay.requiresImageRerun,
           },
         })
       }
@@ -142,7 +166,7 @@ export async function POST(
     // ─── VideoPrompt + confirmedImage 查询 ───
     const confirmedImage = await prisma.shotImage.findFirst({ where: { shotId, isConfirmed: true } })
 
-    const effectiveMotion = userMotion || 'medium'
+    const requestedMotion = userMotion || 'medium'
     // effectivePrompt 在 upsert 后确定（无 userPrompt 时用 VideoPrompt 现有值）
 
     // ─── 幂等：检查是否有未终态的当前尝试（无 clientRequestId 时回退保护）───
@@ -160,6 +184,9 @@ export async function POST(
             count: 1,
             isAsync: true,
             reused: true,
+            candidateId: inflight.id,
+            appliedFixes: overlay.appliedFixes,
+            requiresImageRerun: overlay.requiresImageRerun,
           },
         })
       }
@@ -170,12 +197,37 @@ export async function POST(
     const rawDuration = (shot.endTime || 10) - (shot.startTime || 0)
     const duration = snapShotDuration(rawDuration, modelName)
     const isMock = process.env.USE_MOCK_MODEL === 'true'
+    const effectiveMotion = normalizeMotionStrength(requestedMotion, {
+      shotNo: shot.shotNo,
+      shotName: shot.shotName,
+      action: shot.action,
+      details: shot.details,
+      camera: shot.camera,
+      visual: shot.visual,
+      emotion: shot.emotion,
+      location: shot.location,
+      sceneTime: shot.sceneTime,
+      dialogue: shot.dialogue,
+    }, issueTypes)
 
     // ─── VideoPrompt upsert（Phase 6：@@unique([shotId]) 原子 upsert）───
     // 用户提供了 prompt → 更新；否则读取现有 prompt 作为 effectivePrompt。
     // upsert 在事务内与候选 ShotVideo 一起创建（见下）。
     const vidPrompt = await prisma.videoPrompt.findFirst({ where: { shotId }, orderBy: { createdAt: 'desc' } })
     const effectivePrompt = userPrompt || vidPrompt?.prompt || ''
+    const finalPrompt = buildSeedanceConsistencyPrompt(effectivePrompt, {
+      shotNo: shot.shotNo,
+      shotName: shot.shotName,
+      action: shot.action,
+      details: shot.details,
+      camera: shot.camera,
+      visual: shot.visual,
+      emotion: shot.emotion,
+      location: shot.location,
+      sceneTime: shot.sceneTime,
+      dialogue: shot.dialogue,
+    }, duration, effectiveMotion, { issueTypes, fixNote })
+    const negativePrompt = buildSeedanceNegativePrompt(vidPrompt?.negativePrompt, { issueTypes, fixNote })
 
     // ─── 确定 inputImage URL（Phase 6+：智能回退）───
     // 优先级：
@@ -225,7 +277,8 @@ export async function POST(
 
     const genReq: VideoGenerationRequest = {
       taskType: 'image_to_video',
-      prompt: effectivePrompt,
+      prompt: finalPrompt,
+      negativePrompt,
       inputImage: inputImageUrl || undefined,
       referenceImages: referenceImageUrls,
       duration,
@@ -247,10 +300,24 @@ export async function POST(
             where: { shotId },
             create: {
               shotId, projectId, prompt: userPrompt, duration: rawDuration,
-              motionStrength: userMotion || 'medium',
-              params: { fps: 24 } as unknown as JsonValue, confirmed: false,
+              motionStrength: effectiveMotion,
+              params: {
+                fps: 24,
+                issue_types: issueTypes,
+                applied_fixes: overlay.appliedFixes,
+                fix_note: fixNote || undefined,
+              } as unknown as JsonValue, confirmed: false,
             },
-            update: { prompt: userPrompt, ...(userMotion ? { motionStrength: userMotion } : {}) },
+            update: {
+              prompt: userPrompt,
+              motionStrength: effectiveMotion,
+              params: {
+                fps: 24,
+                issue_types: issueTypes,
+                applied_fixes: overlay.appliedFixes,
+                fix_note: fixNote || undefined,
+              } as unknown as JsonValue,
+            },
           })
         }
         const response = await videoAdapter.generate(genReq)
@@ -258,14 +325,21 @@ export async function POST(
           data: {
             shotId, projectId, inputImageUrl,
             videoUrl: response.videos[0]?.url || '',
-            prompt: effectivePrompt,
+            prompt: finalPrompt,
             seed: String(response.videos[0]?.params?.seed || ''),
             modelName,
             referenceImages: confirmedImage
               ? [{ image_url: inputImageUrl, reference_type: 'input_image' }, ...inheritedReferenceImages] as unknown as JsonValue
               : [] as unknown as JsonValue,
             duration: response.videos[0]?.duration || duration,
-            params: { aspect_ratio: project.aspectRatio, sent_reference_image_count: referenceImageUrls.length } as unknown as JsonValue,
+            params: {
+              aspect_ratio: project.aspectRatio,
+              sent_reference_image_count: referenceImageUrls.length,
+              issue_types: issueTypes,
+              applied_fixes: overlay.appliedFixes,
+              fix_note: fixNote || undefined,
+              motion_strength: effectiveMotion,
+            } as unknown as JsonValue,
             isSelected: false, isConfirmed: false,
             clientRequestId: clientRequestId ?? undefined,
             // mock 同步完成，标记为已完成
@@ -274,7 +348,18 @@ export async function POST(
         })
         return newVideo
       })
-      return NextResponse.json({ success: true, data: { shotId, videos: [created], count: 1 } })
+      return NextResponse.json({
+        success: true,
+        data: {
+          shotId,
+          videos: [created],
+          count: 1,
+          candidateId: created.id,
+          reused: false,
+          appliedFixes: overlay.appliedFixes,
+          requiresImageRerun: overlay.requiresImageRerun,
+        },
+      })
     }
 
     // ─── 真实模式：短事务1 - upsert VideoPrompt + 创建 queued 候选 ShotVideo ───
@@ -285,10 +370,24 @@ export async function POST(
           where: { shotId },
           create: {
             shotId, projectId, prompt: userPrompt, duration: rawDuration,
-            motionStrength: userMotion || 'medium',
-            params: { fps: 24 } as unknown as JsonValue, confirmed: false,
+            motionStrength: effectiveMotion,
+            params: {
+              fps: 24,
+              issue_types: issueTypes,
+              applied_fixes: overlay.appliedFixes,
+              fix_note: fixNote || undefined,
+            } as unknown as JsonValue, confirmed: false,
           },
-          update: { prompt: userPrompt, ...(userMotion ? { motionStrength: userMotion } : {}) },
+          update: {
+            prompt: userPrompt,
+            motionStrength: effectiveMotion,
+            params: {
+              fps: 24,
+              issue_types: issueTypes,
+              applied_fixes: overlay.appliedFixes,
+              fix_note: fixNote || undefined,
+            } as unknown as JsonValue,
+          },
         })
       }
       return tx.shotVideo.create({
@@ -296,7 +395,7 @@ export async function POST(
           shotId, projectId,
           inputImageUrl,
           videoUrl: '',
-          prompt: effectivePrompt,
+          prompt: finalPrompt,
           seed: '',
           modelName,
           referenceImages: confirmedImage
@@ -307,6 +406,10 @@ export async function POST(
             aspect_ratio: project.aspectRatio,
             generation_method: 'async_task',
             sent_reference_image_count: referenceImageUrls.length,
+            issue_types: issueTypes,
+            applied_fixes: overlay.appliedFixes,
+            fix_note: fixNote || undefined,
+            motion_strength: effectiveMotion,
           } as unknown as JsonValue,
           // 标记为排队中：作为"当前尝试"。旧视频不受影响。
           remoteStatus: 'queued',
@@ -340,7 +443,16 @@ export async function POST(
 
       return NextResponse.json({
         success: true,
-        data: { shotId, videos: [updated], count: 1, isAsync: true },
+        data: {
+          shotId,
+          videos: [updated],
+          count: 1,
+          isAsync: true,
+          candidateId: updated.id,
+          reused: false,
+          appliedFixes: overlay.appliedFixes,
+          requiresImageRerun: overlay.requiresImageRerun,
+        },
       })
     } catch (remoteErr) {
       // ─── 短事务2：失败 → 标记该候选为 failed，保留记录与旧视频 ───
@@ -359,7 +471,13 @@ export async function POST(
       return NextResponse.json({
         success: false,
         error: '视频生成失败，请稍后重试。已有视频仍可使用。',
-        data: { shotId, failedAttemptId: candidate.id },
+        data: {
+          shotId,
+          failedAttemptId: candidate.id,
+          candidateId: candidate.id,
+          appliedFixes: overlay.appliedFixes,
+          requiresImageRerun: overlay.requiresImageRerun,
+        },
       }, { status: 502 })
     }
   } catch (error) {

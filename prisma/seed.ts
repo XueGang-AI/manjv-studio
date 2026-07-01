@@ -4,10 +4,16 @@
 // ============================================
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
+import {
+  DEFAULT_ARK_API_BASE_URL,
+  DEFAULT_ARK_IMAGE_MODEL,
+  DEFAULT_ARK_TEXT_MODEL,
+  DEFAULT_ARK_VIDEO_MODEL,
+} from '../src/server/model-adapters/model-config'
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({
-    connectionString: process.env.DATABASE_URL || 'postgresql://xuegang@localhost:5432/manjv_studio?schema=public',
+    connectionString: process.env.DATABASE_URL || 'postgresql://manjv:manjv@127.0.0.1:15432/manjv_studio?schema=public',
   }),
 })
 
@@ -51,8 +57,8 @@ async function main() {
     {
       name: 'Doubao Seed Character',
       type: 'TEXT',
-      modelName: process.env.ARK_TEXT_MODEL || 'doubao-seed-character-251128',
-      baseUrl: process.env.ARK_API_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3',
+      modelName: process.env.ARK_TEXT_MODEL || DEFAULT_ARK_TEXT_MODEL,
+      baseUrl: process.env.ARK_API_BASE_URL || DEFAULT_ARK_API_BASE_URL,
       apiKey: process.env.ARK_API_KEY || '',
       isDefault: true,
       params: { temperature: 0.7, max_tokens: 4096 },
@@ -60,8 +66,8 @@ async function main() {
     {
       name: 'Doubao Seedream',
       type: 'IMAGE',
-      modelName: process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5-0-260128',
-      baseUrl: process.env.ARK_API_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3',
+      modelName: process.env.ARK_IMAGE_MODEL || DEFAULT_ARK_IMAGE_MODEL,
+      baseUrl: process.env.ARK_API_BASE_URL || DEFAULT_ARK_API_BASE_URL,
       apiKey: process.env.ARK_API_KEY || '',
       isDefault: true,
       params: { aspect_ratio: '9:16', num_outputs: 4 },
@@ -69,8 +75,8 @@ async function main() {
     {
       name: 'Doubao Seedance',
       type: 'VIDEO',
-      modelName: process.env.ARK_VIDEO_MODEL || 'doubao-seedance-2-0-260128',
-      baseUrl: process.env.ARK_API_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3',
+      modelName: process.env.ARK_VIDEO_MODEL || DEFAULT_ARK_VIDEO_MODEL,
+      baseUrl: process.env.ARK_API_BASE_URL || DEFAULT_ARK_API_BASE_URL,
       apiKey: process.env.ARK_API_KEY || '',
       isDefault: true,
       params: { duration: 5, fps: 24, motion_strength: 'medium', resolution: process.env.ARK_VIDEO_RESOLUTION || '720p' },
@@ -80,7 +86,14 @@ async function main() {
   for (const config of modelConfigs) {
     await prisma.modelConfig.upsert({
       where: { name: config.name },
-      update: {},
+      update: {
+        type: config.type,
+        modelName: config.modelName,
+        baseUrl: config.baseUrl,
+        isDefault: config.isDefault,
+        params: config.params,
+        ...(process.env.ARK_API_KEY ? { apiKey: process.env.ARK_API_KEY } : {}),
+      },
       create: config,
     })
   }

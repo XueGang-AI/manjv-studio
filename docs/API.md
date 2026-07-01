@@ -1,6 +1,6 @@
 # API 文档
 
-Base URL: `http://localhost:3000/api`
+Base URL: `http://localhost:3100/api`
 
 所有接口统一返回：
 
@@ -100,7 +100,43 @@ Base URL: `http://localhost:3000/api`
 | 自动化 | POST | `/api/projects/:id/episodes/:episodeId/automation/auto-confirm` | QC 达标后自动确认当前阶段产物 |
 | 发布包 | POST | `/api/projects/:id/episodes/:episodeId/release-package/generate` | 生成发布 manifest 并写回成片记录 |
 
-视频远端任务检查会轮询 Ark Video API，并更新 `remoteStatus`、`remoteProgress`、`videoUrl` 等字段。
+视频远端任务检查会轮询 Ark Video API，并更新 `remoteStatus`、`remoteProgress` 等字段。远端返回 `videoUrl` 后，服务端会先转存到当前媒体存储，再写入 `videoUrl`（read URL）、`storageObjectKey`、`storageProvider` 和 `sourceVideoUrl`；已有 `storageObjectKey` 的记录会在读取时动态刷新 read URL。
+
+### 媒体存储字段
+
+角色图、场景参考图、分镜图、视频片段和最终成片都使用统一媒体存储语义：
+
+| 字段 | 说明 |
+|------|------|
+| `storageObjectKey` | 正式产物长期对象键，如 `projects/<projectId>/videos/...` 或 `projects/<projectId>/final_videos/...` |
+| `storageProvider` | 写入 Provider，生产应为 `aliyun-oss` |
+| `sourceUrl` / `sourceVideoUrl` | 脱敏后的供应商来源 URL，仅用于审计，不作为读取入口 |
+| `imageUrl` / `videoUrl` | API 当前响应的 read URL；OSS/S3 场景下通常是短期签名 URL |
+
+`GET /api/projects/:id/episodes/:episodeId/final-preview` 返回的 `latest` 会额外包含 `assetPackageUrl`、`assetPackageObjectKey`、`assetPackageStorageProvider`。发布包生成接口返回 `packageUrl`、`packageObjectKey`、`packageStorageProvider`。
+
+### 单镜头问题驱动重生成
+
+分镜图和视频片段的单镜头重生成接口均支持问题驱动参数：
+
+```json
+{
+  "issueTypes": [
+    "character_drift",
+    "hair_inconsistent",
+    "scene_drift",
+    "phone_fake_ui_text",
+    "large_motion_or_hand_deform",
+    "audio_issue",
+    "other"
+  ],
+  "fixNote": "保持低马尾和红绳手链，手机屏幕只显示不可读光点",
+  "motionStrength": "low",
+  "clientRequestId": "uuid"
+}
+```
+
+返回 `data` 会包含 `candidateId`、`reused`、`appliedFixes`，视频重生成在人物/发型/场景问题下还会返回 `requiresImageRerun=true`。分镜图重生成采用候选追加模式，不删除旧确认图；视频重生成继续保留旧视频候选，并通过 `clientRequestId` 避免重复提交 Ark 远端视频任务。
 
 ## 版本 API
 
@@ -122,10 +158,12 @@ Base URL: `http://localhost:3000/api`
 | POST | `/api/projects/:id/episodes/:episodeId/qc/run` | 运行剧集 QC |
 | GET | `/api/projects/:id/episodes/:episodeId/qc/reports` | 查看剧集 QC 报告 |
 
+QC issue 输出保留旧字段 `level/field/problem/suggestion`，并补充 `shotNo`、`timeRange`、`issueType`、`severity`（`P0`/`P1`/`P2`/`P3`）和 `recommendedAction`（`accept`、`rerun_shot_image`、`rerun_shot_video`、`rerender_final`）。当前规则会检查角色/场景参考数量、手机屏幕禁用项、成片音轨、响度、黑屏和冻结风险。
+
 ## 健康与媒体
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/health` | Web/API 健康检查 |
 | GET | `/api/worker/health` | DB、Redis、Worker heartbeat 综合健康检查 |
-| GET | `/api/media/:key...` | 本地媒体访问代理 |
+| GET | `/api/media/:key...` | local-fs 开发媒体读取代理；生产 OSS/S3 不依赖该路由 |

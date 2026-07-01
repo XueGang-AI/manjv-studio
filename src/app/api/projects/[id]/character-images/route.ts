@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
+import { toLocalMediaReadUrl } from '@/server/services/local-media-read-url'
+import { resolveMediaReadUrl } from '@/server/services/media-persist'
 
 /**
  * GET /api/projects/:id/character-images
@@ -30,8 +32,15 @@ export async function GET(
           where: { characterId: char.id, projectId },
           orderBy: { createdAt: 'desc' },
         })
+        const readableImages = await Promise.all(images.map(async image => ({
+          ...image,
+          imageUrl: await resolveMediaReadUrl(
+            image.storageObjectKey,
+            toLocalMediaReadUrl(image.imageUrl) || image.imageUrl,
+          ),
+        })))
         // 统计各 reference_type 确认情况
-        const confirmedTypes = [...new Set(images.filter(i => i.isConfirmed).map(i => i.referenceType || 'front_full_body'))]
+        const confirmedTypes = [...new Set(readableImages.filter(i => i.isConfirmed).map(i => i.referenceType || 'front_full_body'))]
         return {
           character: {
             id: char.id,
@@ -40,9 +49,9 @@ export async function GET(
             zhFixedPrompt: char.zhFixedPrompt,
             enFixedPrompt: char.enFixedPrompt,
           },
-          images,
-          selectedImage: images.find(img => img.isSelected) || null,
-          confirmed: images.some(img => img.isConfirmed),
+          images: readableImages,
+          selectedImage: readableImages.find(img => img.isSelected) || null,
+          confirmed: readableImages.some(img => img.isConfirmed),
           confirmedTypes,
           confirmedTypeCount: confirmedTypes.length,
         }

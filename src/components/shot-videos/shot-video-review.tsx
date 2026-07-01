@@ -13,6 +13,7 @@ import { ShotVideoPlayer } from './shot-video-player'
 import { AIPromptBox } from '@/components/ai/ai-prompt-box'
 import { AIConsoleSheet } from '@/components/ai/ai-console-sheet'
 import { useAIPromptBox } from '@/components/ai/use-ai-prompt-box'
+import { RegenerationIssuePanel, type RegenerationIssueType } from '@/components/regeneration/regeneration-issue-panel'
 
 interface ShotVideoReviewProps {
   group: ShotVideoGroup
@@ -21,6 +22,13 @@ interface ShotVideoReviewProps {
   projectId: string
   episodeId: string
   onRefresh: () => void
+}
+
+function createClientRequestId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
 export function ShotVideoReview({ group, isConfirmed, isGenerating, projectId, episodeId, onRefresh }: ShotVideoReviewProps) {
@@ -52,6 +60,8 @@ export function ShotVideoReview({ group, isConfirmed, isGenerating, projectId, e
 
   // Regenerate
   const [regenerating, setRegenerating] = useState(false)
+  const [issueTypes, setIssueTypes] = useState<RegenerationIssueType[]>([])
+  const [fixNote, setFixNote] = useState('')
 
   // Check task
   const [checkingTaskId, setCheckingTaskId] = useState<string | null>(null)
@@ -87,6 +97,8 @@ export function ShotVideoReview({ group, isConfirmed, isGenerating, projectId, e
     episodeId,
     shotId: shot.id,
     video: aiVideoData,
+    issueTypes,
+    fixNote,
     onRefresh,
   })
   const aiConsoleProps = {
@@ -131,7 +143,16 @@ export function ShotVideoReview({ group, isConfirmed, isGenerating, projectId, e
   const handleRegenerate = async () => {
     setRegenerating(true)
     try {
-      const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/shots/${shot.id}/videos/regenerate`, { method: 'POST' })
+      const res = await fetch(`/api/projects/${projectId}/episodes/${episodeId}/shots/${shot.id}/videos/regenerate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          issueTypes,
+          fixNote: fixNote.trim() || undefined,
+          motionStrength: issueTypes.includes('phone_fake_ui_text') || issueTypes.includes('large_motion_or_hand_deform') ? 'low' : undefined,
+          clientRequestId: createClientRequestId(),
+        }),
+      })
       const data = await res.json()
       if (data.success) {
         addToast({ type: 'success', title: `镜头 ${shot.shotNo} 重新生成中` })
@@ -184,6 +205,16 @@ export function ShotVideoReview({ group, isConfirmed, isGenerating, projectId, e
           </Button>
         )}
       </div>
+
+      {!isConfirmed && videos.length > 0 && (
+        <RegenerationIssuePanel
+          issueTypes={issueTypes}
+          onIssueTypesChange={setIssueTypes}
+          fixNote={fixNote}
+          onFixNoteChange={setFixNote}
+          disabled={regenerating || isGenerating}
+        />
+      )}
 
       {/* Video player */}
       <ShotVideoPlayer

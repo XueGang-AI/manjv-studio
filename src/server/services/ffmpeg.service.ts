@@ -43,13 +43,39 @@ export interface RenderInput {
   aspectRatio?: string
   fps?: number
   addFadeTransition?: boolean
+  normalizeAudio?: boolean
+  targetIntegratedLoudness?: number
 }
 
 export interface RenderResult {
   success: boolean
   outputPath?: string
   duration?: number
+  audioNormalized?: boolean
   error?: string
+}
+
+export function isAudioNormalizationEnabled(input: Pick<RenderInput, 'normalizeAudio'>): boolean {
+  if (input.normalizeAudio !== undefined) return input.normalizeAudio
+  return process.env.FFMPEG_NORMALIZE_AUDIO !== 'false'
+}
+
+export function buildAudioNormalizationArgs(
+  inputPath: string,
+  outputPath: string,
+  targetIntegratedLoudness = -16,
+): string[] {
+  const targetI = Math.max(-30, Math.min(-8, targetIntegratedLoudness))
+  return [
+    '-i', inputPath,
+    '-c:v', 'copy',
+    '-af', `loudnorm=I=${targetI}:TP=-1.5:LRA=11`,
+    '-c:a', 'aac',
+    '-b:a', '160k',
+    '-movflags', '+faststart',
+    '-y',
+    outputPath,
+  ]
 }
 
 export class FFmpegService {
@@ -302,8 +328,19 @@ export class FFmpegService {
         throw new RenderError('RENDER_FAILED', '视频合成失败，请检查视频片段格式后重试', `exit=${result.exitCode}`)
       }
 
+      const audioNormalized = isAudioNormalizationEnabled(input)
+      if (audioNormalized) {
+        const normalizedOutputPath = path.join(taskDir, 'audio-normalized.mp4')
+        await this.normalizeFinalAudio(
+          outputPath,
+          normalizedOutputPath,
+          input.targetIntegratedLoudness ?? -16,
+        )
+        fs.copyFileSync(normalizedOutputPath, outputPath)
+      }
+
       const totalDuration = input.shotVideos.reduce((s, v) => s + v.duration, 0)
-      return { success: true, outputPath, duration: totalDuration }
+      return { success: true, outputPath, duration: totalDuration, audioNormalized }
 
     } catch (error) {
       if (error instanceof RenderError) throw error
@@ -374,6 +411,38 @@ export class FFmpegService {
       throw new RenderError(
         'VIDEO_VALIDATION_FAILED',
         '视频片段标准化失败，请检查视频片段格式后重试',
+        `exit=${result.exitCode}, stderr=${stderrPreview}`,
+      )
+    }
+  }
+
+  private async normalizeFinalAudio(
+    inputPath: string,
+    outputPath: string,
+    targetIntegratedLoudness: number,
+  ): Promise<void> {
+    const resolvedInput = path.resolve(inputPath)
+    const resolvedOutput = path.resolve(outputPath)
+
+    if (!isPathInside(this.outputDir, resolvedInput) && !isPathInside(this.tempRoot, resolvedInput)) {
+      throw new RenderError('INVALID_INPUT', '响度归一化输入路径不在允许范围内')
+    }
+    if (!isPathInside(this.outputDir, resolvedOutput) && !isPathInside(this.tempRoot, resolvedOutput)) {
+      throw new RenderError('INVALID_INPUT', '响度归一化输出路径不在允许范围内')
+    }
+
+    console.log(`[ffmpeg] Normalizing final audio loudness to ${targetIntegratedLoudness} LUFS`)
+    const result = await spawnSafe(
+      FFMPEG_PATH,
+      buildAudioNormalizationArgs(resolvedInput, resolvedOutput, targetIntegratedLoudness),
+      { timeout: 180_000 },
+    )
+
+    if (result.exitCode !== 0 || result.timedOut) {
+      const stderrPreview = result.stderr.substring(0, 300)
+      throw new RenderError(
+        result.timedOut ? 'RENDER_TIMEOUT' : 'RENDER_FAILED',
+        '成片音频响度归一化失败',
         `exit=${result.exitCode}, stderr=${stderrPreview}`,
       )
     }

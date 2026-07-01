@@ -1,13 +1,21 @@
 // ============================================
 // Ark Video Model Probe — Create Video Tasks
-// Model: doubao-seedance-2-0-260128
+// Model: configured Ark video model
 // Usage: npx tsx scripts/probes/probe-ark-video.ts
 // ============================================
 import 'dotenv/config'
 import fs from 'fs'
+import {
+  DEFAULT_ARK_API_BASE_URL,
+  DEFAULT_ARK_VIDEO_MODEL,
+  normalizeArkBaseUrl,
+} from '../../src/server/model-adapters/model-config'
 
-const BASE = 'https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks'
-const MODEL = process.env.ARK_VIDEO_MODEL || 'doubao-seedance-2-0-260128'
+const BASE_URL = normalizeArkBaseUrl(
+  process.env.ARK_VIDEO_API_BASE_URL || process.env.ARK_API_BASE_URL || DEFAULT_ARK_API_BASE_URL
+)
+const BASE = `${BASE_URL}/contents/generations/tasks`
+const MODEL = process.env.ARK_VIDEO_MODEL || DEFAULT_ARK_VIDEO_MODEL
 const KEY = process.env.ARK_API_KEY || ''
 const TEST_IMAGE_URL = 'https://ark-project.tos-cn-beijing.volces.com/doc_image/seepro_i2v.png'
 

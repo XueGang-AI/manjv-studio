@@ -75,6 +75,8 @@ export async function handleCharacterImages(taskId: string): Promise<void> {
     const style = project.artStyle || '韩漫'
     const negativePrompt = 'ugly, deformed, bad anatomy, bad proportions, low quality, blurry, pixelated, distorted face, extra fingers, missing fingers, asymmetric eyes, watermark, text, logo, extra limbs, multiple heads'
     const allResults: Array<{ characterId: string; characterName: string; images: unknown[] }> = []
+    const generationErrors: string[] = []
+    const persistErrors: string[] = []
 
     for (let charIndex = 0; charIndex < characters.length; charIndex++) {
       const char = characters[charIndex]
@@ -123,7 +125,9 @@ export async function handleCharacterImages(taskId: string): Promise<void> {
         try {
           response = await withRetry(() => imageAdapter.generate(genReq), 3, `${char.name || char.id}/${refType}`)
         } catch (singleError) {
-          console.error(`[worker:character-images] ${char.name || char.id}/${refType} failed: ${(singleError as Error).message}`)
+          const message = `${char.name || char.id}/${refType}: ${(singleError as Error).message}`
+          generationErrors.push(message)
+          console.error(`[worker:character-images] ${message}`)
           continue
         }
 
@@ -136,6 +140,8 @@ export async function handleCharacterImages(taskId: string): Promise<void> {
           if (!img.url) return null
           const outcome = await persistImageWithPolicy(img.url, projectId, 'image')
           if (!outcome.persisted && outcome.imageUrl === '') {
+            const message = `${char.name || char.id}/${refType}: ${outcome.error || '图片转存失败'}`
+            persistErrors.push(message)
             console.error(`[worker:character-images] image persist failed (${refType}, prod skipped): ${outcome.error}`)
             return null
           }
@@ -178,7 +184,8 @@ export async function handleCharacterImages(taskId: string): Promise<void> {
     const totalPersisted = allResults.reduce((sum, result) => sum + result.images.length, 0)
     if (totalPersisted === 0) {
       await prisma.project.update({ where: { id: projectId }, data: { status: 'CHARACTER_CONFIRMED' } })
-      throw new Error('图片转存失败，请稍后重试')
+      const detail = generationErrors[0] || persistErrors[0] || '没有生成可用角色图'
+      throw new Error(`角色图生成失败：${detail}`)
     }
 
     await prisma.project.update({

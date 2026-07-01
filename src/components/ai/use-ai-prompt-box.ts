@@ -21,6 +21,7 @@
 
 import * as React from 'react'
 import { deriveGenerationState, type GenerationState } from './generation-state'
+import type { RegenerationIssueType } from '@/components/regeneration/regeneration-issue-panel'
 
 export interface AIPromptBoxVideoData {
   prompt: string
@@ -34,6 +35,8 @@ export interface UseAIPromptBoxArgs {
   episodeId: string
   shotId: string
   video: AIPromptBoxVideoData
+  issueTypes?: RegenerationIssueType[]
+  fixNote?: string
   onRefresh: () => void
 }
 
@@ -66,6 +69,8 @@ export function useAIPromptBox({
   episodeId,
   shotId,
   video,
+  issueTypes = [],
+  fixNote = '',
   onRefresh,
 }: UseAIPromptBoxArgs): AIPromptBoxState {
   const [prompt, setPrompt] = React.useState(video.prompt || '')
@@ -111,6 +116,8 @@ export function useAIPromptBox({
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               prompt: prompt.trim(),
+              issueTypes,
+              fixNote: fixNote.trim() || undefined,
               motionStrength: motion,
               clientRequestId,
             }),
@@ -135,7 +142,7 @@ export function useAIPromptBox({
       }
     }
     setError(lastErr || '提交失败')
-  }, [prompt, motion, projectId, episodeId, shotId, onRefresh])
+  }, [prompt, motion, issueTypes, fixNote, projectId, episodeId, shotId, onRefresh])
 
   const handleSubmit = React.useCallback(async () => {
     // ref 守卫：同步检查，防止重复点击在 setSubmitting 异步生效前触发第二次请求

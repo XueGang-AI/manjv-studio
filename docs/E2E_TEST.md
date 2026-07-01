@@ -12,10 +12,10 @@ USE_MOCK_MODEL=true npm run dev:all
 npm run test:e2e
 ```
 
-如服务不在 `http://localhost:3000`，可指定：
+默认服务地址为 `http://localhost:3100`。如服务不在默认地址，可指定：
 
 ```bash
-E2E_BASE_URL=http://localhost:3001 npm run test:e2e
+E2E_BASE_URL=http://localhost:3100 npm run test:e2e
 ```
 
 ### Mock 自动化流程 (22 步)
@@ -50,7 +50,9 @@ E2E 全部 22 步通过！
 project_id:      d97512be-0b17-...
 episode_id:      b37ea308-f4c6-...
 final_video_id:  1a09f58a-f4e4-...
-final_video_url: uploads/final_videos/xxx_ep1_xxx.mp4
+final_video_url: /api/media/projects/.../final_videos/episodes/.../xxx.mp4
+object_key:      projects/.../final_videos/episodes/.../xxx.mp4
+storage:         local-fs
 duration:        90.0s
 resolution:      1080x1920
 fps:             25/1
@@ -58,13 +60,20 @@ codec:           h264
 audio:           aac
 ```
 
-## 真实 API 最小闭环测试
+Mock 默认使用 `MEDIA_STORAGE_PROVIDER=local`，正式产物对象会写入 `uploads/media/projects/...`，读取 URL 走 `/api/media/...`。如果本地开发切到 OSS/S3 Provider，Mock 脚本会跳过本地 ffprobe 文件检查。
 
-真实闭环要求 `.env` 中配置 Ark 凭证，并关闭 Mock：
+## 真实 API + OSS 全链路验收
+
+正式真实验收使用《蓝染球衣上场那天》，覆盖 90 秒主流程、OSS 持久化、QC 和发布包。运行前要求 `.env` 中配置 Ark 与 Aliyun OSS，并关闭 Mock：
 
 ```env
 USE_MOCK_MODEL=false
+MEDIA_STORAGE_PROVIDER=aliyun-oss
 ARK_API_KEY=...
+OSS_BUCKET=...
+OSS_PUBLIC_ENDPOINT=...
+OSS_ACCESS_KEY_ID=...
+OSS_ACCESS_KEY_SECRET=...
 ```
 
 运行：
@@ -74,7 +83,13 @@ npm run dev:all
 npm run test:e2e:real
 ```
 
-### 真实闭环流程
+如远端视频任务或本地进程中断，可在服务恢复后使用：
+
+```bash
+npm run test:e2e:real:blue:resume
+```
+
+### Blue Jersey 验收流程
 
 1. 创建测试项目
 2. Ark 文本模型生成故事方案
@@ -90,15 +105,57 @@ npm run test:e2e:real
 12. 确认分镜图
 13. Ark/Seedance 创建视频异步任务（确认分镜图作为 `first_frame`）
 14. 轮询远端任务直到 completed
-15. 下载真实视频到本地
-16. FFmpeg 合成最终 MP4
-17. ffprobe 验证
+15. 视频片段从 Ark 返回 URL 转存到 OSS，写入 `ShotVideo.storageObjectKey`
+16. FFmpeg 使用存储 read URL 合成最终 MP4
+17. 最终 MP4 上传到 OSS `projects/<projectId>/final_videos/...`，本地临时输出清理
+18. QC 使用 OSS read URL 下载临时文件执行 ffprobe / loudness / 黑屏 / 冻结检查
+19. 发布包 manifest 上传到 OSS `projects/<projectId>/release_packages/...`
+20. 脚本校验角色图、场景参考图、分镜图、视频片段、成片、发布包均为 `storageProvider=aliyun-oss`，且正式 URL 不得为 `/api/local-media`、`/api/media` 或 `uploads/`
 
 ### 真实接口注意事项
 
 - Seedance 图片输入模式互斥：`first_frame` / `last_frame` 不能与 `reference_image` 混用。生产链路用确认分镜图作为 `first_frame`；角色和场景参考图在分镜图生成阶段传入并固化到首帧。
-- 若强制指定 `ARK_VIDEO_MODEL=doubao-seedance-2-0-260128`，账号必须先在 Ark 控制台开通该模型；未开通时接口会返回 `ModelNotOpen`。
-- 单片段成片也必须走 FFmpeg `concatVideos()` 两阶段规范化链路，确保输出落在 `uploads/final_videos/` 并可被 `/api/local-media/final_videos/...` 读取。
+- 当前 Medium Agent Plan 默认视频模型为 `ARK_VIDEO_MODEL=doubao-seedance-1-5-pro-251215`。Seedance 2.0 是高套餐/开通后可选能力；未开通时在 Agent Plan 下会返回 `UnsupportedModel`。
+- 单片段成片也必须走 FFmpeg `concatVideos()` 两阶段规范化链路。生产成片应上传到媒体存储并写入 `FinalVideo.storageObjectKey`，API 读取时动态生成 read URL。
+- 成片阶段默认启用 loudnorm 响度归一化；如需排障可临时设置 `FFMPEG_NORMALIZE_AUDIO=false`，但真实验收应保持默认开启。
+
+### 当前 90 秒 OSS QA 基线
+
+- 题材：《蓝染球衣上场那天》，非遗蓝染 / 山地足球 / 返乡直播运营。
+- 模型：文本 `doubao-seed-2-0-pro-260215`，图片 `doubao-seedream-5-0-260128`，视频 `doubao-seedance-1-5-pro-251215`。
+- 验收脚本：`npm run test:e2e:real`。
+- 必须通过的存储断言：
+  - `MEDIA_STORAGE_PROVIDER=aliyun-oss`
+  - 角色图、场景参考图、分镜图、视频片段均有 `storageObjectKey` 和 `storageProvider=aliyun-oss`
+  - 最终成片 object key 以 `projects/<projectId>/final_videos/` 开头
+  - 发布包返回 `packageObjectKey`
+  - 项目本地目录 `uploads/media/projects/<projectId>` 不存在
+
+### 历史 90 秒本地 QA 基线
+
+- 题材：《古城最后一盏花灯》，文旅 / 非遗 / 返乡创业，9 个 10 秒镜头。
+- 模型：文本 `doubao-seed-2-0-pro-260215`，图片 `doubao-seedream-5-0-260128`，视频 `doubao-seedance-1-5-pro-251215`，Ark base `https://ark.cn-beijing.volces.com/api/plan`。
+- 产物：当时输出到本地 `uploads/final_videos/...`，ffprobe 显示约 `90.488005s`、`1080x1920`、H.264、AAC。该记录仅保留为历史质量基线，不代表当前存储架构。
+- QA 结论：可接受，通过；P2 问题集中在个别镜头发型/脸型轻微漂移、直播 UI 图形接近平台符号、音量偏低。媒体文件和逐帧素材属于生成产物，不纳入 Git。
+
+## 真实 API 最小探针
+
+`npm run test:e2e:real:minimal` 保留为 Ark 图片/视频接口与本地 FFmpeg 的最小探针，输出在 `uploads/probes/`，不验证完整 Worker 链路、OSS 持久化或发布包，不作为上线验收结论。
+
+### 问题驱动重跑验证
+
+分镜图和视频片段页面的单镜头重生成接口支持：
+
+```json
+{
+  "issueTypes": ["character_drift", "hair_inconsistent", "phone_fake_ui_text"],
+  "fixNote": "保持低马尾、红绳手链；手机屏幕只保留不可读光点",
+  "motionStrength": "low",
+  "clientRequestId": "uuid"
+}
+```
+
+后端返回 `appliedFixes`、`candidateId`、`reused` 和可选 `requiresImageRerun`。分镜图重生成会追加候选，不删除旧确认图；视频重生成沿用候选模式并用 `clientRequestId` 保证重复请求不重复提交远端任务。第 6/8 镜头人物或发型问题应先重跑分镜图，再重跑视频；第 7-9 镜头手机伪 UI/文字问题可直接重跑视频 prompt，并确认 prompt 含禁止红色对勾、爱心、logo、伪中文和可读文字的约束。
 
 ## 探针测试
 
@@ -129,6 +186,6 @@ npm run probe:ark:video:poll -- --task-id <id> --timeout-minutes 60 --interval-s
 | Redis 连接失败 | Redis 未运行 | 可忽略或启动 Redis，系统会 DB 轮询降级 |
 | ffprobe 失败 | FFmpeg 未安装或路径错误 | 安装 FFmpeg，检查 `FFMPEG_PATH` / `FFPROBE_PATH` |
 | 视频一直 queued | Ark 视频队列拥堵 | 后续用 `probe:ark:video:poll` 继续轮询 |
-| `ModelNotOpen` | 当前 Ark 账号未开通指定视频模型 | 在 Ark 控制台开通模型，或使用 `.env` 中已开通的视频模型 |
+| `UnsupportedModel` / `ModelNotOpen` | 当前 Ark 套餐或账号未开通指定视频模型；Medium Agent Plan 不支持 Seedance 2.0 系列作为默认视频模型 | 使用 `.env` 中当前默认 `doubao-seedance-1-5-pro-251215`，或升级/开通 Seedance 2.0 后再改配置 |
 | `first/last frame content cannot be mixed with reference media content` | Seedance 首帧模式与参考媒体模式混用 | 视频阶段只发送确认分镜图首帧；角色/场景参考放在分镜图阶段 |
 | 分镜图生成报错 | 角色图或场景参考未准备好 | 确认前置阶段完成并已确认 |

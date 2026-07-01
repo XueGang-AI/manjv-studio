@@ -1,14 +1,19 @@
 // ============================================
 // Ark Text Model Probe
-// Tests doubao-seed-character-251128 via
-// POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+// Tests the configured Ark text model via
+// POST https://ark.cn-beijing.volces.com/api/plan/v3/chat/completions
 // ============================================
 import { config } from 'dotenv'
+import {
+  DEFAULT_ARK_API_BASE_URL,
+  DEFAULT_ARK_TEXT_MODEL,
+  normalizeArkBaseUrl,
+} from '../../src/server/model-adapters/model-config'
 config()
 
-const BASE = process.env.ARK_API_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3'
+const BASE = normalizeArkBaseUrl(process.env.ARK_API_BASE_URL || DEFAULT_ARK_API_BASE_URL)
 const KEY = process.env.ARK_API_KEY || ''
-const MODEL = process.env.ARK_TEXT_MODEL || 'doubao-seed-character-251128'
+const MODEL = process.env.ARK_TEXT_MODEL || DEFAULT_ARK_TEXT_MODEL
 const ENDPOINT = `${BASE}/chat/completions`
 
 interface TestResult {

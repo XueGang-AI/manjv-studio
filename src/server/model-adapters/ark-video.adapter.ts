@@ -1,6 +1,6 @@
 // ============================================
 // ArkVideoAdapter — 豆包 Seedance 视频适配器
-// Model: doubao-seedance-2-0-260128
+// Model: doubao-seedance-1-5-pro-251215
 // Create: POST {baseUrl}/contents/generations/tasks
 // Poll: GET {baseUrl}/contents/generations/tasks/{task_id}
 // Format: content_array
@@ -24,7 +24,7 @@ export interface ArkVideoAdapterOptions {
   baseUrl: string
 }
 
-const DEFAULT_MODEL = 'doubao-seedance-2-0-260128'
+const DEFAULT_MODEL = 'doubao-seedance-1-5-pro-251215'
 const DEFAULT_RESOLUTION = '720p'
 
 export class ArkVideoAdapter extends BaseVideoAdapter {
@@ -100,6 +100,12 @@ export class ArkVideoAdapter extends BaseVideoAdapter {
     // Append voiceText to prompt if provided (not directly supported by Ark)
     if (request.voiceText) {
       content[0].text = `${content[0].text}, voice text: "${request.voiceText}"`
+    }
+
+    // Seedance 任务接口没有稳定的 negative_prompt 字段；把负面约束合入文本，
+    // 确保视频阶段能继承分镜图的一致性和反伪文字要求。
+    if (request.negativePrompt) {
+      content[0].text = `${content[0].text}\n\nNegative prompt: ${request.negativePrompt}`
     }
 
     // Add input image
@@ -368,7 +374,7 @@ export class ArkVideoAdapter extends BaseVideoAdapter {
  * - Seedance 1.5 t2v: 5 / 10
  * 超出范围的值会被远端 400 InvalidParameter 拒掉，所以这里 clamp 到合法区间。
  */
-function snapArkSeedanceDuration(
+export function snapArkSeedanceDuration(
   requested: number | undefined,
   taskType: 'text_to_video' | 'image_to_video',
   model: string
@@ -377,7 +383,7 @@ function snapArkSeedanceDuration(
     return taskType === 'image_to_video' ? 5 : 5
   }
 
-  if (model.includes('seedance-2-0')) {
+  if (isSeedance20Model(model)) {
     return Math.max(4, Math.min(15, Math.round(requested)))
   }
 
@@ -398,4 +404,9 @@ function snapArkSeedanceDuration(
     }
   }
   return best
+}
+
+function isSeedance20Model(model: string): boolean {
+  const normalized = model.toLowerCase()
+  return normalized.includes('seedance-2-0') || normalized.includes('seedance-2.0')
 }

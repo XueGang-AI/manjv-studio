@@ -4,7 +4,7 @@
  * 统一媒体存储抽象接口，支持 local（dev）与 s3-compatible（生产）Provider。
  */
 
-export type MediaType = 'image' | 'video'
+export type MediaType = 'image' | 'video' | 'final_video' | 'release_package'
 
 export interface StoredMedia {
   provider: string
@@ -66,6 +66,7 @@ export interface MediaStorageProvider {
 
 export const MAX_IMAGE_SIZE = 20 * 1024 * 1024 // 20MB
 export const MAX_VIDEO_SIZE = 200 * 1024 * 1024 // 200MB
+export const MAX_RELEASE_PACKAGE_SIZE = 10 * 1024 * 1024 // 10MB
 export const INGEST_TIMEOUT_MS = 30000
 
 export const ALLOWED_IMAGE_TYPES = new Set([
@@ -81,10 +82,18 @@ export const ALLOWED_VIDEO_TYPES = new Set([
   'video/webm',
 ])
 
+export const ALLOWED_RELEASE_PACKAGE_TYPES = new Set([
+  'application/json',
+])
+
 export function maxBytesFor(mediaType: MediaType): number {
-  return mediaType === 'image' ? MAX_IMAGE_SIZE : MAX_VIDEO_SIZE
+  if (mediaType === 'image') return MAX_IMAGE_SIZE
+  if (mediaType === 'release_package') return MAX_RELEASE_PACKAGE_SIZE
+  return MAX_VIDEO_SIZE
 }
 
 export function allowedTypesFor(mediaType: MediaType): Set<string> {
-  return mediaType === 'image' ? ALLOWED_IMAGE_TYPES : ALLOWED_VIDEO_TYPES
+  if (mediaType === 'image') return ALLOWED_IMAGE_TYPES
+  if (mediaType === 'release_package') return ALLOWED_RELEASE_PACKAGE_TYPES
+  return ALLOWED_VIDEO_TYPES
 }

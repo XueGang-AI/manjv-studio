@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { toLocalMediaReadUrl } from '@/server/services/local-media-read-url'
+import { resolveMediaReadUrl } from '@/server/services/media-persist'
 
 /**
  * GET /api/projects/:id/episodes/:episodeId/scene-references
@@ -22,13 +23,16 @@ export async function GET(
       },
     })
 
-    const readableScenes = scenes.map(scene => ({
+    const readableScenes = await Promise.all(scenes.map(async scene => ({
       ...scene,
-      sceneImages: scene.sceneImages.map(image => ({
+      sceneImages: await Promise.all(scene.sceneImages.map(async image => ({
         ...image,
-        imageUrl: toLocalMediaReadUrl(image.imageUrl) || image.imageUrl,
-      })),
-    }))
+        imageUrl: await resolveMediaReadUrl(
+          image.storageObjectKey,
+          toLocalMediaReadUrl(image.imageUrl) || image.imageUrl,
+        ),
+      }))),
+    })))
 
     return NextResponse.json({ success: true, data: { scenes: readableScenes } })
   } catch (error) {

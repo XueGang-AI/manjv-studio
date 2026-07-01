@@ -12,13 +12,16 @@
 // - 错误脱敏
 
 import prisma from '@/lib/prisma'
+import fs from 'fs'
 import { ffmpegService, sanitizeError, RenderError } from '@/server/services/ffmpeg.service'
 import { taskService } from '@/server/queues/task-queue.service'
+import { persistLocalVideoFile, persistVideoFromUrl, resolveMediaReadUrl } from '@/server/services/media-persist'
 import { emitTaskEvent, taskToUpdateEvent } from '../task-events'
 
 export interface FinalRenderInput {
   episodeId: string
   aspectRatio?: string
+  normalizeAudio?: boolean
 }
 
 /**
@@ -90,24 +93,26 @@ export async function handleFinalRender(taskId: string): Promise<void> {
     const ffAvailable = await ffmpegService.checkAvailable()
     const outputFileName = `${projectId}_ep${episode.episodeNo}_${Date.now()}.mp4`
 
-    let result: { success: boolean; outputPath?: string; duration?: number; error?: string }
+    let result: { success: boolean; outputPath?: string; duration?: number; audioNormalized?: boolean; error?: string }
 
     if (ffAvailable) {
       await updateProgress(10)
-      result = await ffmpegService.concatVideos({
-        shotVideos: confirmedVideos.map(v => ({
-          videoUrl: v.videoUrl || '',
+      const renderInputs = await Promise.all(confirmedVideos.map(async v => ({
+          videoUrl: await resolveMediaReadUrl(v.storageObjectKey, v.videoUrl) || '',
           duration: v.duration || 5,
-        })),
+        })))
+      result = await ffmpegService.concatVideos({
+        shotVideos: renderInputs,
         outputFileName,
         aspectRatio,
         fps: 25,
         addFadeTransition: confirmedVideos.length > 1,
+        normalizeAudio: typeof input.normalizeAudio === 'boolean' ? input.normalizeAudio : undefined,
       })
     } else {
       result = {
         success: true,
-        outputPath: confirmedVideos[0]?.videoUrl || '',
+        outputPath: await resolveMediaReadUrl(confirmedVideos[0]?.storageObjectKey, confirmedVideos[0]?.videoUrl) || '',
         duration: confirmedVideos[0]?.duration || 5,
       }
     }
@@ -125,11 +130,23 @@ export async function handleFinalRender(taskId: string): Promise<void> {
       return
     }
 
+    const outputPathOrUrl = result.outputPath || ''
+    const persistedFinal = /^https?:\/\//i.test(outputPathOrUrl)
+      ? await persistVideoFromUrl(outputPathOrUrl, projectId, `episodes/${episodeId}`, 'final_video')
+      : await persistLocalVideoFile(outputPathOrUrl, projectId, `episodes/${episodeId}`, 'final_video')
+
+    if (outputPathOrUrl && !/^https?:\/\//i.test(outputPathOrUrl) && fs.existsSync(outputPathOrUrl)) {
+      try { fs.unlinkSync(outputPathOrUrl) } catch { /* best effort cleanup */ }
+    }
+
     // 保存 FinalVideo 记录
     const finalVideo = await prisma.finalVideo.create({
       data: {
         episodeId, projectId,
-        videoUrl: result.outputPath || '',
+        videoUrl: persistedFinal.readUrl,
+        storageObjectKey: persistedFinal.storageObjectKey,
+        storageProvider: persistedFinal.storageProvider,
+        sourceVideoUrl: persistedFinal.sourceUrl || null,
         duration: result.duration,
         aspectRatio,
         fps: 25,
@@ -144,7 +161,13 @@ export async function handleFinalRender(taskId: string): Promise<void> {
     const { versionService: vs } = await import('@/server/services/version.service')
     await vs.createVersion({
       projectId, entityType: 'FINAL_VIDEO', entityId: finalVideo.id,
-      snapshot: { final_video_id: finalVideo.id, duration: result.duration, project_status: 'RENDERED' },
+      snapshot: {
+        final_video_id: finalVideo.id,
+        duration: result.duration,
+        project_status: 'RENDERED',
+        storage_object_key: persistedFinal.storageObjectKey,
+        storage_provider: persistedFinal.storageProvider,
+      },
       changeType: 'GENERATE', description: '合成最终成片', sourceTaskId: taskId,
     })
 
@@ -152,6 +175,9 @@ export async function handleFinalRender(taskId: string): Promise<void> {
     const completed = await taskService.completeTask(taskId, {
       final_video_id: finalVideo.id,
       duration: result.duration,
+      audio_normalized: result.audioNormalized ?? false,
+      storage_object_key: persistedFinal.storageObjectKey,
+      storage_provider: persistedFinal.storageProvider,
     })
 
     await emitTaskEvent('task.completed', taskToUpdateEvent(completed))

@@ -5,222 +5,229 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import {
-  LayoutDashboard, FileText, Users, Image as ImageIcon, Film, Video,
-  Clapperboard, Package, ListTodo, Settings, FileCode,
-  ChevronLeft, Check, Lock, Sparkles,
+  Boxes,
+  Grid2X2,
+  ListChecks,
+  Menu,
+  ShieldCheck,
+  Sparkles,
+  Truck,
+  X,
 } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
+import { usePrimaryEpisode } from '@/components/layout/use-primary-episode'
 
 interface NavItem {
   label: string
-  href: string
+  href?: string
   icon: React.ReactNode
-  step?: number
+  match: (pathname: string) => boolean
+  disabledReason?: string
 }
-
-const mainNavItems: NavItem[] = [
-  { label: '项目列表', href: '/projects', icon: <LayoutDashboard size={18} /> },
-]
-
-const projectSteps: NavItem[] = [
-  { label: '项目信息', href: '', icon: <FileText size={18} />, step: 1 },
-  { label: '故事方案', href: '/story', icon: <FileText size={18} />, step: 2 },
-  { label: '角色设定', href: '/characters', icon: <Users size={18} />, step: 3 },
-  { label: '角色图', href: '/character-images', icon: <ImageIcon size={18} />, step: 4 },
-  { label: '分镜脚本', href: '/episodes/1/storyboard', icon: <Film size={18} />, step: 5 },
-  { label: '分镜图', href: '/episodes/1/shot-images', icon: <ImageIcon size={18} />, step: 6 },
-  { label: '视频片段', href: '/episodes/1/shot-videos', icon: <Video size={18} />, step: 7 },
-  { label: '成片预览', href: '/episodes/1/final-preview', icon: <Clapperboard size={18} />, step: 8 },
-  { label: '素材管理', href: '/assets', icon: <Package size={18} />, step: 9 },
-  { label: '任务队列', href: '/tasks', icon: <ListTodo size={18} />, step: 10 },
-]
-
-const systemNavItems: NavItem[] = [
-  { label: 'Prompt 模板', href: '/prompts', icon: <FileCode size={18} /> },
-  { label: '模型设置', href: '/settings/models', icon: <Settings size={18} /> },
-]
 
 interface SidebarProps {
   projectId?: string
 }
 
-export function Sidebar({ projectId }: SidebarProps) {
+export function Sidebar({ projectId: propProjectId }: SidebarProps) {
   const pathname = usePathname()
-  const [collapsed, setCollapsed] = React.useState(false)
+  const collapsed = false
+  const [mobileOpen, setMobileOpen] = React.useState(false)
+  const projectId = propProjectId || pathname.match(/\/projects\/([^/]+)/)?.[1]
+  const isProjectWorkspace = Boolean(projectId && projectId !== 'new')
+  const projectBase = projectId ? `/projects/${projectId}` : '/projects'
+  const { finalPreviewHref, loading: episodeLoading } = usePrimaryEpisode(projectId, pathname)
 
-  const isProjectPage = projectId && pathname.includes('/projects/')
+  const projectNavItems: NavItem[] = [
+    {
+      label: '项目工作台',
+      href: projectBase,
+      icon: <Grid2X2 size={18} />,
+      match: (path) => path === projectBase,
+    },
+    {
+      label: '素材资产库',
+      href: `${projectBase}/assets`,
+      icon: <Boxes size={18} />,
+      match: (path) => path.includes(`${projectBase}/assets`),
+    },
+    {
+      label: '任务队列',
+      href: `${projectBase}/tasks`,
+      icon: <ListChecks size={18} />,
+      match: (path) => path.includes(`${projectBase}/tasks`),
+    },
+    {
+      label: 'QC 质检',
+      href: `${projectBase}/qc`,
+      icon: <ShieldCheck size={18} />,
+      match: (path) => path.includes(`${projectBase}/qc`),
+    },
+    {
+      label: '成片交付',
+      href: finalPreviewHref,
+      icon: <Truck size={18} />,
+      match: (path) => path.includes('/final-preview'),
+      disabledReason: episodeLoading ? '正在读取剧集信息' : '当前项目尚未创建剧集',
+    },
+  ]
 
-  // Determine step states for visual treatment
-  const getStepState = (stepIndex: number): 'completed' | 'active' | 'upcoming' => {
-    // Simple heuristic: steps before current route are completed
-    const currentStepIndex = projectSteps.findIndex((item) => {
-      const href = projectId ? `/projects/${projectId}${item.href}` : ''
-      return pathname === href
-    })
-    if (currentStepIndex === -1) return 'upcoming'
-    if (stepIndex < currentStepIndex) return 'completed'
-    if (stepIndex === currentStepIndex) return 'active'
-    return 'upcoming'
+  const renderNavItem = (item: NavItem, mobile = false) => {
+    const active = item.match(pathname)
+    const className = cn(
+      'flex w-full items-center gap-3 rounded-[var(--radius-md)] px-3 py-3 text-sm transition-all duration-200',
+      active
+        ? 'bg-[var(--gradient-aurora)] text-white shadow-[var(--glow-primary)]'
+        : 'text-[var(--color-text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--color-text-primary)]',
+      collapsed && !mobile && 'justify-center px-2',
+      !item.href && 'cursor-not-allowed opacity-45 hover:bg-transparent hover:text-[var(--color-text-secondary)]',
+    )
+
+    if (!item.href) {
+      return (
+        <button key={item.label} type="button" disabled title={item.disabledReason} className={className}>
+          {item.icon}
+          {(!collapsed || mobile) && <span>{item.label}</span>}
+        </button>
+      )
+    }
+
+    return (
+      <Link
+        key={item.label}
+        href={item.href}
+        title={collapsed && !mobile ? item.label : undefined}
+        onClick={mobile ? () => setMobileOpen(false) : undefined}
+        className={className}
+      >
+        {item.icon}
+        {(!collapsed || mobile) && <span>{item.label}</span>}
+      </Link>
+    )
   }
 
   return (
-    <aside
-      className={cn(
-        'h-screen flex flex-col border-r border-[var(--color-border-dim)] transition-all duration-200',
-        'bg-[var(--bg-surface)]',
-        collapsed ? 'w-16' : 'w-60'
-      )}
-    >
-      {/* Logo */}
-      <div className="flex items-center justify-between h-14 px-4 border-b border-[var(--color-border-dim)]">
-        {!collapsed && (
-          <Link href="/projects" className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-[var(--radius-md)] flex items-center justify-center" style={{ background: 'var(--gradient-aurora)' }}>
-              <Clapperboard size={16} className="text-white" />
-            </div>
-            <span className="font-bold text-[var(--color-text-primary)] tracking-tight text-[15px]">Manjv Studio</span>
-            <Badge variant="primary">Beta</Badge>
-          </Link>
-        )}
-        {collapsed && (
-          <Link href="/projects" className="mx-auto">
-            <div className="w-8 h-8 rounded-[var(--radius-md)] flex items-center justify-center" style={{ background: 'var(--gradient-aurora)' }}>
-              <Clapperboard size={16} className="text-white" />
-            </div>
-          </Link>
-        )}
-        {!collapsed && (
-          <button
-            onClick={() => setCollapsed(true)}
-            className="p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-panel)] transition-colors text-[var(--color-text-muted)] cursor-pointer"
-          >
-            <ChevronLeft size={16} className="transition-transform duration-200" />
-          </button>
-        )}
-      </div>
+    <>
+      <button
+        type="button"
+        onClick={() => setMobileOpen(true)}
+        aria-label="打开生产导航"
+        className="fixed left-2 top-2 z-50 inline-flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--bg-elevated)] text-[var(--color-text-primary)] shadow-[var(--shadow-panel)] md:hidden"
+        title="打开生产导航"
+      >
+        <Menu size={20} />
+      </button>
 
-      {/* Expand button (collapsed state) */}
-      {collapsed && (
-        <div className="flex justify-center py-2 border-b border-[var(--color-border-dim)]">
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 md:hidden">
           <button
-            onClick={() => setCollapsed(false)}
-            className="p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-panel)] transition-colors text-[var(--color-text-muted)] cursor-pointer"
-            title="展开侧栏"
-          >
-            <ChevronLeft size={16} className="rotate-180 transition-transform duration-200" />
-          </button>
-        </div>
-      )}
-
-      {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-3">
-        {/* Main menu */}
-        <div className="px-3 mb-4">
-          {!collapsed && <div className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-widest px-3 mb-2 font-medium">导航</div>}
-          {mainNavItems.map((item) => {
-            const isActive = pathname === item.href
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  'flex items-center gap-3 px-3 py-2 rounded-[var(--radius-md)] text-sm transition-colors mb-0.5',
-                  isActive
-                    ? 'bg-[var(--color-primary-muted)] text-[var(--color-primary)]'
-                    : 'text-[var(--color-text-secondary)] hover:bg-[var(--bg-panel)] hover:text-[var(--color-text-primary)]'
-                )}
-                title={collapsed ? item.label : undefined}
-              >
-                {item.icon}
-                {!collapsed && <span>{item.label}</span>}
+            type="button"
+            aria-label="关闭生产导航"
+            className="absolute inset-0 bg-black/55"
+            onClick={() => setMobileOpen(false)}
+          />
+          <aside className="relative flex h-full w-[min(320px,calc(100vw-32px))] flex-col border-r border-[var(--color-border-dim)] bg-[var(--bg-sidebar)] shadow-[var(--shadow-panel)]">
+            <div className="flex h-14 items-center justify-between border-b border-[var(--color-border-dim)] px-4">
+              <Link href="/projects" onClick={() => setMobileOpen(false)} className="flex min-w-0 items-center gap-2.5">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-[var(--gradient-aurora)] shadow-[var(--glow-primary)]">
+                  <Sparkles size={16} className="text-white" />
+                </div>
+                <span className="truncate text-[15px] font-bold tracking-tight text-[var(--color-text-primary)]">Manjv Studio</span>
               </Link>
-            )
-          })}
-        </div>
-
-        {/* Project steps (only when inside a project) */}
-        {isProjectPage && projectId && (
-          <div className="px-3 mb-4">
-            {!collapsed && (
-              <div className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-widest px-3 mb-2 font-medium">创作流程</div>
-            )}
-            {projectSteps.map((item, index) => {
-              const href = `/projects/${projectId}${item.href}`
-              const isActive = pathname === href
-              const stepState = getStepState(index)
-              const isCompleted = stepState === 'completed'
-              const isLocked = stepState === 'upcoming' && !isActive
-
-              return (
+              <button
+                onClick={() => setMobileOpen(false)}
+                className="rounded-[var(--radius-sm)] p-1.5 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--bg-panel)]"
+                title="关闭导航"
+              >
+                <X size={17} />
+              </button>
+            </div>
+            <nav className="flex-1 overflow-y-auto px-3 py-4">
+              {isProjectWorkspace ? (
+                <div className="space-y-1">
+                  <div className="mb-3 px-3 text-[10px] font-medium uppercase tracking-widest text-[var(--color-text-muted)]">
+                    生产工作台
+                  </div>
+                  {projectNavItems.map((item) => renderNavItem(item, true))}
+                </div>
+              ) : (
                 <Link
-                  key={item.label}
-                  href={href}
+                  href="/projects"
+                  onClick={() => setMobileOpen(false)}
                   className={cn(
-                    'flex items-center gap-3 px-3 py-2 rounded-[var(--radius-md)] text-sm transition-colors mb-0.5',
-                    isActive && !isCompleted && 'bg-[var(--color-primary-muted)] text-[var(--color-primary)]',
-                    isCompleted && !isActive && 'text-[var(--color-success)]',
-                    !isActive && !isCompleted && !isLocked && 'text-[var(--color-text-secondary)] hover:bg-[var(--bg-panel)] hover:text-[var(--color-text-primary)]',
-                    isLocked && 'text-[var(--color-text-muted)] opacity-50'
+                    'flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-sm transition-colors',
+                    pathname === '/projects'
+                      ? 'bg-[var(--color-primary-muted)] text-[var(--color-primary-hover)]'
+                      : 'text-[var(--color-text-secondary)] hover:bg-[var(--bg-panel)] hover:text-[var(--color-text-primary)]',
                   )}
-                  title={collapsed ? item.label : undefined}
                 >
-                  <span className={cn(
-                    'flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold transition-all shrink-0',
-                    isActive && !isCompleted && 'aurora-dot text-white',
-                    isCompleted && 'bg-[var(--color-success)] text-white',
-                    !isActive && !isCompleted && !isLocked && 'bg-[var(--bg-panel)] text-[var(--color-text-muted)]',
-                    isLocked && 'bg-[var(--bg-panel)] text-[var(--color-text-muted)]'
-                  )}>
-                    {isCompleted ? <Check size={12} /> : isLocked ? <Lock size={10} /> : item.step}
-                  </span>
-                  {!collapsed && (
-                    <span className={cn(
-                      isActive && !isCompleted && 'aurora-text',
-                      isActive && !isCompleted && 'font-semibold'
-                    )} style={isActive && !isCompleted ? { background: 'var(--gradient-aurora)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' } : {}}>
-                      {item.label}
-                    </span>
-                  )}
+                  <Grid2X2 size={18} />
+                  <span>项目列表</span>
                 </Link>
-              )
-            })}
-          </div>
-        )}
-
-        {/* System menu */}
-        <div className="px-3 mt-auto">
-          {!collapsed && <div className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-widest px-3 mb-2 mt-4 font-medium">系统</div>}
-          {systemNavItems.map((item) => {
-            const isActive = pathname === item.href
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  'flex items-center gap-3 px-3 py-2 rounded-[var(--radius-md)] text-sm transition-colors mb-0.5',
-                  isActive
-                    ? 'bg-[var(--color-primary-muted)] text-[var(--color-primary)]'
-                    : 'text-[var(--color-text-secondary)] hover:bg-[var(--bg-panel)] hover:text-[var(--color-text-primary)]'
-                )}
-                title={collapsed ? item.label : undefined}
-              >
-                {item.icon}
-                {!collapsed && <span>{item.label}</span>}
-              </Link>
-            )
-          })}
-        </div>
-      </nav>
-
-      {/* Footer */}
-      {!collapsed && (
-        <div className="px-4 py-3 border-t border-[var(--color-border-dim)]">
-          <div className="flex items-center gap-2">
-            <Sparkles size={10} className="text-[var(--color-accent-cyan)]" />
-            <span className="text-[10px] text-[var(--color-text-muted)]">Manjv Studio v0.1.0</span>
-          </div>
+              )}
+            </nav>
+          </aside>
         </div>
       )}
-    </aside>
+
+      <aside
+        className={cn(
+          'hidden h-screen flex-col border-r border-[var(--color-border-dim)] bg-[var(--bg-sidebar)] transition-all duration-200 md:flex',
+          collapsed ? 'w-16' : 'w-[180px]',
+        )}
+      >
+        <div className="flex h-14 items-center justify-between border-b border-[var(--color-border-dim)] px-3">
+          <Link href="/projects" className={cn('flex min-w-0 items-center gap-2.5', collapsed && 'mx-auto')}>
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-[var(--gradient-aurora)] shadow-[var(--glow-primary)]">
+              <Sparkles size={16} className="text-white" />
+            </div>
+            {!collapsed && (
+              <span className="truncate text-[15px] font-bold tracking-tight text-[var(--color-text-primary)]">Manjv Studio</span>
+            )}
+          </Link>
+          {!collapsed && <div className="h-6 w-1" />}
+        </div>
+
+        <nav className="flex-1 overflow-y-auto px-2 py-7">
+          {isProjectWorkspace ? (
+            <div className="space-y-2">
+              {!collapsed && (
+                <div className="mb-4 px-3 text-[10px] font-medium uppercase tracking-widest text-[var(--color-text-muted)]">
+                  生产工作台
+                </div>
+              )}
+              {projectNavItems.map((item) => renderNavItem(item))}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Link
+                href="/projects"
+                className={cn(
+                  'flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-sm transition-colors',
+                  pathname === '/projects'
+                    ? 'bg-[var(--color-primary-muted)] text-[var(--color-primary-hover)]'
+                    : 'text-[var(--color-text-secondary)] hover:bg-[var(--bg-panel)] hover:text-[var(--color-text-primary)]',
+                  collapsed && 'justify-center px-2',
+                )}
+              >
+                <Grid2X2 size={18} />
+                {!collapsed && <span>项目列表</span>}
+              </Link>
+            </div>
+          )}
+        </nav>
+
+        {!collapsed && (
+          <div className="border-t border-[var(--color-border-dim)] p-3">
+            <div className="rounded-[var(--radius-md)] border border-[var(--color-border-dim)] bg-[var(--bg-panel)] p-3">
+              <div className="flex items-center gap-2 text-xs font-medium text-[var(--color-text-secondary)]">
+                <Sparkles size={13} className="text-[var(--color-primary-hover)]" />
+                <span>生产链路</span>
+              </div>
+              <div className="mt-2 text-[10px] leading-4 text-[var(--color-text-muted)]">Ark / Worker / FFmpeg</div>
+            </div>
+          </div>
+        )}
+      </aside>
+    </>
   )
 }

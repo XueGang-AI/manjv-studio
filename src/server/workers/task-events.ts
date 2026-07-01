@@ -66,15 +66,22 @@ export type TaskEventType =
 
 // ─── Redis 频道 ────────────────────────────────────────────────────
 
-const REDIS_CHANNEL_PREFIX = 'manjv:task:'
+const REDIS_TASK_CHANNEL_NAMESPACE = 'task:'
+const DEFAULT_REDIS_KEY_PREFIX = 'manjv_studio:'
 
-/** 项目频道：manjv:task:{projectId} */
-function projectChannel(projectId: string): string {
-  return `${REDIS_CHANNEL_PREFIX}${projectId}`
+function redisKeyPrefix(): string {
+  return process.env.REDIS_KEY_PREFIX || DEFAULT_REDIS_KEY_PREFIX
 }
 
-/** 全局频道：manjv:task:_all */
-const GLOBAL_CHANNEL = `${REDIS_CHANNEL_PREFIX}_all`
+/** 项目频道：{REDIS_KEY_PREFIX}task:{projectId} */
+function projectChannel(projectId: string): string {
+  return `${redisKeyPrefix()}${REDIS_TASK_CHANNEL_NAMESPACE}${projectId}`
+}
+
+/** 全局频道：{REDIS_KEY_PREFIX}task:_all */
+function globalChannel(): string {
+  return `${redisKeyPrefix()}${REDIS_TASK_CHANNEL_NAMESPACE}_all`
+}
 
 // ─── 进程内事件总线（同进程直推） ──────────────────────────────────
 
@@ -272,7 +279,7 @@ async function resubscribeActiveChannels(): Promise<void> {
 
   // 重新订阅全局频道
   if (globalRefCount > 0) {
-    channels.push(GLOBAL_CHANNEL)
+    channels.push(globalChannel())
   }
 
   if (channels.length === 0) return
@@ -337,7 +344,7 @@ async function refGlobalChannel(): Promise<void> {
   if (!sub) return
 
   try {
-    await sub.subscribe(GLOBAL_CHANNEL)
+    await sub.subscribe(globalChannel())
     globalRefCount = 1
   } catch {
     // 订阅失败不阻塞
@@ -351,7 +358,7 @@ async function unrefGlobalChannel(): Promise<void> {
     const sub = subscriber
     if (sub) {
       try {
-        await sub.unsubscribe(GLOBAL_CHANNEL)
+        await sub.unsubscribe(globalChannel())
       } catch {
         // 取消订阅失败不影响
       }
@@ -386,7 +393,7 @@ export async function emitTaskEvent(type: TaskEventType, payload: Omit<TaskUpdat
       const message = JSON.stringify({ type, payload: fullPayload, source: 'redis' })
       await Promise.all([
         pub.publish(projectChannel(payload.projectId), message),
-        pub.publish(GLOBAL_CHANNEL, message),
+        pub.publish(globalChannel(), message),
       ])
     }
   } catch {
@@ -584,6 +591,6 @@ export function getActiveChannels(): string[] {
   for (const [projectId, count] of projectRefCounts) {
     if (count > 0) channels.push(projectChannel(projectId))
   }
-  if (globalRefCount > 0) channels.push(GLOBAL_CHANNEL)
+  if (globalRefCount > 0) channels.push(globalChannel())
   return channels
 }

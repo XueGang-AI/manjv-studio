@@ -1,14 +1,19 @@
 // ============================================
 // Ark Image Model Probe
-// Tests doubao-seedream-5-0-260128 via
-// POST https://ark.cn-beijing.volces.com/api/v3/images/generations
+// Tests the configured Ark image model via
+// POST https://ark.cn-beijing.volces.com/api/plan/v3/images/generations
 // ============================================
 import { config } from 'dotenv'
+import {
+  DEFAULT_ARK_API_BASE_URL,
+  DEFAULT_ARK_IMAGE_MODEL,
+  normalizeArkBaseUrl,
+} from '../../src/server/model-adapters/model-config'
 config()
 
-const BASE = process.env.ARK_API_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3'
+const BASE = normalizeArkBaseUrl(process.env.ARK_API_BASE_URL || DEFAULT_ARK_API_BASE_URL)
 const KEY = process.env.ARK_API_KEY || ''
-const MODEL = process.env.ARK_IMAGE_MODEL || 'doubao-seedream-5-0-260128'
+const MODEL = process.env.ARK_IMAGE_MODEL || DEFAULT_ARK_IMAGE_MODEL
 const ENDPOINT = `${BASE}/images/generations`
 
 const TEST_IMAGE_URL = 'https://ark-project.tos-cn-beijing.volces.com/doc_image/seepro_i2v.png'

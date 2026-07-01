@@ -6,16 +6,23 @@
 import { execSync } from 'child_process'
 import fs from 'fs'
 
-const BASE = process.env.E2E_BASE_URL || 'http://localhost:3000'
+const BASE = process.env.E2E_BASE_URL || 'http://localhost:3100'
 
 const log = (msg: string) => console.log(`\x1b[36m[E2E]\x1b[0m ${msg}`)
 const ok = (msg: string) => console.log(`\x1b[32m✅ ${msg}\x1b[0m`)
 const fail = (msg: string): never => { console.log(`\x1b[31m❌ ${msg}\x1b[0m`); process.exit(1) }
 
-function resolveLocalVideoPath(videoUrl: string): string {
+function resolveLocalVideoPath(videoUrl: string, storageObjectKey?: string | null): string | null {
+  if (storageObjectKey) return `uploads/media/${storageObjectKey}`
+
   const localMediaPrefix = '/api/local-media/'
   if (videoUrl.startsWith(localMediaPrefix)) {
     return `uploads/${decodeURIComponent(videoUrl.slice(localMediaPrefix.length))}`
+  }
+
+  const mediaPrefix = '/api/media/'
+  if (videoUrl.startsWith(mediaPrefix)) {
+    return `uploads/media/${decodeURIComponent(videoUrl.slice(mediaPrefix.length))}`
   }
 
   try {
@@ -23,6 +30,11 @@ function resolveLocalVideoPath(videoUrl: string): string {
     if (url.pathname.startsWith(localMediaPrefix)) {
       return `uploads/${decodeURIComponent(url.pathname.slice(localMediaPrefix.length))}`
     }
+    if (url.pathname.startsWith(mediaPrefix)) {
+      return `uploads/media/${decodeURIComponent(url.pathname.slice(mediaPrefix.length))}`
+    }
+
+    return null
   } catch {
     // Plain filesystem path.
   }
@@ -55,6 +67,8 @@ interface TestState {
   shotVideoIds: string[]
   finalVideoId: string
   finalVideoUrl: string
+  finalVideoObjectKey: string | null
+  finalVideoStorageProvider: string | null
 }
 
 interface ProjectTask {
@@ -232,8 +246,11 @@ async function main() {
   if (!finalPreview.data.latest) fail('最终视频未生成')
   state.finalVideoId = finalPreview.data.latest.id
   state.finalVideoUrl = finalPreview.data.latest.videoUrl
+  state.finalVideoObjectKey = finalPreview.data.latest.storageObjectKey || null
+  state.finalVideoStorageProvider = finalPreview.data.latest.storageProvider || null
   ok(`最终视频合成成功 final_video_id=${state.finalVideoId}`)
   ok(`最终视频路径: ${state.finalVideoUrl}`)
+  ok(`最终视频存储: ${state.finalVideoStorageProvider || 'legacy'} ${state.finalVideoObjectKey || ''}`.trim())
 
   // 19. Run QC
   log('Step 19: 运行 QC')
@@ -246,35 +263,40 @@ async function main() {
   log('Step 20: 生成发布包')
   const releasePackage = await post(`/api/projects/${state.projectId}/episodes/${state.episodeId}/release-package/generate`)
   if (!releasePackage.success) fail('发布包生成失败: ' + releasePackage.error)
-  ok(`发布包生成成功 path=${releasePackage.data.packageUrl}`)
+  ok(`发布包生成成功 objectKey=${releasePackage.data.packageObjectKey || 'legacy'} path=${releasePackage.data.packageUrl}`)
 
-  // 21. Verify final video file
+  // 21. Verify final video file. Mock/local provider stores under uploads/media;
+  // non-local providers only return signed read URLs, so this local ffprobe check is skipped.
   log('Step 21: 验证最终视频文件')
-  const videoPath = resolveLocalVideoPath(state.finalVideoUrl)
-  if (!fs.existsSync(videoPath)) fail(`文件不存在: ${videoPath}`)
-  const stat = fs.statSync(videoPath)
-  if (stat.size === 0) fail('文件大小为 0')
-  ok(`文件存在 size=${(stat.size/1024).toFixed(1)}KB`)
+  const videoPath = resolveLocalVideoPath(state.finalVideoUrl, state.finalVideoObjectKey)
+  if (!videoPath) {
+    ok('最终视频为远端存储签名 URL，跳过本地文件检查')
+  } else {
+    if (!fs.existsSync(videoPath)) fail(`文件不存在: ${videoPath}`)
+    const stat = fs.statSync(videoPath)
+    if (stat.size === 0) fail('文件大小为 0')
+    ok(`文件存在 size=${(stat.size/1024).toFixed(1)}KB`)
 
-  try {
-    const probe = execSync(`ffprobe -v quiet -print_format json -show_format -show_streams "${videoPath}"`, { encoding: 'utf-8' })
-    const info = JSON.parse(probe)
-    const vStream = info.streams.find((s: {codec_type: string}) => s.codec_type === 'video')
-    const aStream = info.streams.find((s: {codec_type: string}) => s.codec_type === 'audio')
+    try {
+      const probe = execSync(`ffprobe -v quiet -print_format json -show_format -show_streams "${videoPath}"`, { encoding: 'utf-8' })
+      const info = JSON.parse(probe)
+      const vStream = info.streams.find((s: {codec_type: string}) => s.codec_type === 'video')
+      const aStream = info.streams.find((s: {codec_type: string}) => s.codec_type === 'audio')
 
-    ok(`ffprobe 检测通过`)
-    ok(`  duration: ${info.format.duration}s`)
-    ok(`  resolution: ${vStream?.width}x${vStream?.height}`)
-    ok(`  fps: ${vStream?.r_frame_rate}`)
-    ok(`  codec: ${vStream?.codec_name}`)
-    ok(`  audio: ${aStream?.codec_name || 'none'}`)
+      ok(`ffprobe 检测通过`)
+      ok(`  duration: ${info.format.duration}s`)
+      ok(`  resolution: ${vStream?.width}x${vStream?.height}`)
+      ok(`  fps: ${vStream?.r_frame_rate}`)
+      ok(`  codec: ${vStream?.codec_name}`)
+      ok(`  audio: ${aStream?.codec_name || 'none'}`)
 
-    // Verify resolution
-    if (vStream?.width !== 1080 || vStream?.height !== 1920) {
-      console.log(`  ⚠️  resolution is ${vStream?.width}x${vStream?.height}, expected 1080x1920`)
+      // Verify resolution
+      if (vStream?.width !== 1080 || vStream?.height !== 1920) {
+        console.log(`  ⚠️  resolution is ${vStream?.width}x${vStream?.height}, expected 1080x1920`)
+      }
+    } catch (e) {
+      fail('ffprobe 检测失败: ' + (e as Error).message)
     }
-  } catch (e) {
-    fail('ffprobe 检测失败: ' + (e as Error).message)
   }
 
   // 22. Final report
@@ -285,6 +307,8 @@ async function main() {
   console.log(`episode_id:      ${state.episodeId}`)
   console.log(`final_video_id:  ${state.finalVideoId}`)
   console.log(`final_video_url: ${state.finalVideoUrl}`)
+  console.log(`object_key:      ${state.finalVideoObjectKey || 'legacy'}`)
+  console.log(`storage:         ${state.finalVideoStorageProvider || 'legacy'}`)
   console.log(`${'='.repeat(60)}\n`)
 
   ok('E2E 全部 22 步通过！')

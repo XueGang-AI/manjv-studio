@@ -1,15 +1,35 @@
 // ============================================
 // QC 质量检查服务
 // ============================================
+import fs from 'fs'
+import path from 'path'
 import prisma from '@/lib/prisma'
+import {
+  FFMPEG_PATH,
+  UPLOAD_DIR,
+  createTaskTempDir,
+  downloadVideo,
+  probeVideo,
+  safeCleanupDir,
+  spawnSafe,
+} from './ffmpeg-utils'
+import { resolveMediaReadUrl } from './media-persist'
 
 type JsonValue = import('@prisma/client').Prisma.InputJsonValue
+
+export type QCSeverity = 'P0' | 'P1' | 'P2' | 'P3'
+export type QCRecommendedAction = 'accept' | 'rerun_shot_image' | 'rerun_shot_video' | 'rerender_final'
 
 export interface QCIssue {
   level: 'high' | 'medium' | 'low'
   field: string
   problem: string
   suggestion: string
+  shotNo?: number
+  timeRange?: string
+  issueType?: string
+  severity?: QCSeverity
+  recommendedAction?: QCRecommendedAction
 }
 
 export interface QCResult {
@@ -23,6 +43,101 @@ export interface QCResult {
 }
 
 export class QCService {
+  private normalizeIssue(issue: QCIssue): QCIssue {
+    return {
+      ...issue,
+      issueType: issue.issueType || issue.field,
+      severity: issue.severity || this.severityFromLevel(issue.level),
+      recommendedAction: issue.recommendedAction || this.actionFromLevel(issue.level),
+    }
+  }
+
+  private severityFromLevel(level: QCIssue['level']): QCSeverity {
+    if (level === 'high') return 'P1'
+    if (level === 'medium') return 'P2'
+    return 'P3'
+  }
+
+  private actionFromLevel(level: QCIssue['level']): QCRecommendedAction {
+    if (level === 'high') return 'rerun_shot_image'
+    if (level === 'medium') return 'rerun_shot_video'
+    return 'accept'
+  }
+
+  private timeRangeForShot(shot: { startTime?: number | null; endTime?: number | null }): string | undefined {
+    if (shot.startTime == null || shot.endTime == null) return undefined
+    return `${Math.round(shot.startTime)}-${Math.round(shot.endTime)}s`
+  }
+
+  private hasPhoneSafetyGuard(prompt: string | null | undefined): boolean {
+    if (!prompt) return false
+    const lower = prompt.toLowerCase()
+    const required = [
+      /phone|手机|screen|屏幕|直播/.test(lower),
+      /red check|红色对勾|heart|爱心|like icon|点赞/.test(lower),
+      /logo|watermark|平台|platform/.test(lower),
+      /fake subtitles|garbled|伪中文|乱码|可读文字|readable text/.test(lower),
+    ]
+    return required.every(Boolean)
+  }
+
+  private resolveLocalFinalVideoPath(videoUrl?: string | null): string | null {
+    if (!videoUrl || /^https?:\/\//i.test(videoUrl)) return null
+    const uploadRoot = path.resolve(UPLOAD_DIR)
+    const resolved = path.isAbsolute(videoUrl)
+      ? path.resolve(videoUrl)
+      : path.resolve(videoUrl.replace(/^\/+/, ''))
+    if (!resolved.startsWith(uploadRoot + path.sep) && resolved !== uploadRoot) return null
+    return fs.existsSync(resolved) ? resolved : null
+  }
+
+  private async analyzeFinalVideoMedia(localPath: string): Promise<{
+    valid: boolean
+    hasAudio: boolean
+    duration: number | null
+    meanVolumeDb: number | null
+    hasBlackFrames: boolean
+    hasFreeze: boolean
+  }> {
+    const probe = await probeVideo(localPath)
+    let meanVolumeDb: number | null = null
+    let hasBlackFrames = false
+    let hasFreeze = false
+
+    if (probe.valid && probe.hasAudioStream) {
+      const volume = await spawnSafe(FFMPEG_PATH, [
+        '-i', localPath,
+        '-af', 'volumedetect',
+        '-vn', '-sn', '-dn',
+        '-f', 'null',
+        '-',
+      ], { timeout: 90_000 })
+      const match = volume.stderr.match(/mean_volume:\s*(-?\d+(?:\.\d+)?)\s*dB/i)
+      if (match) meanVolumeDb = Number(match[1])
+    }
+
+    if (probe.valid) {
+      const visual = await spawnSafe(FFMPEG_PATH, [
+        '-i', localPath,
+        '-vf', 'blackdetect=d=1:pic_th=0.98,freezedetect=n=-60dB:d=2',
+        '-an',
+        '-f', 'null',
+        '-',
+      ], { timeout: 90_000 })
+      hasBlackFrames = /black_start:/i.test(visual.stderr)
+      hasFreeze = /freeze_start:/i.test(visual.stderr)
+    }
+
+    return {
+      valid: probe.valid,
+      hasAudio: probe.hasAudioStream,
+      duration: probe.duration,
+      meanVolumeDb,
+      hasBlackFrames,
+      hasFreeze,
+    }
+  }
+
   /** 运行完整 QC */
   async runQC(projectId: string, episodeId?: string): Promise<QCResult[]> {
     const results: QCResult[] = []
@@ -171,19 +286,68 @@ export class QCService {
     const charImgCount = charImages.filter(i => i.isConfirmed).length
     const chars = await prisma.character.findMany({ where: { projectId, confirmed: true } })
     if (chars.length > charImgCount) {
-      issues.push({ level: 'high', field: 'character_images', problem: `${chars.length - charImgCount} 个角色缺少确认的标准图`, suggestion: '为每个角色确认标准图' })
+      issues.push({ level: 'high', field: 'character_images', problem: `${chars.length - charImgCount} 个角色缺少确认的标准图`, suggestion: '为每个角色确认标准图', issueType: 'reference_count', severity: 'P1', recommendedAction: 'rerun_shot_image' })
+    }
+    for (const c of chars) {
+      const refs = charImages.filter(i => i.characterId === c.id && i.isConfirmed && i.isSelected)
+      if (refs.length > 0 && refs.length < 3) {
+        issues.push({
+          level: 'medium',
+          field: `character_images.${c.name || c.id}`,
+          problem: `${c.name || '角色'} 已确认参考图少于 3 张，多角度一致性约束偏弱`,
+          suggestion: '补齐正面半身、正面全身、侧面或背面等参考图',
+          issueType: 'reference_count',
+          severity: 'P2',
+          recommendedAction: 'rerun_shot_image',
+        })
+      }
     }
 
     // 分镜图检查
     if (episodeId) {
-      const shots = await prisma.shot.findMany({ where: { episodeId, projectId } })
+      const shots = await prisma.shot.findMany({ where: { episodeId, projectId }, include: { scene: { include: { sceneImages: true } } } })
       let confirmedCount = 0
       for (const shot of shots) {
         const has = shotImages.filter(i => i.shotId === shot.id && i.isConfirmed).length
         if (has > 0) confirmedCount++
+        const confirmedImage = shotImages.find(i => i.shotId === shot.id && i.isConfirmed)
+        const refCount = Array.isArray(confirmedImage?.referenceImages) ? confirmedImage.referenceImages.length : 0
+        const charCount = Array.isArray(shot.characters) ? shot.characters.length : 0
+        if (confirmedImage && charCount > 0 && refCount === 0) {
+          issues.push({
+            level: 'medium',
+            field: `shot_${shot.shotNo}.referenceImages`,
+            problem: `镜头 ${shot.shotNo} 已确认分镜图缺少角色/场景参考记录`,
+            suggestion: '使用带参考图约束的重生成入口追加候选',
+            shotNo: shot.shotNo,
+            timeRange: this.timeRangeForShot(shot),
+            issueType: 'reference_count',
+            severity: 'P2',
+            recommendedAction: 'rerun_shot_image',
+          })
+        }
       }
       if (confirmedCount < shots.length) {
-        issues.push({ level: 'medium', field: 'shot_images', problem: `${shots.length - confirmedCount} 个镜头缺少确认的分镜图`, suggestion: '为每个镜头确认分镜图' })
+        issues.push({ level: 'medium', field: 'shot_images', problem: `${shots.length - confirmedCount} 个镜头缺少确认的分镜图`, suggestion: '为每个镜头确认分镜图', issueType: 'shot_image_missing', severity: 'P2', recommendedAction: 'rerun_shot_image' })
+      }
+
+      const scenes = new Map<string, NonNullable<(typeof shots)[number]['scene']>>()
+      for (const shot of shots) {
+        if (shot.scene) scenes.set(shot.scene.id, shot.scene)
+      }
+      for (const scene of scenes.values()) {
+        const confirmedRefs = scene.sceneImages.filter(img => img.isConfirmed && img.isSelected)
+        if (confirmedRefs.length === 0) {
+          issues.push({
+            level: 'high',
+            field: `scene_${scene.id}.references`,
+            problem: `场景「${scene.name}」缺少确认的场景参考图`,
+            suggestion: '先补齐场景参考图，再重跑对应分镜图或视频',
+            issueType: 'reference_count',
+            severity: 'P1',
+            recommendedAction: 'rerun_shot_image',
+          })
+        }
       }
     }
 
@@ -196,7 +360,7 @@ export class QCService {
     const issues: QCIssue[] = []
     if (!episodeId) return this.buildResult(100, [], '未指定剧集，跳过视频 QC')
 
-    const shots = await prisma.shot.findMany({ where: { episodeId, projectId } })
+    const shots = await prisma.shot.findMany({ where: { episodeId, projectId }, include: { videoPrompts: { orderBy: { createdAt: 'desc' }, take: 1 } } })
     const videos = await prisma.shotVideo.findMany({ where: { projectId, shot: { episodeId } } })
 
     if (videos.length === 0) {
@@ -206,9 +370,36 @@ export class QCService {
     let confirmedCount = 0
     for (const shot of shots) {
       if (videos.some(v => v.shotId === shot.id && v.isConfirmed)) confirmedCount++
+      const shotText = [
+        shot.shotName,
+        shot.location,
+        shot.action,
+        shot.details,
+        shot.dialogue,
+        typeof shot.visual === 'object' && shot.visual ? JSON.stringify(shot.visual) : '',
+      ].filter(Boolean).join(' ')
+      const involvesPhone = /手机|直播|屏幕|支架|phone|livestream|screen/i.test(shotText)
+      if (involvesPhone) {
+        const confirmedVideo = videos.find(v => v.shotId === shot.id && v.isConfirmed)
+        const latestVideo = videos.filter(v => v.shotId === shot.id).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]
+        const prompt = confirmedVideo?.prompt || latestVideo?.prompt || shot.videoPrompts[0]?.prompt
+        if (!this.hasPhoneSafetyGuard(prompt)) {
+          issues.push({
+            level: 'high',
+            field: `shot_${shot.shotNo}.videoPrompt`,
+            problem: `镜头 ${shot.shotNo} 涉及手机/直播画面，但视频 prompt 缺少对平台 UI、对勾、爱心、logo 和伪文字的禁用项`,
+            suggestion: '选择“手机伪 UI/文字”后重跑视频片段',
+            shotNo: shot.shotNo,
+            timeRange: this.timeRangeForShot(shot),
+            issueType: 'prompt_phone_safety',
+            severity: 'P1',
+            recommendedAction: 'rerun_shot_video',
+          })
+        }
+      }
     }
     if (confirmedCount < shots.length) {
-      issues.push({ level: 'medium', field: 'shot_videos', problem: `${shots.length - confirmedCount} 个镜头缺少确认视频`, suggestion: '为每个镜头确认视频片段' })
+      issues.push({ level: 'medium', field: 'shot_videos', problem: `${shots.length - confirmedCount} 个镜头缺少确认视频`, suggestion: '为每个镜头确认视频片段', issueType: 'shot_video_missing', severity: 'P2', recommendedAction: 'rerun_shot_video' })
     }
 
     const score = Math.max(0, 100 - issues.filter(i=>i.level==='high').length*15 - issues.filter(i=>i.level==='medium').length*8)
@@ -229,21 +420,109 @@ export class QCService {
       return this.buildResult(50, [{ level: 'medium', field: 'final_video', problem: '没有已生成的成片', suggestion: '合成最终视频' }], '尚无成片')
     }
 
-    if (!fv.videoUrl) issues.push({ level: 'high', field: 'videoUrl', problem: '缺少视频 URL', suggestion: '重新合成' })
-    if (!fv.duration) issues.push({ level: 'medium', field: 'duration', problem: '缺少时长信息', suggestion: '' })
+    if (!fv.videoUrl) issues.push({ level: 'high', field: 'videoUrl', problem: '缺少视频 URL', suggestion: '重新合成', issueType: 'final_video_missing', severity: 'P1', recommendedAction: 'rerender_final' })
+    if (!fv.duration) issues.push({ level: 'medium', field: 'duration', problem: '缺少时长信息', suggestion: '', issueType: 'final_duration_missing', severity: 'P2', recommendedAction: 'rerender_final' })
     if (!fv.fps) issues.push({ level: 'low', field: 'fps', problem: '缺少帧率信息', suggestion: '' })
+
+    let localPath = this.resolveLocalFinalVideoPath(fv.videoUrl)
+    const tempRoot = path.join(UPLOAD_DIR, 'qc_temp')
+    let tempDir: string | null = null
+    if (!localPath && fv.storageObjectKey) {
+      try {
+        fs.mkdirSync(tempRoot, { recursive: true })
+        tempDir = createTaskTempDir(tempRoot)
+        const readUrl = await resolveMediaReadUrl(fv.storageObjectKey, fv.videoUrl)
+        if (readUrl && /^https?:\/\//i.test(readUrl)) {
+          const downloaded = await downloadVideo(readUrl, tempDir)
+          localPath = downloaded.localPath
+        }
+      } catch (error) {
+        issues.push({
+          level: 'high',
+          field: 'final_video.media',
+          problem: `成片存储对象无法下载校验：${(error as Error).message}`,
+          suggestion: '检查 OSS 对象、签名 URL 和存储配置后重新运行 QC',
+          issueType: 'final_media_unavailable',
+          severity: 'P1',
+          recommendedAction: 'rerender_final',
+        })
+      }
+    }
+    try {
+    if (localPath) {
+      const media = await this.analyzeFinalVideoMedia(localPath)
+      if (!media.valid) {
+        issues.push({
+          level: 'high',
+          field: 'final_video.media',
+          problem: '成片文件 ffprobe 校验失败',
+          suggestion: '重新合成最终视频',
+          issueType: 'final_media_invalid',
+          severity: 'P1',
+          recommendedAction: 'rerender_final',
+        })
+      }
+      if (!media.hasAudio) {
+        issues.push({
+          level: 'high',
+          field: 'final_video.audio',
+          problem: '成片缺少音频轨',
+          suggestion: '重新合成，确认无音频输入已补静音音轨',
+          issueType: 'final_audio_missing',
+          severity: 'P1',
+          recommendedAction: 'rerender_final',
+        })
+      }
+      if (media.meanVolumeDb !== null && media.meanVolumeDb < -28) {
+        issues.push({
+          level: 'high',
+          field: 'final_video.loudness',
+          problem: `成片平均响度约 ${media.meanVolumeDb.toFixed(1)} dB，低于短视频发布建议`,
+          suggestion: '启用响度归一化后重新合成最终视频',
+          issueType: 'final_loudness_low',
+          severity: 'P1',
+          recommendedAction: 'rerender_final',
+        })
+      }
+      if (media.hasBlackFrames) {
+        issues.push({
+          level: 'high',
+          field: 'final_video.blackdetect',
+          problem: '成片检测到持续黑屏片段',
+          suggestion: '定位对应镜头并重跑视频片段或重新合成',
+          issueType: 'final_black_frames',
+          severity: 'P1',
+          recommendedAction: 'rerun_shot_video',
+        })
+      }
+      if (media.hasFreeze) {
+        issues.push({
+          level: 'medium',
+          field: 'final_video.freezedetect',
+          problem: '成片检测到疑似冻结片段',
+          suggestion: '检查对应时间段，必要时重跑视频片段',
+          issueType: 'final_freeze',
+          severity: 'P2',
+          recommendedAction: 'rerun_shot_video',
+        })
+      }
+    }
+    } finally {
+      if (tempDir) safeCleanupDir(tempDir, tempRoot)
+    }
 
     const score = Math.max(0, 100 - issues.filter(i=>i.level==='high').length*20 - issues.filter(i=>i.level==='medium').length*10)
     return this.buildResult(score, issues, `成片 QC 完成`)
   }
 
   private buildResult(score: number, issues: QCIssue[], summary: string): QCResult {
+    const normalizedIssues = issues.map(issue => this.normalizeIssue(issue))
     const level = score >= 90 ? 'excellent' : score >= 75 ? 'good' : score >= 60 ? 'warning' : 'failed'
     return {
       score: Math.min(100, Math.max(0, score)),
       passed: score >= 60,
       level,
-      issues,
+      issues: normalizedIssues,
       summary,
       rewrite_required: score < 75,
       rewrite_instruction: score < 75 ? '建议根据问题列表优化后重新生成' : '',

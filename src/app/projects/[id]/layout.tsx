@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, usePathname } from 'next/navigation'
 import { StepNavigator } from '@/components/project/step-navigator'
 import { WorkflowShell } from '@/components/layout/workflow-shell'
+import type { WorkflowStatus } from '@/components/project/workflow/workflow-status-mapper'
 import { buildWorkflowSteps } from '@/components/project/workflow/workflow-status-mapper'
-import { deriveErrorStepId, type TaskBrief } from '@/components/project/workflow/workflow-error-deriver'
+import { deriveErrorStepId, deriveWorkflowStatusOverrides, type TaskBrief } from '@/components/project/workflow/workflow-error-deriver'
 
 export default function ProjectDetailLayout({
   children,
@@ -13,10 +14,12 @@ export default function ProjectDetailLayout({
   children: React.ReactNode
 }) {
   const params = useParams()
+  const pathname = usePathname()
   const projectId = params.id as string
   const [status, setStatus] = useState('DRAFT')
   const [episodeId, setEpisodeId] = useState<string | undefined>()
   const [errorStepId, setErrorStepId] = useState<string | null>(null)
+  const [statusOverrides, setStatusOverrides] = useState<Partial<Record<string, WorkflowStatus>>>({})
 
   useEffect(() => {
     const controller = new AbortController()
@@ -41,11 +44,16 @@ export default function ProjectDetailLayout({
         }
         // errorStepId 为增强信息，失败时仅不显示步骤错误，不白屏
         if (tasksRes.success && Array.isArray(tasksRes.data)) {
+          const taskBriefs = tasksRes.data as TaskBrief[]
           const errorId = deriveErrorStepId(
-            tasksRes.data as TaskBrief[],
+            taskBriefs,
             buildWorkflowSteps(projectId, resolvedEpisodeId),
           )
-          if (!controller.signal.aborted) setErrorStepId(errorId)
+          const overrides = deriveWorkflowStatusOverrides(taskBriefs, projRes.data?.status || 'DRAFT', resolvedEpisodeId)
+          if (!controller.signal.aborted) {
+            setErrorStepId(errorId)
+            setStatusOverrides(overrides)
+          }
         }
       } catch (err) {
         // AbortError 是正常的取消，不处理；其余静默保留默认状态
@@ -57,11 +65,24 @@ export default function ProjectDetailLayout({
     return () => controller.abort()
   }, [projectId])
 
+  const hideStepNavigator = pathname.includes('/assets')
+    || pathname.includes('/tasks')
+    || pathname.includes('/qc')
+    || pathname.includes('/final-preview')
+
   return (
     <div className="flex flex-col h-full">
-      <StepNavigator projectId={projectId} currentStatus={status} episodeId={episodeId} errorStepId={errorStepId} />
+      {!hideStepNavigator && (
+        <StepNavigator
+          projectId={projectId}
+          currentStatus={status}
+          episodeId={episodeId}
+          errorStepId={errorStepId}
+          statusOverrides={statusOverrides}
+        />
+      )}
       <WorkflowShell>
-        <WorkflowShell.Main className="p-6 bg-[var(--bg-base)]">
+        <WorkflowShell.Main className="bg-transparent">
           {children}
         </WorkflowShell.Main>
         {/* RightPanel slot reserved for future contextual panels. */}

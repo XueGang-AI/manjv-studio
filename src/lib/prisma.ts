@@ -9,7 +9,7 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 function createPrismaClient(): PrismaClient {
-  const connectionString = process.env.DATABASE_URL || 'postgresql://xuegang@localhost:5432/manjv_studio?schema=public'
+  const connectionString = process.env.DATABASE_URL || 'postgresql://xuegang@127.0.0.1:15432/manjv_studio?schema=public'
   const adapter = new PrismaPg({ connectionString })
   return new PrismaClient({ adapter })
 }

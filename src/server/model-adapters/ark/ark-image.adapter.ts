@@ -38,10 +38,17 @@ export class ArkImageAdapter extends BaseImageAdapter {
     const body: Record<string, unknown> = {
       model: this.model,
       prompt,
+      watermark: false,
+      response_format: 'url',
     }
 
-    // Aspect ratio: use aspect_ratio param (size="1080x1920" fails with 400:
-    // "image size must be at least 3686400 pixels", so we use aspect_ratio instead)
+    // Ark Seedream 5.0 当前图片接口使用 size 控制画幅。
+    // aspect_ratio 会被忽略为默认 2K 方图；1080x1920 又低于最小像素要求。
+    // 因此把内部比例显式映射到可接受的高分辨率尺寸。
+    const requestedSize = request.params?.size as string | undefined
+    body.size = requestedSize || sizeForAspectRatio(request.aspectRatio)
+
+    // 兼容旧字段：保留在请求中不依赖它，方便供应商后续恢复时仍可识别。
     if (request.aspectRatio) {
       body.aspect_ratio = request.aspectRatio
     }
@@ -113,4 +120,10 @@ export class ArkImageAdapter extends BaseImageAdapter {
 
     return { images }
   }
+}
+
+function sizeForAspectRatio(aspectRatio?: '9:16' | '16:9' | '1:1'): string {
+  if (aspectRatio === '16:9') return '2560x1440'
+  if (aspectRatio === '1:1') return '2048x2048'
+  return '1440x2560'
 }

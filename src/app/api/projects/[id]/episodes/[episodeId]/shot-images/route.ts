@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
+import { toLocalMediaReadUrl } from '@/server/services/local-media-read-url'
+import { resolveMediaReadUrl } from '@/server/services/media-persist'
 
 /**
  * GET /api/projects/:id/episodes/:episodeId/shot-images
@@ -27,16 +29,25 @@ export async function GET(
       },
     })
 
-    const grouped = shots.map(shot => ({
+    const grouped = await Promise.all(shots.map(async shot => {
+      const images = await Promise.all(shot.shotImages.map(async image => ({
+        ...image,
+        imageUrl: await resolveMediaReadUrl(
+          image.storageObjectKey,
+          toLocalMediaReadUrl(image.imageUrl) || image.imageUrl,
+        ),
+      })))
+      return {
       shot: {
         id: shot.id, shotNo: shot.shotNo, shotName: shot.shotName,
         startTime: shot.startTime, endTime: shot.endTime,
         location: shot.location, characters: shot.characters,
         action: shot.action, imagePrompt: shot.imagePrompts[0] || null,
       },
-      images: shot.shotImages,
-      selectedImage: shot.shotImages.find(i => i.isSelected) || null,
-      confirmed: shot.shotImages.some(i => i.isConfirmed),
+      images,
+      selectedImage: images.find(i => i.isSelected) || null,
+      confirmed: images.some(i => i.isConfirmed),
+    }
     }))
 
     const allConfirmed = grouped.length > 0 && grouped.every(g => g.confirmed)

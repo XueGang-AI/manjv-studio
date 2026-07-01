@@ -10,157 +10,19 @@ import { adapterFactory } from '@/server/model-adapters/adapter.factory'
 import { getRuntimeModelName } from '@/server/model-adapters/model-config'
 import { taskService } from '@/server/queues/task-queue.service'
 import { resolveImageUrlForModel } from '@/server/services/media-reference-url'
+import {
+  buildCharacterAppearanceMap,
+  buildShotImageNegativePrompt,
+  buildShotImagePrompt,
+  matchShotCharacterReferences,
+  selectReferenceImageUrls,
+  type CharacterReferenceEntry,
+} from '@/server/services/shot-regeneration-quality'
 import { emitTaskEvent, taskToUpdateEvent } from '../task-events'
 import type { ImageGenerationRequest } from '@/server/model-adapters/types'
 
 export interface ShotImagesInput {
   episodeId: string
-}
-
-// ─── 角色参考图匹配 ────────────────────────────────────────────────
-
-type RefEntry = {
-  characterId: string
-  characterName: string
-  imageUrl: string
-  referenceType: string
-  storageObjectKey?: string | null
-  sourceUrl?: string | null
-}
-type MatchedReference = {
-  character_id: string
-  character_name: string
-  image_url: string
-  reference_type: string
-  storage_object_key?: string | null
-  source_url?: string | null
-}
-type CharAppearance = { name: string; appearanceText: string }
-
-function matchReferences(
-  shotCharsRaw: unknown,
-  shotContent: { action?: string; camera?: Record<string, unknown>; emotion?: string },
-  refByName: Map<string, RefEntry[]>,
-): MatchedReference[] {
-  const shotChars: string[] = []
-  if (Array.isArray(shotCharsRaw)) {
-    for (const item of shotCharsRaw) {
-      if (typeof item === 'string') shotChars.push(item.trim())
-      else if (item && typeof item === 'object') {
-        const name = (item as Record<string, unknown>).name
-        if (typeof name === 'string') shotChars.push(name.trim())
-      }
-    }
-  }
-  if (shotChars.length === 0) return []
-
-  const contentText = [
-    shotContent.action || '',
-    JSON.stringify(shotContent.camera || {}),
-    shotContent.emotion || '',
-  ].join(' ').toLowerCase()
-
-  const camera = shotContent.camera || {}
-  const shotSize = String(camera.shot_size || '')
-
-  const isCloseUp = /特写|近景/.test(shotSize)
-  const isWideShot = /全景|远景|大全景|极远景/.test(shotSize)
-  const isBackView = /背影|转身|离开|离去|走远|背面|背对/.test(contentText)
-  const isSideView = /侧脸|侧身|侧面|回首|回眸|转头|扭头/.test(contentText)
-  const isFullBody = /全身|站立|走路|行走|奔跑|跑过|步入|伫立/.test(contentText)
-  const isExpression = /表情|眼神|凝视|注视|特写.*脸|脸部/.test(contentText)
-  const isPropWeapon = /道具|武器|枪支|刀|剑|物件|物品|手持|握着|举起/.test(contentText)
-
-  const priorityTypes: string[] = []
-  if (isBackView) priorityTypes.push('back_view', 'front_full_body', 'front_half_body')
-  else if (isSideView) priorityTypes.push('left_side', 'right_side', 'front_half_body', 'front_full_body')
-  else if (isWideShot) priorityTypes.push('front_full_body', 'back_view', 'pose')
-  else if (isCloseUp && isExpression) priorityTypes.push('front_half_body', 'expression', 'front_full_body')
-  else if (isCloseUp) priorityTypes.push('front_half_body', 'front_full_body')
-  else if (isFullBody) priorityTypes.push('front_full_body', 'outfit', 'pose')
-  else if (isPropWeapon) priorityTypes.push('prop', 'weapon', 'front_full_body', 'front_half_body')
-  else priorityTypes.push('front_half_body', 'front_full_body')
-
-  const matched: MatchedReference[] = []
-  const usedNames = new Set<string>()
-
-  for (const sc of shotChars) {
-    let entries: RefEntry[] | undefined
-    if (refByName.has(sc)) {
-      entries = refByName.get(sc)
-    } else {
-      for (const [name, refs] of refByName) {
-        if (sc.includes(name) || name.includes(sc)) {
-          entries = refs; break
-        }
-      }
-    }
-    if (!entries || usedNames.has(entries[0].characterName)) continue
-
-    const sorted = [...entries].sort((a, b) => {
-      const ai = priorityTypes.indexOf(a.referenceType)
-      const bi = priorityTypes.indexOf(b.referenceType)
-      if (ai >= 0 && bi >= 0) return ai - bi
-      if (ai >= 0) return -1
-      if (bi >= 0) return 1
-      return 0
-    })
-
-    for (let i = 0; i < Math.min(sorted.length, 2); i++) {
-      matched.push({
-        character_id: sorted[i].characterId,
-        character_name: sorted[i].characterName,
-        image_url: sorted[i].imageUrl,
-        reference_type: sorted[i].referenceType,
-        storage_object_key: sorted[i].storageObjectKey || null,
-        source_url: sorted[i].sourceUrl || null,
-      })
-    }
-    usedNames.add(sorted[0].characterName)
-
-    if (matched.length >= 6) break
-  }
-
-  return matched
-}
-
-function buildEnhancedPrompt(
-  basePrompt: string,
-  shotCharsRaw: unknown,
-  styleStr: string,
-  charAppearanceByName: Map<string, CharAppearance>,
-): string {
-  const shotChars: string[] = []
-  if (Array.isArray(shotCharsRaw)) {
-    for (const item of shotCharsRaw) {
-      if (typeof item === 'string') shotChars.push(item.trim())
-      else if (item && typeof item === 'object') {
-        const name = (item as Record<string, unknown>).name
-        if (typeof name === 'string') shotChars.push(name.trim())
-      }
-    }
-  }
-
-  const charsInShot: CharAppearance[] = []
-  for (const sc of shotChars) {
-    let found = charAppearanceByName.get(sc)
-    if (!found) {
-      for (const [name, info] of charAppearanceByName) {
-        if (sc.includes(name) || name.includes(sc)) {
-          found = info; break
-        }
-      }
-    }
-    if (found) charsInShot.push(found)
-  }
-
-  let enhanced = basePrompt
-  if (charsInShot.length > 0) {
-    const charDescriptions = charsInShot.map(c => c.appearanceText).join('\n  ')
-    enhanced = enhanced + `\n\n[Character Reference - MUST maintain consistency]\n  ${charDescriptions}\n\n`
-  }
-  enhanced = enhanced + `\n\nStyle: ${styleStr}, Korean manhwa, cinematic lighting, high quality, 8k resolution, consistent character design, same character appearance throughout the scene`
-  return enhanced
 }
 
 /**
@@ -204,7 +66,7 @@ export async function handleShotImages(taskId: string): Promise<void> {
       include: { character: { select: { id: true, name: true } } },
     })
 
-    const refByName = new Map<string, RefEntry[]>()
+    const refByName = new Map<string, CharacterReferenceEntry[]>()
     for (const ci of charImages) {
       const name = ci.character.name?.trim()
       if (name && ci.imageUrl) {
@@ -233,43 +95,7 @@ export async function handleShotImages(taskId: string): Promise<void> {
       },
     })
 
-    const charAppearanceByName = new Map<string, CharAppearance>()
-    for (const c of characters) {
-      const name = c.name?.trim()
-      if (!name) continue
-
-      const parts: string[] = [name]
-      if (c.gender) parts.push(c.gender)
-      if (c.age) parts.push(`${c.age}岁`)
-
-      if (c.appearance && typeof c.appearance === 'object') {
-        const app = c.appearance as Record<string, unknown>
-        if (app.hair_color && app.hair_style) parts.push(`${app.hair_style}、${app.hair_color}`)
-        else if (app.hair_style) parts.push(String(app.hair_style))
-        else if (app.hair_color) parts.push(`发色${app.hair_color}`)
-        if (app.eyes) parts.push(`眼睛：${app.eyes}`)
-        if (app.skin) parts.push(`肤色：${app.skin}`)
-        if (app.face_shape) parts.push(`脸型：${app.face_shape}`)
-        if (app.body_shape) parts.push(`体型：${app.body_shape}`)
-      }
-
-      if (c.clothing && typeof c.clothing === 'object') {
-        const cloth = c.clothing as Record<string, unknown>
-        const daily = (cloth.daily || cloth) as Record<string, unknown> | undefined
-        if (daily) {
-          if (daily.top) parts.push(`上衣：${daily.top}`)
-          if (daily.bottom) parts.push(`下装：${daily.bottom}`)
-          if (daily.shoes) parts.push(`鞋子：${daily.shoes}`)
-          if (daily.accessories) parts.push(`配饰：${daily.accessories}`)
-        }
-      }
-
-      if (Array.isArray(c.signatureFeatures) && c.signatureFeatures.length > 0) {
-        parts.push(`标志特征：${c.signatureFeatures.join('、')}`)
-      }
-
-      charAppearanceByName.set(name, { name, appearanceText: parts.join('。') })
-    }
+    const charAppearanceByName = buildCharacterAppearanceMap(characters)
 
     // 获取所有镜头
     const shots = await prisma.shot.findMany({
@@ -298,7 +124,7 @@ export async function handleShotImages(taskId: string): Promise<void> {
     const aspectRatio = (project.aspectRatio || '9:16') as '9:16'
     const style = project.artStyle || '韩漫'
     const numOutputs = 4
-    const baseNegative = 'ugly, deformed, bad anatomy, bad proportions, low quality, blurry, pixelated, distorted face, extra fingers, missing fingers, asymmetric eyes, watermark, text, logo'
+    const baseNegative = 'ugly, deformed, bad anatomy, bad proportions, low quality, blurry, pixelated, distorted face, identity change, different hairstyle, different outfit, inconsistent background, unstable room layout, extra people, extra fingers, missing fingers, asymmetric eyes, bad hands, warped body, split screen, comic panel grid, poster layout, watermark, text, logo, random UI text, garbled Chinese characters'
 
     const allResults: Array<{ shotId: string; shotNo: number; images: unknown[] }> = []
 
@@ -321,10 +147,21 @@ export async function handleShotImages(taskId: string): Promise<void> {
       const imgPrompt = shot.imagePrompts[0]
       const basePrompt = imgPrompt?.enPrompt || imgPrompt?.zhPrompt || shot.action || ''
 
-      const prompt = buildEnhancedPrompt(basePrompt, shot.characters, style, charAppearanceByName)
-      const negative = (imgPrompt?.negativePrompt || baseNegative)
+      const prompt = buildShotImagePrompt(basePrompt, {
+        shotNo: shot.shotNo,
+        shotName: shot.shotName,
+        characters: shot.characters,
+        action: shot.action,
+        details: shot.details,
+        camera: shot.camera,
+        visual: shot.visual,
+        location: shot.location,
+        sceneTime: shot.sceneTime,
+        emotion: shot.emotion,
+      }, style, charAppearanceByName, shot.scene)
+      const negative = buildShotImageNegativePrompt(imgPrompt?.negativePrompt || baseNegative)
 
-      const references = matchReferences(shot.characters, {
+      const references = matchShotCharacterReferences(shot.characters, {
         action: shot.action || undefined,
         camera: (shot.camera as Record<string, unknown>) || undefined,
         emotion: shot.emotion || undefined,
@@ -364,10 +201,7 @@ export async function handleShotImages(taskId: string): Promise<void> {
         }))
       )).filter((url): url is string => !!url)
 
-      const referenceImageUrls = [
-        ...sceneReferenceUrls.slice(0, 2),
-        ...characterReferenceUrls,
-      ].slice(0, 4)
+      const referenceImageUrls = selectReferenceImageUrls(characterReferenceUrls, sceneReferenceUrls)
 
       if (referenceImageUrls.length > 0) {
         genReq.referenceImages = referenceImageUrls
