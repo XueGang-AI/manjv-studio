@@ -22,8 +22,8 @@ import { Badge } from '@/components/ui/badge'
 import { ProgressBar } from '@/components/ui/progress-bar'
 import { useTaskSSE } from '@/lib/hooks/use-task-sse'
 import {
+  CompactMetricCard,
   EmptyState,
-  MetricCard,
   Panel,
   StatusPill,
   TaskStatusIcon,
@@ -136,11 +136,11 @@ export default function TasksPage() {
     },
   })
 
-  const fetchLogs = async (taskId: string) => {
+  const fetchLogs = useCallback(async (taskId: string) => {
     const res = await fetch(`/api/tasks/${taskId}/logs`)
     const data = await res.json()
     if (data.success) setLogs(data.data || [])
-  }
+  }, [])
 
   const toggleExpand = (taskId: string) => {
     if (expandedTask === taskId) {
@@ -237,6 +237,20 @@ export default function TasksPage() {
 
   const activeTask = tasks.find((task) => task.id === expandedTask) || tasks.find((task) => task.status === 'failed') || tasks[0]
 
+  useEffect(() => {
+    if (!activeTask?.id) return
+    const controller = new AbortController()
+    fetch(`/api/tasks/${activeTask.id}/logs`, { signal: controller.signal })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) setLogs(data.data || [])
+      })
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return
+      })
+    return () => controller.abort()
+  }, [activeTask?.id])
+
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -246,7 +260,7 @@ export default function TasksPage() {
   }
 
   return (
-    <div className="space-y-5 p-5">
+    <div className="space-y-4 p-4">
       <WorkbenchPageHeader
         eyebrow="Operations"
         title="任务队列"
@@ -271,28 +285,29 @@ export default function TasksPage() {
         </div>
       )}
 
-      <div className="grid gap-3 md:grid-cols-5">
-        <MetricCard label="队列中" value={summary.queued} helper="等待 Worker 领取" icon={<Clock size={18} />} tone="warning" />
-        <MetricCard label="运行中" value={summary.running} helper="正在执行" icon={<RefreshCw size={18} />} tone="info" />
-        <MetricCard label="已完成" value={summary.success} helper={`成功率 ${summary.successRate}%`} icon={<ListChecks size={18} />} tone="success" />
-        <MetricCard label="失败" value={summary.failed} helper="需查看日志或重试" icon={<XCircle size={18} />} tone={summary.failed ? 'danger' : 'success'} />
-        <MetricCard label="SSE" value={streamConnected ? '已连接' : '未连接'} helper="任务状态刷新" icon={<Server size={18} />} tone={streamConnected ? 'success' : 'warning'} />
+      <div className="grid gap-2 md:grid-cols-5">
+        <CompactMetricCard label="队列中" value={summary.queued} helper="等待领取" icon={<Clock size={15} />} tone="warning" />
+        <CompactMetricCard label="运行中" value={summary.running} helper="Worker 执行" icon={<RefreshCw size={15} />} tone="info" />
+        <CompactMetricCard label="已完成" value={summary.success} helper={`成功率 ${summary.successRate}%`} icon={<ListChecks size={15} />} tone="success" progress={summary.successRate} />
+        <CompactMetricCard label="失败" value={summary.failed} helper="日志定位" icon={<XCircle size={15} />} tone={summary.failed ? 'danger' : 'success'} />
+        <CompactMetricCard label="SSE" value={streamConnected ? '已连接' : '未连接'} helper="实时刷新" icon={<Server size={15} />} tone={streamConnected ? 'success' : 'warning'} />
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <Panel title="任务列表" description={`${tasks.length} 个任务，点击行查看详情和日志。`}>
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-3">
+        <Panel title="任务列表" description={`${tasks.length} 个任务，点击行查看详情和日志。`} bodyClassName="p-2">
           {tasks.length === 0 ? (
             <EmptyState icon={<FileText size={24} />} title="暂无任务记录" description="生成故事、角色、分镜、视频或成片后，任务会出现在这里。" />
           ) : (
             <div className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border-dim)]">
-              <div className="grid grid-cols-[minmax(220px,1fr)_110px_180px_110px_120px] gap-3 border-b border-[var(--color-border-dim)] bg-[var(--bg-panel)] px-3 py-2 text-xs font-medium text-[var(--color-text-muted)]">
+              <div className="grid grid-cols-[minmax(210px,1fr)_82px_150px_64px_70px] gap-2 border-b border-[var(--color-border-dim)] bg-[var(--bg-panel)] px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
                 <div>任务类型</div>
                 <div>状态</div>
                 <div>进度</div>
                 <div>重试</div>
                 <div>操作</div>
               </div>
-              <div className="divide-y divide-[var(--color-border-dim)]">
+              <div className="max-h-[356px] divide-y divide-[var(--color-border-dim)] overflow-y-auto">
                 {tasks.map((task) => {
                   const cfg = STATUS_CONFIG[task.status] || { variant: 'default' as const, label: task.status }
                   const isExpanded = expandedTask === task.id
@@ -302,12 +317,12 @@ export default function TasksPage() {
                     <div key={task.id}>
                       <button
                         onClick={() => toggleExpand(task.id)}
-                        className="grid w-full grid-cols-[minmax(220px,1fr)_110px_180px_110px_120px] items-center gap-3 bg-[var(--bg-elevated)] px-3 py-3 text-left transition-colors hover:bg-[var(--bg-hover)]"
+                        className="grid w-full grid-cols-[minmax(210px,1fr)_82px_150px_64px_70px] items-center gap-2 bg-[var(--bg-elevated)] px-2.5 py-1.5 text-left transition-colors hover:bg-[var(--bg-hover)]"
                       >
                         <div className="flex min-w-0 items-center gap-3">
                           <TaskStatusIcon status={task.status} />
                           <div className="min-w-0">
-                            <div className="truncate text-sm font-medium text-[var(--color-text-primary)]">{TASK_LABELS[task.taskType] || task.taskType}</div>
+                            <div className="truncate text-xs font-medium text-[var(--color-text-primary)]">{TASK_LABELS[task.taskType] || task.taskType}</div>
                             <div className="truncate text-xs text-[var(--color-text-muted)]">{formatDateTime(task.createdAt)}</div>
                           </div>
                         </div>
@@ -322,7 +337,7 @@ export default function TasksPage() {
                         </div>
                       </button>
                       {isExpanded && (
-                        <div className="space-y-3 bg-[var(--bg-surface)] px-3 py-3">
+                        <div className="space-y-2 bg-[var(--bg-surface)] px-2.5 py-2.5">
                           {task.errorMessage && (
                             <div className="rounded-[var(--radius-md)] bg-[var(--color-danger-muted)] p-3 text-xs text-[var(--color-danger)]">
                               {task.errorMessage}
@@ -345,7 +360,7 @@ export default function TasksPage() {
                               <Button size="sm" variant="destructive" onClick={() => handleDelete(task.id)} disabled={!!actionLoading} icon={actionLoading === task.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}>删除</Button>
                             )}
                           </div>
-                          <div className="max-h-44 overflow-y-auto rounded-[var(--radius-md)] bg-[var(--bg-panel)] p-2">
+                          <div className="max-h-32 overflow-y-auto rounded-[var(--radius-md)] bg-[var(--bg-panel)] p-2">
                             {logs.length === 0 ? (
                               <div className="text-xs text-[var(--color-text-muted)]">暂无日志</div>
                             ) : logs.map((log) => (
@@ -366,20 +381,47 @@ export default function TasksPage() {
           )}
         </Panel>
 
-        <div className="space-y-5">
-          <Panel title="Worker 健康状态" action={<StatusPill status={health?.status || 'unknown'} label={health?.status || 'unknown'} />}>
-            <div className="space-y-3">
+        <Panel title="任务日志" description={activeTask ? `${TASK_LABELS[activeTask.taskType] || activeTask.taskType} · ${activeTask.id.slice(0, 8)}` : '选择任务后查看日志'} bodyClassName="p-2">
+          <div className="max-h-[260px] min-h-[210px] overflow-y-auto rounded-[var(--radius-md)] border border-[var(--color-border-dim)] bg-[#050b16] p-2 font-mono">
+            {logs.length === 0 ? (
+              <div className="text-xs text-[var(--color-text-muted)]">暂无日志。</div>
+            ) : logs.slice(0, 18).map((log) => (
+              <div key={log.id} className="grid grid-cols-[72px_48px_minmax(0,1fr)] gap-2 border-b border-white/[0.03] py-1 text-[11px]">
+                <span className="text-[var(--color-text-muted)]">{new Date(log.createdAt).toLocaleTimeString('zh-CN')}</span>
+                <span className={log.level === 'ERROR' ? 'text-[var(--color-danger)]' : log.level === 'WARN' ? 'text-[var(--color-warning)]' : 'text-[var(--color-info)]'}>{log.level}</span>
+                <span className="truncate text-[var(--color-text-secondary)]">{log.message}</span>
+              </div>
+            ))}
+          </div>
+        </Panel>
+        </div>
+
+        <div className="space-y-3">
+          <Panel title="Worker 健康矩阵" action={<StatusPill status={health?.status || 'unknown'} label={health?.status || 'unknown'} />} bodyClassName="p-3">
+            <div className="grid grid-cols-2 gap-2">
               {health?.checks ? Object.entries(health.checks).map(([name, check]) => (
-                <div key={name} className="flex items-center justify-between rounded-[var(--radius-md)] bg-[var(--bg-panel)] px-3 py-2 text-sm">
-                  <span className="text-[var(--color-text-secondary)]">{name}</span>
-                  <span className="flex items-center gap-2">
+                <div key={name} className="rounded-[var(--radius-md)] border border-[var(--color-border-dim)] bg-[var(--bg-panel)] p-2.5 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-xs text-[var(--color-text-secondary)]">{name}</span>
+                    <span className={`h-2 w-2 rounded-full ${check.status === 'ok' ? 'bg-[var(--color-success)]' : 'bg-[var(--color-warning)]'}`} />
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-2">
                     <StatusPill status={check.status === 'ok' ? 'success' : check.status} label={check.status === 'ok' ? '正常' : check.status} />
-                    {check.latency != null && <span className="font-mono text-xs text-[var(--color-text-muted)]">{check.latency}ms</span>}
-                  </span>
+                    {check.latency != null && <span className="font-mono text-[11px] text-[var(--color-text-muted)]">{check.latency}ms</span>}
+                  </div>
                 </div>
               )) : (
-                <div className="text-sm text-[var(--color-text-muted)]">未获取到 Worker 健康信息。</div>
+                <div className="col-span-2 text-sm text-[var(--color-text-muted)]">未获取到 Worker 健康信息。</div>
               )}
+            </div>
+            <div className="mt-3 space-y-2">
+              {tasks.slice(0, 6).map((task, index) => (
+                <div key={`slot-${task.id}`} className="flex items-center justify-between rounded-[var(--radius-md)] bg-[var(--bg-panel)] px-2.5 py-2 text-xs">
+                  <span className="font-mono text-[var(--color-text-muted)]">slot-{String(index + 1).padStart(2, '0')}</span>
+                  <span className="truncate text-[var(--color-text-secondary)]">{TASK_LABELS[task.taskType] || task.taskType}</span>
+                  <StatusPill status={task.status} />
+                </div>
+              ))}
               <div className="text-xs text-[var(--color-text-muted)]">
                 Worker 数：{health?.workers?.length ?? 0} · SSE：{streamConnected ? '已连接' : '未连接'}
               </div>

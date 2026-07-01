@@ -9,11 +9,11 @@ import { STATUS_ARIA_LABEL } from './workflow-status-mapper'
 
 /** 状态 → 圆形指示器背景/边框 */
 const INDICATOR_CLASS: Record<WorkflowStatus, string> = {
-  completed: 'bg-[var(--status-success)] border-transparent',
-  active: 'bg-[var(--accent-soft)] border-[var(--accent-primary)]',
+  completed: 'bg-[var(--success-soft)] border-[var(--status-success)]',
+  active: 'bg-[var(--accent-primary)] border-[var(--accent-border)] shadow-[var(--glow-primary)]',
   generating: 'bg-[var(--generating-soft)] border-[var(--status-generating)]',
   error: 'bg-[var(--error-soft)] border-[var(--status-error)]',
-  locked: 'bg-[var(--bg-card)] border-[var(--border-subtle)]',
+  locked: 'bg-[var(--bg-input)] border-[var(--border-default)]',
 }
 
 const LABEL_CLASS: Record<WorkflowStatus, string> = {
@@ -35,7 +35,7 @@ const CONNECTOR_CLASS: Record<WorkflowStatus, string> = {
 function StepIcon({ status, index }: { status: WorkflowStatus; index: number }) {
   switch (status) {
     case 'completed':
-      return <Check size={13} className="text-white" />
+      return <Check size={13} className="text-[var(--status-success)]" />
     case 'generating':
       return <Loader2 size={13} className="text-[var(--status-generating)] animate-spin" />
     case 'error':
@@ -43,7 +43,7 @@ function StepIcon({ status, index }: { status: WorkflowStatus; index: number }) 
     case 'locked':
       return <Lock size={11} className="text-[var(--text-disabled)]" />
     case 'active':
-      return <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-primary)]" />
+      return <span className="text-[11px] font-bold text-white">{index}</span>
     default:
       return <span className="text-[10px] font-bold text-[var(--text-tertiary)]">{index}</span>
   }
@@ -60,8 +60,8 @@ export interface ProjectWorkflowStepperProps {
  */
 export function ProjectWorkflowStepper({ steps, className }: ProjectWorkflowStepperProps) {
   return (
-    <nav aria-label="项目生产流程" className={cn('w-full', className)}>
-      <ol className="flex items-center gap-0 overflow-x-auto py-2.5 px-6">
+    <nav aria-label="项目生产流程" className={cn('w-full rounded-[var(--radius-lg)] border border-[var(--color-border-dim)] bg-[var(--bg-card)] shadow-[var(--shadow-card)]', className)}>
+      <ol className="flex items-center gap-0 overflow-x-auto px-5 py-3">
         {steps.map((step, i) => {
           const isLocked = step.status === 'locked'
           const isGenerating = step.status === 'generating'
@@ -97,7 +97,7 @@ export function ProjectWorkflowStepper({ steps, className }: ProjectWorkflowStep
               {i > 0 && (
                 <div
                   className={cn(
-                    'w-6 h-0.5 mx-1.5 rounded-full shrink-0 transition-colors',
+                    'h-0.5 w-7 shrink-0 rounded-full mx-1.5 transition-colors',
                     CONNECTOR_CLASS[steps[i - 1].status],
                   )}
                   aria-hidden="true"

@@ -1,16 +1,16 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { AlertCircle, CheckCircle2, Circle, Clock, Loader2 } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Circle, Clock, Image as ImageIcon, Loader2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { ProgressBar } from '@/components/ui/progress-bar'
 import { cn } from '@/lib/utils'
 
-type Tone = 'default' | 'success' | 'warning' | 'danger' | 'info' | 'primary'
+export type Tone = 'default' | 'success' | 'warning' | 'danger' | 'info' | 'primary'
 
 const toneClasses: Record<Tone, string> = {
-  default: 'bg-[var(--bg-panel)] text-[var(--color-text-secondary)] border-[var(--color-border-dim)]',
+  default: 'bg-[var(--bg-input)] text-[var(--color-text-secondary)] border-[var(--color-border-dim)]',
   success: 'bg-[var(--color-success-muted)] text-[var(--color-success)] border-[var(--color-success)]/25',
   warning: 'bg-[var(--color-warning-muted)] text-[var(--color-warning)] border-[var(--color-warning)]/25',
   danger: 'bg-[var(--color-danger-muted)] text-[var(--color-danger)] border-[var(--color-danger)]/25',
@@ -33,13 +33,13 @@ export function WorkbenchPageHeader({
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
       <div className="min-w-0">
         {eyebrow && (
-          <div className="mb-2 text-xs font-medium uppercase tracking-[0.18em] text-[var(--color-text-muted)]">
+          <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.2em] text-[var(--color-text-muted)]">
             {eyebrow}
           </div>
         )}
-        <h1 className="text-2xl font-bold tracking-tight text-[var(--color-text-primary)]">{title}</h1>
+        <h1 className="text-[22px] font-semibold tracking-tight text-[var(--color-text-primary)]">{title}</h1>
         {description && (
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--color-text-muted)]">{description}</p>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--color-text-secondary)]">{description}</p>
         )}
       </div>
       {actions && <div className="flex shrink-0 flex-wrap gap-2">{actions}</div>}
@@ -63,15 +63,15 @@ export function MetricCard({
   progress?: number
 }) {
   return (
-    <Card className="p-4">
+    <Card className="workbench-glass p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-xs text-[var(--color-text-muted)]">{label}</div>
-          <div className="mt-2 text-2xl font-semibold text-[var(--color-text-primary)]">{value}</div>
+          <div className="mt-2 text-[28px] font-semibold leading-none text-[var(--color-text-primary)]">{value}</div>
           {helper && <div className="mt-1 truncate text-xs text-[var(--color-text-muted)]">{helper}</div>}
         </div>
         {icon && (
-          <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-md)] border', toneClasses[tone])}>
+          <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-md)] border shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]', toneClasses[tone])}>
             {icon}
           </div>
         )}
@@ -85,29 +85,124 @@ export function MetricCard({
   )
 }
 
+export function CompactMetricCard({
+  label,
+  value,
+  helper,
+  icon,
+  tone = 'default',
+  progress,
+}: {
+  label: string
+  value: string | number
+  helper?: string
+  icon?: ReactNode
+  tone?: Tone
+  progress?: number
+}) {
+  return (
+    <div className="rounded-[var(--radius-md)] border border-[var(--color-border-dim)] bg-[var(--bg-panel)]/72 p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-[11px] text-[var(--color-text-muted)]">{label}</div>
+          <div className="mt-1 text-lg font-semibold leading-none text-[var(--color-text-primary)]">{value}</div>
+          {helper && <div className="mt-1 truncate text-[11px] text-[var(--color-text-muted)]">{helper}</div>}
+        </div>
+        {icon && (
+          <div className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--radius-sm)] border', toneClasses[tone])}>
+            {icon}
+          </div>
+        )}
+      </div>
+      {typeof progress === 'number' && (
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--bg-input)]">
+          <div
+            className={cn(
+              'h-full rounded-full',
+              tone === 'success' ? 'bg-[var(--color-success)]' : tone === 'warning' ? 'bg-[var(--color-warning)]' : tone === 'danger' ? 'bg-[var(--color-danger)]' : 'bg-[var(--gradient-aurora)]',
+            )}
+            style={{ width: `${Math.max(0, Math.min(100, progress))}%` }}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function WorkbenchImage({
+  src,
+  alt,
+  className,
+  imgClassName,
+  fallback,
+}: {
+  src?: string | null
+  alt: string
+  className?: string
+  imgClassName?: string
+  fallback?: ReactNode
+}) {
+  if (!src) {
+    return (
+      <div className={cn('flex items-center justify-center overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border-dim)] bg-[var(--bg-input)] text-[var(--color-text-muted)]', className)}>
+        {fallback || <ImageIcon size={22} />}
+      </div>
+    )
+  }
+  return (
+    <div className={cn('overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border-dim)] bg-[var(--bg-input)]', className)}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={alt} className={cn('h-full w-full object-cover', imgClassName)} loading="lazy" />
+    </div>
+  )
+}
+
+export function ProductionTable({
+  columns,
+  children,
+  className,
+}: {
+  columns: string
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <div className={cn('overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border-dim)] bg-[var(--bg-input)]', className)}>
+      <div
+        className="grid gap-3 border-b border-[var(--color-border-dim)] bg-[var(--bg-panel)]/90 px-3 py-2 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--color-text-muted)]"
+        style={{ gridTemplateColumns: columns }}
+      >
+        {children}
+      </div>
+    </div>
+  )
+}
+
 export function Panel({
   title,
   description,
   action,
   children,
   className,
+  bodyClassName,
 }: {
   title: string
   description?: string
   action?: ReactNode
   children: ReactNode
   className?: string
+  bodyClassName?: string
 }) {
   return (
-    <Card className={cn('overflow-hidden', className)}>
-      <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border-dim)] px-4 py-3">
+    <Card className={cn('workbench-glass overflow-hidden', className)}>
+      <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border-dim)] px-3.5 py-2.5">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">{title}</h2>
+          <h2 className="text-[15px] font-semibold text-[var(--color-text-primary)]">{title}</h2>
           {description && <p className="mt-1 text-xs text-[var(--color-text-muted)]">{description}</p>}
         </div>
         {action}
       </div>
-      <div className="p-4">{children}</div>
+      <div className={cn('p-4', bodyClassName)}>{children}</div>
     </Card>
   )
 }
@@ -141,8 +236,8 @@ export function EmptyState({
   action?: ReactNode
 }) {
   return (
-    <div className="flex min-h-[220px] flex-col items-center justify-center rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border-dim)] bg-[var(--bg-surface)]/55 p-8 text-center">
-      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-[var(--radius-lg)] bg-[var(--bg-panel)] text-[var(--color-text-muted)]">
+    <div className="flex min-h-[220px] flex-col items-center justify-center rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border-default)] bg-[var(--bg-input)]/60 p-8 text-center">
+      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-[var(--radius-lg)] border border-[var(--color-border-dim)] bg-[var(--bg-panel)] text-[var(--color-text-muted)]">
         {icon || <Circle size={22} />}
       </div>
       <div className="text-sm font-semibold text-[var(--color-text-primary)]">{title}</div>

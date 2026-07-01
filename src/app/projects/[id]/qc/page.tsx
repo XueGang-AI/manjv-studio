@@ -1,14 +1,16 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Play, ShieldCheck } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
+  CompactMetricCard,
   EmptyState,
-  MetricCard,
   Panel,
+  WorkbenchImage,
   WorkbenchPageHeader,
   formatDateTime,
 } from '@/components/production-workbench/workbench-ui'
@@ -43,6 +45,18 @@ interface QCReport {
   createdAt: string
 }
 
+interface ShotImageGroup {
+  shot?: {
+    id: string
+    shotNo: number
+    shotName?: string | null
+    location?: string | null
+    startTime?: number | null
+    endTime?: number | null
+  }
+  images?: Array<{ id: string; imageUrl?: string | null; isConfirmed?: boolean; isSelected?: boolean }>
+}
+
 export default function QCProjectPage() {
   const params = useParams()
   const projectId = params.id as string
@@ -53,6 +67,7 @@ export default function QCProjectPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedIssueIndex, setSelectedIssueIndex] = useState(0)
+  const [shotImageGroups, setShotImageGroups] = useState<ShotImageGroup[]>([])
 
   const fetchReports = useCallback(async (resolvedEpisodeId?: string | null) => {
     const url = resolvedEpisodeId
@@ -72,7 +87,17 @@ export default function QCProjectPage() {
         const firstEpisode = projectJson.data?.episodes?.find((episode: { episodeNo: number }) => episode.episodeNo === 1) || projectJson.data?.episodes?.[0]
         if (cancelled) return
         setEpisodeId(firstEpisode?.id || null)
-        await fetchReports(firstEpisode?.id || null)
+        await Promise.all([
+          fetchReports(firstEpisode?.id || null),
+          firstEpisode?.id
+            ? fetch(`/api/projects/${projectId}/episodes/${firstEpisode.id}/shot-images`)
+              .then((res) => res.json())
+              .then((payload) => {
+                if (payload.success && !cancelled) setShotImageGroups((payload.data?.shots || []).sort((a: ShotImageGroup, b: ShotImageGroup) => (a.shot?.shotNo || 0) - (b.shot?.shotNo || 0)))
+              })
+              .catch(() => undefined)
+            : Promise.resolve(),
+        ])
       } catch {
         if (!cancelled) {
           setError('QC 报告加载失败')
@@ -115,6 +140,13 @@ export default function QCProjectPage() {
   }, [reports, results])
 
   const selectedIssue = issues[selectedIssueIndex] || issues[0] || null
+  const selectedShotGroup = selectedIssue?.shotNo
+    ? shotImageGroups.find((group) => group.shot?.shotNo === selectedIssue.shotNo)
+    : shotImageGroups[0]
+  const selectedShotFrame = selectedShotGroup?.images?.find((image) => image.isConfirmed) || selectedShotGroup?.images?.find((image) => image.isSelected) || selectedShotGroup?.images?.[0]
+  const referenceShotFrame = selectedIssue?.shotNo
+    ? (shotImageGroups.find((group) => group.shot?.shotNo === Math.max(1, (selectedIssue.shotNo || 1) - 1))?.images?.find((image) => image.isConfirmed) || shotImageGroups[0]?.images?.find((image) => image.isConfirmed) || shotImageGroups[0]?.images?.[0])
+    : shotImageGroups[0]?.images?.[0]
   const score = results.length > 0
     ? Math.round(results.reduce((sum, result) => sum + result.score, 0) / results.length)
     : reports[0]?.score ?? 0
@@ -134,7 +166,7 @@ export default function QCProjectPage() {
   }
 
   return (
-    <div className="space-y-5 p-5">
+    <div className="space-y-4 p-4">
       <WorkbenchPageHeader
         eyebrow="Quality control"
         title="QC 质检"
@@ -152,41 +184,44 @@ export default function QCProjectPage() {
         </div>
       )}
 
-      <div className="grid gap-3 md:grid-cols-5">
-        <MetricCard label="总体评分" value={score || '-'} helper={score ? scoreLabel(score) : '尚未检测'} icon={<ShieldCheck size={18} />} tone={score >= 75 ? 'success' : score ? 'warning' : 'default'} />
-        <MetricCard label="P0 严重问题" value={severityCounts.P0} helper="阻塞发布" icon={<AlertTriangle size={18} />} tone={severityCounts.P0 ? 'danger' : 'success'} />
-        <MetricCard label="P1 高优先级" value={severityCounts.P1} helper="尽快修复" icon={<AlertCircle size={18} />} tone={severityCounts.P1 ? 'danger' : 'success'} />
-        <MetricCard label="P2 中优先级" value={severityCounts.P2} helper="建议优化" icon={<AlertCircle size={18} />} tone={severityCounts.P2 ? 'warning' : 'success'} />
-        <MetricCard label="P3 低优先级" value={severityCounts.P3} helper="可接受风险" icon={<CheckCircle2 size={18} />} tone="info" />
+      <div className="grid gap-2 md:grid-cols-5">
+        <CompactMetricCard label="总体评分" value={score || '-'} helper={score ? scoreLabel(score) : '尚未检测'} icon={<ShieldCheck size={15} />} tone={score >= 75 ? 'success' : score ? 'warning' : 'default'} progress={score || 0} />
+        <CompactMetricCard label="P0" value={severityCounts.P0} helper="阻塞发布" icon={<AlertTriangle size={15} />} tone={severityCounts.P0 ? 'danger' : 'success'} />
+        <CompactMetricCard label="P1" value={severityCounts.P1} helper="高优先级" icon={<AlertCircle size={15} />} tone={severityCounts.P1 ? 'danger' : 'success'} />
+        <CompactMetricCard label="P2" value={severityCounts.P2} helper="建议优化" icon={<AlertCircle size={15} />} tone={severityCounts.P2 ? 'warning' : 'success'} />
+        <CompactMetricCard label="P3" value={severityCounts.P3} helper="可接受风险" icon={<CheckCircle2 size={15} />} tone="info" />
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <Panel title="问题列表" description={`${issues.length} 条问题，按严重程度与镜头位置追踪。`}>
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-3">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+        <Panel title="问题列表" description={`${issues.length} 条问题，按严重程度与镜头位置追踪。`} bodyClassName="p-2">
           {issues.length === 0 ? (
             <EmptyState icon={<ShieldCheck size={24} />} title="暂无 QC 问题" description={reports.length || results.length ? '最近报告没有返回问题项。' : '点击运行 QC 开始检查项目。'} />
           ) : (
             <div className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border-dim)]">
-              <div className="grid grid-cols-[86px_90px_120px_minmax(0,1fr)_150px] gap-3 border-b border-[var(--color-border-dim)] bg-[var(--bg-panel)] px-3 py-2 text-xs font-medium text-[var(--color-text-muted)]">
+              <div className="grid grid-cols-[48px_62px_minmax(0,1fr)_82px] gap-2 border-b border-[var(--color-border-dim)] bg-[var(--bg-panel)] px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
                 <div>严重级别</div>
                 <div>镜头</div>
-                <div>问题类型</div>
                 <div>描述</div>
                 <div>建议动作</div>
               </div>
-              <div className="divide-y divide-[var(--color-border-dim)]">
+              <div className="max-h-[184px] divide-y divide-[var(--color-border-dim)] overflow-y-auto">
                 {issues.map((issue, index) => (
                   <button
                     key={`${issue.field || issue.issueType || 'issue'}-${index}`}
                     onClick={() => setSelectedIssueIndex(index)}
                     className={cn(
-                      'grid w-full grid-cols-[86px_90px_120px_minmax(0,1fr)_150px] gap-3 px-3 py-3 text-left text-sm transition-colors hover:bg-[var(--bg-hover)]',
+                      'grid w-full grid-cols-[48px_62px_minmax(0,1fr)_82px] gap-2 px-2.5 py-2 text-left text-sm transition-colors hover:bg-[var(--bg-hover)]',
                       selectedIssueIndex === index ? 'bg-[var(--color-primary-muted)]/50' : 'bg-[var(--bg-elevated)]',
                     )}
                   >
                     <div><SeverityBadge severity={normalizedSeverity(issue)} /></div>
                     <div className="text-[var(--color-text-secondary)]">{issue.shotNo ? `镜头 ${issue.shotNo}` : '-'}</div>
-                    <div className="truncate font-mono text-xs text-[var(--color-text-muted)]">{issue.issueType || issue.field || '-'}</div>
-                    <div className="truncate text-[var(--color-text-primary)]">{issue.problem || '未提供问题描述'}</div>
+                    <div>
+                      <div className="truncate text-xs font-medium text-[var(--color-text-primary)]">{issue.problem || '未提供问题描述'}</div>
+                      <div className="truncate font-mono text-[11px] text-[var(--color-text-muted)]">{issue.issueType || issue.field || '-'}</div>
+                    </div>
                     <div className="truncate text-xs text-[var(--color-text-secondary)]">{actionLabel(issue.recommendedAction)}</div>
                   </button>
                 ))}
@@ -195,32 +230,82 @@ export default function QCProjectPage() {
           )}
         </Panel>
 
-        <div className="space-y-5">
-          <Panel title="选中问题详情">
+        <Panel title="帧序列证据" description="按镜头顺序展示可审计首帧，选中 QC 问题后定位对应镜头。" bodyClassName="p-2">
+          {shotImageGroups.length === 0 ? (
+            <EmptyState title="暂无帧证据" description="分镜图生成后会在这里展示帧序列。" />
+          ) : (
+            <div className="grid grid-cols-4 gap-1.5 xl:grid-cols-6">
+              {shotImageGroups.slice(0, 12).map((group) => {
+                const image = group.images?.find((item) => item.isConfirmed) || group.images?.[0]
+                const active = selectedIssue?.shotNo === group.shot?.shotNo
+                return (
+                  <button
+                    key={group.shot?.id || group.shot?.shotNo}
+                    type="button"
+                    onClick={() => {
+                      const index = issues.findIndex((issue) => issue.shotNo === group.shot?.shotNo)
+                      if (index >= 0) setSelectedIssueIndex(index)
+                    }}
+                    className={`rounded-[var(--radius-sm)] border p-1 text-left ${active ? 'border-[var(--color-primary)] bg-[var(--color-primary-muted)]' : 'border-[var(--color-border-dim)] bg-[var(--bg-panel)]'}`}
+                  >
+                    <WorkbenchImage src={image?.imageUrl} alt={`镜头 ${group.shot?.shotNo || ''}`} className="aspect-[4/3] rounded-[var(--radius-sm)]" />
+                    <div className="mt-1 flex items-center justify-between text-[11px]">
+                      <span className="font-mono text-[var(--color-text-primary)]">{String(group.shot?.shotNo || '-').padStart(2, '0')}</span>
+                      <span className="truncate text-[var(--color-text-muted)]">{group.shot?.location || '场景'}</span>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </Panel>
+        </div>
+
+          <Panel title="选中问题详情" bodyClassName="p-3">
             {selectedIssue ? (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between gap-3">
-                  <SeverityBadge severity={normalizedSeverity(selectedIssue)} />
-                  <Badge variant="default">{selectedIssue.timeRange || '无时间段'}</Badge>
+              <div className="grid gap-3 xl:grid-cols-[240px_minmax(0,1fr)_220px]">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <SeverityBadge severity={normalizedSeverity(selectedIssue)} />
+                    <Badge variant="default">{selectedIssue.timeRange || '无时间段'}</Badge>
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold leading-5 text-[var(--color-text-primary)]">{selectedIssue.problem || '未提供问题描述'}</div>
+                    {selectedIssue.suggestion && <p className="mt-2 line-clamp-4 text-xs leading-5 text-[var(--color-text-muted)]">{selectedIssue.suggestion}</p>}
+                  </div>
+                  <div className="space-y-1.5 text-xs">
+                    <Info label="镜头号" value={selectedIssue.shotNo ? String(selectedIssue.shotNo) : '-'} />
+                    <Info label="问题类型" value={selectedIssue.issueType || '-'} />
+                    <Info label="建议动作" value={actionLabel(selectedIssue.recommendedAction)} />
+                  </div>
                 </div>
-                <div>
-                  <div className="text-sm font-semibold text-[var(--color-text-primary)]">{selectedIssue.problem || '未提供问题描述'}</div>
-                  {selectedIssue.suggestion && <p className="mt-2 text-sm leading-6 text-[var(--color-text-muted)]">{selectedIssue.suggestion}</p>}
+                <div className="grid gap-3 md:grid-cols-2">
+                  <FrameCard title="参考帧" src={referenceShotFrame?.imageUrl} />
+                  <FrameCard title="问题帧" src={selectedShotFrame?.imageUrl} active />
                 </div>
-                <div className="space-y-2 text-sm">
-                  <Info label="镜头号" value={selectedIssue.shotNo ? String(selectedIssue.shotNo) : '-'} />
-                  <Info label="时间段" value={selectedIssue.timeRange || '-'} />
-                  <Info label="字段" value={selectedIssue.field || '-'} />
-                  <Info label="问题类型" value={selectedIssue.issueType || '-'} />
-                  <Info label="建议动作" value={actionLabel(selectedIssue.recommendedAction)} />
+                <div className="flex flex-col justify-between gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-dim)] bg-[var(--bg-panel)] p-3">
+                  <div className="space-y-2 text-xs text-[var(--color-text-secondary)]">
+                    <Info label="时间段" value={selectedIssue.timeRange || '-'} />
+                    <Info label="字段" value={selectedIssue.field || '-'} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Link href={episodeId ? `/projects/${projectId}/episodes/${episodeId}/shot-images` : `/projects/${projectId}/qc`}>
+                      <Button size="sm" variant="outline" className="w-full">查看分镜证据</Button>
+                    </Link>
+                    <Link href={episodeId ? `/projects/${projectId}/episodes/${episodeId}/shot-videos` : `/projects/${projectId}/qc`}>
+                      <Button size="sm" variant="aurora" className="w-full">进入视频返工</Button>
+                    </Link>
+                  </div>
                 </div>
               </div>
             ) : (
               <EmptyState title="未选中问题" description="QC 运行后可在这里查看问题细节。" />
             )}
           </Panel>
+        </div>
 
-          <Panel title="媒体与剧情检查">
+        <div className="space-y-4">
+          <Panel title="自动化媒体检测" bodyClassName="p-3">
             <div className="space-y-2">
               <ChecklistItem label="成片可播放 / ffprobe 校验" issues={issues} match="final_media" />
               <ChecklistItem label="音轨与响度检查" issues={issues} match="audio|loudness" />
@@ -230,7 +315,16 @@ export default function QCProjectPage() {
             </div>
           </Panel>
 
-          <Panel title="历史报告">
+          <Panel title="剧情与一致性检查" bodyClassName="p-3">
+            <div className="space-y-2">
+              <ChecklistItem label="人物一致性" issues={issues} match="character|face|hair|人物|角色" />
+              <ChecklistItem label="场景连续性" issues={issues} match="scene|location|场景" />
+              <ChecklistItem label="道具/手机安全" issues={issues} match="prop|phone|screen|logo|文字" />
+              <ChecklistItem label="剧情节点完整" issues={issues} match="story|plot|剧情" />
+            </div>
+          </Panel>
+
+          <Panel title="历史报告" bodyClassName="p-3">
             {reports.length === 0 ? (
               <div className="text-sm text-[var(--color-text-muted)]">暂无历史报告。</div>
             ) : (
@@ -285,6 +379,18 @@ function Info({ label, value }: { label: string; value: string }) {
     <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border-dim)] pb-2">
       <span className="text-[var(--color-text-muted)]">{label}</span>
       <span className="truncate text-right text-[var(--color-text-primary)]">{value}</span>
+    </div>
+  )
+}
+
+function FrameCard({ title, src, active }: { title: string; src?: string | null; active?: boolean }) {
+  return (
+    <div className={`rounded-[var(--radius-md)] border p-2 ${active ? 'border-[var(--color-primary)] bg-[var(--color-primary-muted)]/45' : 'border-[var(--color-border-dim)] bg-[var(--bg-panel)]'}`}>
+      <div className="mb-2 flex items-center justify-between text-xs">
+        <span className="font-medium text-[var(--color-text-secondary)]">{title}</span>
+        {active && <Badge variant="primary">当前问题</Badge>}
+      </div>
+      <WorkbenchImage src={src} alt={title} className="aspect-video" />
     </div>
   )
 }

@@ -39,7 +39,7 @@ export function StepNavigator({ projectId, currentStatus, episodeId, errorStepId
   )
 
   return (
-    <div className="bg-[var(--bg-surface)]/80 backdrop-blur-md border-b border-[var(--border-subtle)]">
+    <div className="bg-[var(--bg-base)] px-3 pt-3 md:px-4">
       <ProjectWorkflowStepper steps={steps} className="hidden md:block" />
       <MobileWorkflowSummary steps={steps} />
     </div>

@@ -69,7 +69,7 @@ export interface WorkflowStepDef {
   id: string
   /** 展示标题 */
   label: string
-  /** 路由（已含 projectId 与默认 episode=1） */
+  /** 路由（已含 projectId；剧集未解析时回到项目工作台） */
   href: string
   /** 该步已完成时的状态阈值 */
   confirmStatus: string
@@ -85,9 +85,9 @@ export interface WorkflowStepDef {
  * 构建项目工作流步骤定义（9 步，顺序固定）。
  * 路由沿用项目工作台约定，场景参考图作为独立前置步骤。
  */
-export function buildWorkflowSteps(projectId: string, episodeId = '1'): WorkflowStepDef[] {
+export function buildWorkflowSteps(projectId: string, episodeId?: string): WorkflowStepDef[] {
   const base = `/projects/${projectId}`
-  const episodeBase = `${base}/episodes/${episodeId}`
+  const episodeHref = (suffix: string) => episodeId ? `${base}/episodes/${episodeId}/${suffix}` : base
   return [
     {
       id: 'info',
@@ -125,7 +125,7 @@ export function buildWorkflowSteps(projectId: string, episodeId = '1'): Workflow
     {
       id: 'storyboard',
       label: '分镜脚本',
-      href: `${episodeBase}/storyboard`,
+      href: episodeHref('storyboard'),
       confirmStatus: 'STORYBOARD_CONFIRMED',
       unlockStatus: 'CHARACTER_IMAGE_CONFIRMED',
       generatingStatus: 'STORYBOARD_GENERATING',
@@ -134,7 +134,7 @@ export function buildWorkflowSteps(projectId: string, episodeId = '1'): Workflow
     {
       id: 'scene-references',
       label: '场景参考图',
-      href: `${episodeBase}/scene-references`,
+      href: episodeHref('scene-references'),
       confirmStatus: 'SHOT_IMAGE_GENERATING',
       unlockStatus: 'STORYBOARD_CONFIRMED',
       matchPath: (p) => p.includes('scene-references'),
@@ -142,7 +142,7 @@ export function buildWorkflowSteps(projectId: string, episodeId = '1'): Workflow
     {
       id: 'shot-images',
       label: '分镜图',
-      href: `${episodeBase}/shot-images`,
+      href: episodeHref('shot-images'),
       confirmStatus: 'SHOT_IMAGE_CONFIRMED',
       unlockStatus: 'STORYBOARD_CONFIRMED',
       generatingStatus: 'SHOT_IMAGE_GENERATING',
@@ -151,7 +151,7 @@ export function buildWorkflowSteps(projectId: string, episodeId = '1'): Workflow
     {
       id: 'shot-videos',
       label: '视频片段',
-      href: `${episodeBase}/shot-videos`,
+      href: episodeHref('shot-videos'),
       confirmStatus: 'SHOT_VIDEO_CONFIRMED',
       unlockStatus: 'SHOT_IMAGE_CONFIRMED',
       generatingStatus: 'SHOT_VIDEO_GENERATING',
@@ -160,7 +160,7 @@ export function buildWorkflowSteps(projectId: string, episodeId = '1'): Workflow
     {
       id: 'final-preview',
       label: '成片预览',
-      href: `${episodeBase}/final-preview`,
+      href: episodeHref('final-preview'),
       confirmStatus: 'RENDERED',
       unlockStatus: 'SHOT_VIDEO_CONFIRMED',
       generatingStatus: 'RENDERING',

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, usePathname } from 'next/navigation'
 import { StepNavigator } from '@/components/project/step-navigator'
 import { WorkflowShell } from '@/components/layout/workflow-shell'
 import type { WorkflowStatus } from '@/components/project/workflow/workflow-status-mapper'
@@ -14,6 +14,7 @@ export default function ProjectDetailLayout({
   children: React.ReactNode
 }) {
   const params = useParams()
+  const pathname = usePathname()
   const projectId = params.id as string
   const [status, setStatus] = useState('DRAFT')
   const [episodeId, setEpisodeId] = useState<string | undefined>()
@@ -64,17 +65,24 @@ export default function ProjectDetailLayout({
     return () => controller.abort()
   }, [projectId])
 
+  const hideStepNavigator = pathname.includes('/assets')
+    || pathname.includes('/tasks')
+    || pathname.includes('/qc')
+    || pathname.includes('/final-preview')
+
   return (
     <div className="flex flex-col h-full">
-      <StepNavigator
-        projectId={projectId}
-        currentStatus={status}
-        episodeId={episodeId}
-        errorStepId={errorStepId}
-        statusOverrides={statusOverrides}
-      />
+      {!hideStepNavigator && (
+        <StepNavigator
+          projectId={projectId}
+          currentStatus={status}
+          episodeId={episodeId}
+          errorStepId={errorStepId}
+          statusOverrides={statusOverrides}
+        />
+      )}
       <WorkflowShell>
-        <WorkflowShell.Main className="bg-[var(--bg-base)]">
+        <WorkflowShell.Main className="bg-transparent">
           {children}
         </WorkflowShell.Main>
         {/* RightPanel slot reserved for future contextual panels. */}

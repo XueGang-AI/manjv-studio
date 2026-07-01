@@ -28,7 +28,7 @@ const SCENARIOS: Array<{
 
 export default function WorkflowStatesPreviewPage() {
   const _pathname = usePathname()
-  const baseSteps = buildWorkflowSteps('demo')
+  const baseSteps = buildWorkflowSteps('demo', '1')
 
   return (
     <div className="min-h-screen bg-[var(--bg-base)] p-8 space-y-8">

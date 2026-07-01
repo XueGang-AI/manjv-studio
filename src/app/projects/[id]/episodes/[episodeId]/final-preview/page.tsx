@@ -24,8 +24,8 @@ import { ProgressBar } from '@/components/ui/progress-bar'
 import { getPreflightIssues, getRenderStatus, type FinalPreviewData } from '@/components/final-preview/final-preview-types'
 import { useTaskSSE, type TaskEventType, type TaskUpdateEvent } from '@/lib/hooks/use-task-sse'
 import {
+  CompactMetricCard,
   EmptyState,
-  MetricCard,
   Panel,
   WorkbenchPageHeader,
   formatDateTime,
@@ -176,7 +176,7 @@ export default function FinalPreviewPage() {
   }
 
   return (
-    <div className="space-y-5 p-5">
+    <div className="space-y-4 p-4">
       <WorkbenchPageHeader
         eyebrow="Delivery"
         title="成片交付"
@@ -202,33 +202,43 @@ export default function FinalPreviewPage() {
         </div>
       )}
 
-      <div className="grid gap-3 md:grid-cols-4">
-        <MetricCard label="成片状态" value={isRendered ? '已生成' : isRendering ? '合成中' : canRender ? '可合成' : '待确认'} helper={data?.projectStatus || '-'} icon={<Clapperboard size={18} />} tone={isRendered ? 'success' : isRendering ? 'info' : canRender ? 'warning' : 'default'} />
-        <MetricCard label="镜头片段" value={`${data?.shotsWithVideos.filter((shot) => shot.videoCount > 0).length || 0}/${data?.shotsWithVideos.length || 0}`} helper="已确认视频片段" icon={<Film size={18} />} tone={data?.allVideosConfirmed ? 'success' : 'warning'} progress={data?.shotsWithVideos.length ? (data.shotsWithVideos.filter((shot) => shot.videoCount > 0).length / data.shotsWithVideos.length) * 100 : 0} />
-        <MetricCard label="视频参数" value={latest?.aspectRatio || '9:16'} helper={latest?.fps ? `${latest.fps} fps` : '待 ffprobe 写入'} icon={<RefreshCw size={18} />} tone="info" />
-        <MetricCard label="版本数量" value={data?.finalVideos.length || 0} helper={latest ? `最新 ${formatDateTime(latest.createdAt)}` : '暂无版本'} icon={<FileJson size={18} />} tone="primary" />
-      </div>
-
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-5">
-          <Panel title="成片预览" description="播放器位于主工作区，竖版 9:16 成片会以大尺寸展示。">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="space-y-4">
+          <Panel title="成片预览" description="播放器、控制条和镜头时间线作为首屏主工作区。" bodyClassName="p-3">
             {isRendering ? (
-              <div className="flex min-h-[560px] flex-col items-center justify-center rounded-[var(--radius-lg)] bg-black/35 text-center">
+              <div className="flex min-h-[455px] flex-col items-center justify-center rounded-[var(--radius-lg)] bg-black/35 text-center">
                 <Loader2 size={42} className="mb-4 animate-spin text-[var(--color-info)]" />
                 <div className="text-lg font-semibold text-[var(--color-text-primary)]">FFmpeg 正在合成</div>
                 <p className="mt-2 max-w-md text-sm text-[var(--color-text-muted)]">正在拼接 {data?.shotsWithVideos.length || 0} 个镜头、标准化分辨率和音频，完成后会自动刷新。</p>
               </div>
             ) : isRendered && latest?.videoUrl ? (
-              <div className="flex justify-center rounded-[var(--radius-lg)] bg-black p-4">
+              <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-dim)] bg-black p-3">
+                <div className="flex min-h-[455px] justify-center">
                 <video
                   key={latest.id}
                   src={latest.videoUrl}
                   controls
                   preload="metadata"
                   playsInline
-                  className="h-[min(72vh,760px)] max-h-[760px] w-auto max-w-full rounded-[var(--radius-md)] bg-black object-contain"
+                  className="h-[min(58vh,560px)] max-h-[560px] w-auto max-w-full rounded-[var(--radius-md)] bg-black object-contain"
                   aria-label="最终成片播放器"
                 />
+                </div>
+                <div className="mt-3 grid gap-2 rounded-[var(--radius-md)] border border-white/10 bg-white/[0.04] p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
+                      <span>FinalVideo</span>
+                      <span className="font-mono">{latest.id.slice(0, 8)}</span>
+                      <span>{formatDuration(latest.duration)}</span>
+                      <span>{latest.aspectRatio || '9:16'}</span>
+                    </div>
+                    <ProgressBar value={100} variant="success" />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" onClick={handleCopy} disabled={!latest.videoUrl} icon={<Copy size={14} />}>复制链接</Button>
+                    <Button size="sm" variant="aurora" onClick={handleDownload} icon={<Download size={14} />}>下载 MP4</Button>
+                  </div>
+                </div>
               </div>
             ) : (
               <EmptyState
@@ -238,32 +248,38 @@ export default function FinalPreviewPage() {
                 action={canRender ? <Button variant="aurora" onClick={() => setConfirmOpen(true)} disabled={!allPreflightPassed}>开始合成</Button> : <Button variant="outline" onClick={() => router.push(`/projects/${projectId}/episodes/${episodeId}/shot-videos`)}>返回视频片段</Button>}
               />
             )}
-          </Panel>
-
-          <Panel title={`镜头时间线（共 ${data?.shotsWithVideos.length || 0} 个镜头）`} description="当前接口只提供镜头编号、名称和确认视频数量；第一阶段以可审计状态条展示。">
             {data?.shotsWithVideos.length ? (
-              <div className="space-y-4">
+              <div className="mt-3 rounded-[var(--radius-md)] border border-[var(--color-border-dim)] bg-[var(--bg-input)] p-3">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <div className="text-xs font-semibold text-[var(--color-text-primary)]">镜头时间线（共 {data.shotsWithVideos.length} 个镜头）</div>
+                  <Badge variant={data.allVideosConfirmed ? 'success' : 'warning'}>{data.allVideosConfirmed ? '全部确认' : '待补齐'}</Badge>
+                </div>
                 <div className="flex gap-2 overflow-x-auto pb-2">
                   {data.shotsWithVideos.map((shot) => (
-                    <div key={shot.shotNo} className="min-w-28 rounded-[var(--radius-md)] border border-[var(--color-border-dim)] bg-[var(--bg-panel)] p-3">
+                    <div key={shot.shotNo} className="min-w-[104px] rounded-[var(--radius-sm)] border border-[var(--color-border-dim)] bg-[var(--bg-panel)] p-2">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono text-xs text-[var(--color-text-muted)]">{String(shot.shotNo).padStart(2, '0')}</span>
-                        <Badge variant={shot.videoCount > 0 ? 'success' : 'warning'}>{shot.videoCount > 0 ? '已确认' : '缺视频'}</Badge>
+                        <span className="font-mono text-[11px] text-[var(--color-text-muted)]">{String(shot.shotNo).padStart(2, '0')}</span>
+                        <Badge variant={shot.videoCount > 0 ? 'success' : 'warning'}>{shot.videoCount > 0 ? '确认' : '缺失'}</Badge>
                       </div>
-                      <div className="mt-3 truncate text-sm font-medium text-[var(--color-text-primary)]">{shot.shotName || `镜头 ${shot.shotNo}`}</div>
-                      <div className="mt-2 text-xs text-[var(--color-text-muted)]">{shot.videoCount} 个确认片段</div>
+                      <div className="mt-1.5 truncate text-[11px] font-medium text-[var(--color-text-primary)]">{shot.shotName || `镜头 ${shot.shotNo}`}</div>
+                      <div className="mt-1 text-[11px] text-[var(--color-text-muted)]">{shot.videoCount} 个片段</div>
                     </div>
                   ))}
                 </div>
                 <ProgressBar value={data.shotsWithVideos.length ? (data.shotsWithVideos.filter((shot) => shot.videoCount > 0).length / data.shotsWithVideos.length) * 100 : 0} variant="success" />
               </div>
-            ) : (
-              <EmptyState title="暂无镜头视频数据" description="完成视频片段确认后，这里会显示镜头时间线。" />
-            )}
+            ) : null}
           </Panel>
         </div>
 
-        <div className="space-y-5">
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <CompactMetricCard label="成片状态" value={isRendered ? '已生成' : isRendering ? '合成中' : canRender ? '可合成' : '待确认'} helper={data?.projectStatus || '-'} icon={<Clapperboard size={15} />} tone={isRendered ? 'success' : isRendering ? 'info' : canRender ? 'warning' : 'default'} />
+            <CompactMetricCard label="镜头片段" value={`${data?.shotsWithVideos.filter((shot) => shot.videoCount > 0).length || 0}/${data?.shotsWithVideos.length || 0}`} helper="确认视频" icon={<Film size={15} />} tone={data?.allVideosConfirmed ? 'success' : 'warning'} progress={data?.shotsWithVideos.length ? (data.shotsWithVideos.filter((shot) => shot.videoCount > 0).length / data.shotsWithVideos.length) * 100 : 0} />
+            <CompactMetricCard label="视频参数" value={latest?.aspectRatio || '9:16'} helper={latest?.fps ? `${latest.fps} fps` : '待写入'} icon={<RefreshCw size={15} />} tone="info" />
+            <CompactMetricCard label="版本数量" value={data?.finalVideos.length || 0} helper={latest ? `最新 ${formatDateTime(latest.createdAt)}` : '暂无版本'} icon={<FileJson size={15} />} tone="primary" />
+          </div>
+
           <Panel title="成片信息">
             {latest ? (
               <div className="space-y-3 text-sm">
