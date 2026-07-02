@@ -14,6 +14,7 @@ import { AIPromptBox } from '@/components/ai/ai-prompt-box'
 import { AIConsoleSheet } from '@/components/ai/ai-console-sheet'
 import { useAIPromptBox } from '@/components/ai/use-ai-prompt-box'
 import { RegenerationIssuePanel, type RegenerationIssueType } from '@/components/regeneration/regeneration-issue-panel'
+import { WorkbenchImage } from '@/components/production-workbench/workbench-ui'
 
 interface ShotVideoReviewProps {
   group: ShotVideoGroup
@@ -62,6 +63,7 @@ export function ShotVideoReview({ group, isConfirmed, isGenerating, projectId, e
   const [regenerating, setRegenerating] = useState(false)
   const [issueTypes, setIssueTypes] = useState<RegenerationIssueType[]>([])
   const [fixNote, setFixNote] = useState('')
+  const [regenerateOpen, setRegenerateOpen] = useState(false)
 
   // Check task
   const [checkingTaskId, setCheckingTaskId] = useState<string | null>(null)
@@ -183,7 +185,7 @@ export function ShotVideoReview({ group, isConfirmed, isGenerating, projectId, e
   return (
     <div className="p-4 md:p-6 space-y-5">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="w-8 h-8 rounded-[var(--radius-md)] flex items-center justify-center text-sm font-bold text-white" style={{ background: confirmed ? 'var(--color-success)' : 'var(--gradient-aurora)' }}>
@@ -200,7 +202,7 @@ export function ShotVideoReview({ group, isConfirmed, isGenerating, projectId, e
           </div>
         </div>
         {!isConfirmed && videos.length > 0 && (
-          <Button variant="outline" size="sm" icon={<RefreshCw size={12} className={regenerating ? 'animate-spin' : ''} />} onClick={handleRegenerate} disabled={regenerating || isGenerating}>
+          <Button variant="outline" size="sm" icon={<RefreshCw size={12} className={regenerating ? 'animate-spin' : ''} />} onClick={() => setRegenerateOpen(true)} disabled={regenerating || isGenerating}>
             {regenerating ? '生成中…' : '重新生成'}
           </Button>
         )}
@@ -248,8 +250,7 @@ export function ShotVideoReview({ group, isConfirmed, isGenerating, projectId, e
                   {hasUrl ? (
                     <video src={v.videoUrl!} className="w-full h-full object-cover" preload="none" muted />
                   ) : shot.confirmedImage?.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- 远端对象存储缩略图，next.config 未配 remotePatterns，与既有 shot-image-review 约定一致
-                    <img src={shot.confirmedImage.imageUrl} alt="参考图" className="w-full h-full object-cover opacity-40" />
+                    <WorkbenchImage src={shot.confirmedImage.imageUrl} alt="参考图" className="h-full w-full rounded-none border-0 opacity-60" loading="lazy" compact />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       <Video size={12} className="text-[var(--color-text-muted)]" />
@@ -294,11 +295,12 @@ export function ShotVideoReview({ group, isConfirmed, isGenerating, projectId, e
         <Card className="p-3">
           <div className="text-[10px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-2">参考分镜图</div>
           <div className="flex items-start gap-3">
-            {/* eslint-disable-next-line @next/next/no-img-element -- 远端对象存储参考图，next.config 未配 remotePatterns，与既有 shot-image-review 约定一致 */}
-            <img
+            <WorkbenchImage
               src={shot.confirmedImage.imageUrl}
               alt="确认的分镜图"
-              className="w-16 h-24 object-cover rounded-[var(--radius-md)] border border-[var(--color-border-dim)]"
+              className="h-24 w-16 rounded-[var(--radius-md)]"
+              loading="lazy"
+              compact
             />
           </div>
         </Card>
@@ -308,9 +310,20 @@ export function ShotVideoReview({ group, isConfirmed, isGenerating, projectId, e
       {/* 桌面与移动共享同一 useAIPromptBox 状态（提升到 review），不各自维护副本 */}
       <>
         {/* 桌面常驻控制台 */}
-        <div className="hidden md:block">
-          <AIPromptBox {...aiConsoleProps} />
-        </div>
+        <details className="hidden rounded-[var(--radius-lg)] border border-[var(--color-border-dim)] bg-[var(--bg-elevated)] p-4 md:block">
+          <summary className="cursor-pointer list-none">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-[var(--color-text-primary)]">AI 视频创作 / 再生成</div>
+                <div className="mt-1 text-xs text-[var(--color-text-muted)]">默认收起，避免遮挡视频审核；展开后编辑 Prompt 会触发真实视频生成。</div>
+              </div>
+              <Badge variant="warning">消耗额度</Badge>
+            </div>
+          </summary>
+          <div className="mt-4">
+            <AIPromptBox {...aiConsoleProps} />
+          </div>
+        </details>
         {/* 移动端入口 + Sheet（共享同一 state，不维护两套表单） */}
         <div className="md:hidden">
           <Button
@@ -375,6 +388,20 @@ export function ShotVideoReview({ group, isConfirmed, isGenerating, projectId, e
         confirmLabel={confirming ? '确认中…' : '确认'}
         loading={confirming}
         onConfirm={handleConfirm}
+      />
+
+      <ConfirmDialog
+        open={regenerateOpen}
+        onOpenChange={setRegenerateOpen}
+        variant="warning"
+        title="重新生成视频片段"
+        description={`将为镜头 ${shot.shotNo}「${shot.shotName || ''}」创建新的真实豆包视频生成任务。旧视频会保留为候选，但本次操作会消耗视频 API 额度，耗时通常更长。`}
+        confirmLabel={regenerating ? '创建中…' : '确认重新生成'}
+        loading={regenerating}
+        onConfirm={async () => {
+          setRegenerateOpen(false)
+          await handleRegenerate()
+        }}
       />
     </div>
   )

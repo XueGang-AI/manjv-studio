@@ -135,11 +135,12 @@ export default function QCProjectPage() {
 
   const issues = useMemo(() => {
     const fresh = results.flatMap((result) => result.issues || [])
-    if (fresh.length > 0) return fresh
-    return reports.flatMap((report) => report.issues || [])
+    if (results.length > 0) return fresh
+    return reports[0]?.issues || []
   }, [reports, results])
 
-  const selectedIssue = issues[selectedIssueIndex] || issues[0] || null
+  const safeSelectedIssueIndex = issues.length ? Math.min(selectedIssueIndex, issues.length - 1) : 0
+  const selectedIssue = issues[safeSelectedIssueIndex] || null
   const selectedShotGroup = selectedIssue?.shotNo
     ? shotImageGroups.find((group) => group.shot?.shotNo === selectedIssue.shotNo)
     : shotImageGroups[0]
@@ -150,6 +151,8 @@ export default function QCProjectPage() {
   const score = results.length > 0
     ? Math.round(results.reduce((sum, result) => sum + result.score, 0) / results.length)
     : reports[0]?.score ?? 0
+  const latestReport = reports[0] || null
+  const historicalIssueCount = reports.slice(1).reduce((sum, report) => sum + (report.issues?.length || 0), 0)
   const severityCounts = useMemo(() => ({
     P0: issues.filter((issue) => normalizedSeverity(issue) === 'P0').length,
     P1: issues.filter((issue) => normalizedSeverity(issue) === 'P1').length,
@@ -172,9 +175,12 @@ export default function QCProjectPage() {
         title="QC 质检"
         description="规则 QC 会输出评分、严重程度、镜头号、时间段、问题类型和建议动作；缺失字段按旧报告结构降级展示。"
         actions={
-          <Button onClick={runQC} disabled={running} variant="aurora" icon={running ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}>
-            {running ? '检测中...' : '运行 QC'}
-          </Button>
+          <div className="flex flex-col items-end gap-1">
+            <Button onClick={runQC} disabled={running} variant="aurora" icon={running ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}>
+              {running ? '检测中...' : '运行 QC'}
+            </Button>
+            <span className="text-[11px] text-[var(--color-text-muted)]">只读取现有产物，不触发图片/视频生成</span>
+          </div>
         }
       />
 
@@ -195,9 +201,13 @@ export default function QCProjectPage() {
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-3">
         <div className="grid gap-3 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
-        <Panel title="问题列表" description={`${issues.length} 条问题，按严重程度与镜头位置追踪。`} bodyClassName="p-2">
+        <Panel
+          title="当前报告问题"
+          description={issues.length ? `${issues.length} 条当前问题，按严重程度与镜头位置追踪。` : latestReport ? `最新报告 ${formatDateTime(latestReport.createdAt)} 未返回当前问题。` : '尚未生成 QC 报告。'}
+          bodyClassName="p-2"
+        >
           {issues.length === 0 ? (
-            <EmptyState icon={<ShieldCheck size={24} />} title="暂无 QC 问题" description={reports.length || results.length ? '最近报告没有返回问题项。' : '点击运行 QC 开始检查项目。'} />
+            <EmptyState icon={<ShieldCheck size={24} />} title="当前无阻断问题" description={reports.length || results.length ? historicalIssueCount ? `历史报告里还有 ${historicalIssueCount} 条旧问题，已移到右侧历史报告中。` : '最新报告没有返回问题项。' : '点击运行 QC 开始检查项目。'} />
           ) : (
             <div className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border-dim)]">
               <div className="grid grid-cols-[48px_62px_minmax(0,1fr)_82px] gap-2 border-b border-[var(--color-border-dim)] bg-[var(--bg-panel)] px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
@@ -213,14 +223,14 @@ export default function QCProjectPage() {
                     onClick={() => setSelectedIssueIndex(index)}
                     className={cn(
                       'grid w-full grid-cols-[48px_62px_minmax(0,1fr)_82px] gap-2 px-2.5 py-2 text-left text-sm transition-colors hover:bg-[var(--bg-hover)]',
-                      selectedIssueIndex === index ? 'bg-[var(--color-primary-muted)]/50' : 'bg-[var(--bg-elevated)]',
+                      safeSelectedIssueIndex === index ? 'bg-[var(--color-primary-muted)]/50' : 'bg-[var(--bg-elevated)]',
                     )}
                   >
                     <div><SeverityBadge severity={normalizedSeverity(issue)} /></div>
                     <div className="text-[var(--color-text-secondary)]">{issue.shotNo ? `镜头 ${issue.shotNo}` : '-'}</div>
                     <div>
-                      <div className="truncate text-xs font-medium text-[var(--color-text-primary)]">{issue.problem || '未提供问题描述'}</div>
-                      <div className="truncate font-mono text-[11px] text-[var(--color-text-muted)]">{issue.issueType || issue.field || '-'}</div>
+                      <div className="truncate text-xs font-medium text-[var(--color-text-primary)]">{issueProblemLabel(issue)}</div>
+                      <div className="truncate text-[11px] text-[var(--color-text-muted)]">{issueTypeLabel(issue.issueType || issue.field)}</div>
                     </div>
                     <div className="truncate text-xs text-[var(--color-text-secondary)]">{actionLabel(issue.recommendedAction)}</div>
                   </button>
@@ -270,12 +280,12 @@ export default function QCProjectPage() {
                     <Badge variant="default">{selectedIssue.timeRange || '无时间段'}</Badge>
                   </div>
                   <div>
-                    <div className="text-sm font-semibold leading-5 text-[var(--color-text-primary)]">{selectedIssue.problem || '未提供问题描述'}</div>
+                    <div className="text-sm font-semibold leading-5 text-[var(--color-text-primary)]">{issueProblemLabel(selectedIssue)}</div>
                     {selectedIssue.suggestion && <p className="mt-2 line-clamp-4 text-xs leading-5 text-[var(--color-text-muted)]">{selectedIssue.suggestion}</p>}
                   </div>
                   <div className="space-y-1.5 text-xs">
                     <Info label="镜头号" value={selectedIssue.shotNo ? String(selectedIssue.shotNo) : '-'} />
-                    <Info label="问题类型" value={selectedIssue.issueType || '-'} />
+                    <Info label="问题类型" value={issueTypeLabel(selectedIssue.issueType || selectedIssue.field)} />
                     <Info label="建议动作" value={actionLabel(selectedIssue.recommendedAction)} />
                   </div>
                 </div>
@@ -333,6 +343,7 @@ export default function QCProjectPage() {
                   <div key={report.id} className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] bg-[var(--bg-panel)] px-3 py-2 text-sm">
                     <span className="font-mono text-[var(--color-text-primary)]">{report.score ?? '-'}</span>
                     <Badge variant={report.passed ? 'success' : 'warning'}>{report.passed ? '通过' : '需处理'}</Badge>
+                    <span className="text-xs text-[var(--color-text-muted)]">{report.issues?.length || 0} 问题</span>
                     <span className="truncate text-xs text-[var(--color-text-muted)]">{formatDateTime(report.createdAt)}</span>
                   </div>
                 ))}
@@ -365,6 +376,29 @@ function actionLabel(action?: string) {
     rerender_final: '重新合成',
   }
   return action ? map[action] || action : '-'
+}
+
+function issueTypeLabel(value?: string | null) {
+  const map: Record<string, string> = {
+    reference_count: '参考图数量与一致性',
+    prompt_phone_safety: '手机屏幕安全',
+    final_media: '成片媒体校验',
+    final_video_missing: '成片缺失',
+    black_frame: '黑屏风险',
+    freeze_frame: '冻结风险',
+    silent_audio: '静音风险',
+    loudness: '响度问题',
+    audio: '音轨问题',
+  }
+  if (!value) return '-'
+  return map[value] || value.replace(/_/g, ' ')
+}
+
+function issueProblemLabel(issue: QCIssue) {
+  if (issue.problem && !/^[a-z0-9_.-]+$/i.test(issue.problem)) return issue.problem
+  const type = issueTypeLabel(issue.issueType || issue.field)
+  if (issue.shotNo) return `镜头 ${issue.shotNo} 需要检查：${type}`
+  return type === '-' ? '存在质量风险' : type
 }
 
 function scoreLabel(score: number) {

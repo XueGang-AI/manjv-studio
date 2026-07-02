@@ -2,18 +2,19 @@
  * MediaStorage Factory（Phase 7/8）
  * --------------------------------------------
  * 根据环境变量选择 provider：
- * - MEDIA_STORAGE_PROVIDER=local（默认，仅 development）
- * - MEDIA_STORAGE_PROVIDER=s3（S3-compatible 通用实现）
- * - MEDIA_STORAGE_PROVIDER=aliyun-oss（阿里云 OSS，V4 签名，生产推荐）
+ * - MEDIA_STORAGE_PROVIDER=local（默认，开发/本地生产均可用）
+ * - MEDIA_STORAGE_PROVIDER=s3（S3-compatible 通用实现，需 MEDIA_STORAGE_ENABLE_REMOTE=true）
+ * - MEDIA_STORAGE_PROVIDER=aliyun-oss（阿里云 OSS，V4 签名，需 MEDIA_STORAGE_ENABLE_REMOTE=true）
  *
  * 安全：
- * - production + local → 抛配置错误，不自动退回本地磁盘
- * - production 不会自动退回 local 或 s3（必须显式配置）
+ * - remote provider 默认关闭，避免旧 OSS 配置继续产生对象存储费用
+ * - production + local 允许运行，但部署方必须提供持久化磁盘
  * - 凭证仅服务端读取，不发送客户端
  * - 启动时校验必要变量
  *
  * 环境变量：
  * - MEDIA_STORAGE_PROVIDER: local | s3 | aliyun-oss
+ * - MEDIA_STORAGE_ENABLE_REMOTE: true 时才允许 s3 / aliyun-oss 生效
  * - S3: MEDIA_STORAGE_ACCESS_KEY/SECRET_KEY/REGION/BUCKET/ENDPOINT/FORCE_PATH_STYLE/PUBLIC_BASE_URL
  * - OSS: OSS_BUCKET/OSS_REGION/OSS_PUBLIC_ENDPOINT/OSS_INTERNAL_ENDPOINT/OSS_USE_INTERNAL_ENDPOINT/
  *        OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_SIGNED_URL_EXPIRES_SECONDS
@@ -27,13 +28,13 @@ import type { MediaStorageProvider } from './types'
 
 export type StorageProviderName = 'local' | 's3' | 'aliyun-oss'
 
-function isProduction(): boolean {
-  return process.env.NODE_ENV === 'production'
-}
-
 function readBool(value: string | undefined, defaultValue = false): boolean {
   if (value === undefined) return defaultValue
   return value === 'true' || value === '1'
+}
+
+function remoteStorageEnabled(): boolean {
+  return readBool(process.env.MEDIA_STORAGE_ENABLE_REMOTE, false)
 }
 
 /** 校验 S3 配置完整性，返回错误信息列表 */
@@ -54,12 +55,19 @@ export function getMediaStorage(): MediaStorageProvider {
   const providerName = (process.env.MEDIA_STORAGE_PROVIDER || 'local') as StorageProviderName
 
   if (providerName === 'local') {
-    if (isProduction()) {
-      throw new Error(
-        '生产环境禁止使用本地文件系统存储（MEDIA_STORAGE_PROVIDER=local）。' +
-        '请配置 MEDIA_STORAGE_PROVIDER=s3 及相应凭证。',
-      )
-    }
+    cachedProvider = localStorageProvider
+    return cachedProvider
+  }
+
+  if (providerName !== 's3' && providerName !== 'aliyun-oss') {
+    throw new Error(`未知的 MEDIA_STORAGE_PROVIDER: ${providerName}`)
+  }
+
+  if (!remoteStorageEnabled()) {
+    console.warn(
+      `[media-storage] MEDIA_STORAGE_PROVIDER=${providerName} 已被忽略；` +
+      '远程媒体存储未启用（MEDIA_STORAGE_ENABLE_REMOTE=true 才会使用 S3/OSS），当前使用 local-fs。',
+    )
     cachedProvider = localStorageProvider
     return cachedProvider
   }

@@ -222,8 +222,13 @@ export default function ProjectWorkbenchPage() {
   }, [episodeId, project])
 
   const completedSteps = workflow.filter((step) => step.completed).length
-  const activeStep = workflow.find((step) => !step.completed && !step.locked) || workflow.find((step) => step.id === 'final-preview') || workflow[0]
-  const failedTasks = tasks.filter((task) => task.status === 'failed')
+  const isDelivered = project?.status === 'RENDERED' || project?.status === 'FINAL_CONFIRMED' || counts.finalVideos > 0
+  const activeStep = isDelivered
+    ? workflow.find((step) => step.id === 'final-preview') || workflow[workflow.length - 1] || workflow[0]
+    : workflow.find((step) => !step.completed && !step.locked) || workflow.find((step) => step.id === 'final-preview') || workflow[0]
+  const failedTasks = isDelivered ? [] : tasks.filter((task) => task.status === 'failed')
+  const historicalFailedTasks = isDelivered ? tasks.filter((task) => task.status === 'failed') : []
+  const visibleTasks = isDelivered ? tasks.filter((task) => task.status !== 'failed').slice(0, 5) : tasks.slice(0, 5)
   const latestReport = reports[0]
   const latestIssues = (latestReport?.issues || []).slice(0, 4)
   const selectedShot = useMemo(() => {
@@ -273,7 +278,7 @@ export default function ProjectWorkbenchPage() {
         actions={
           <>
             <Link href={activeStep?.href || `/projects/${project.id}/story`}>
-              <Button variant="aurora" icon={<ArrowRight size={16} />}>进入当前阶段</Button>
+              <Button variant="aurora" icon={<ArrowRight size={16} />}>{isDelivered ? '查看成片' : '进入当前阶段'}</Button>
             </Link>
             {episodeId ? (
               <Link href={`/projects/${project.id}/episodes/${episodeId}/final-preview`}>
@@ -295,9 +300,9 @@ export default function ProjectWorkbenchPage() {
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_330px]">
         <div className="space-y-4">
           <Panel
-            title="当前步骤：分镜图审核"
-            description={selectedShot?.shot ? `镜头 ${selectedShot.shot.shotNo} · ${selectedShot.shot.location || '未标注场景'}` : '选择镜头后查看候选图、确认状态和后续视频状态。'}
-            action={<Badge variant="primary">{counts.confirmedShotImages}/{counts.shots || 0} 已确认</Badge>}
+            title={isDelivered ? '当前状态：成片交付' : '当前步骤：分镜图审核'}
+            description={isDelivered ? `项目已生成 ${counts.finalVideos} 个成片版本，下面保留镜头级产物概览供回看。` : selectedShot?.shot ? `镜头 ${selectedShot.shot.shotNo} · ${selectedShot.shot.location || '未标注场景'}` : '选择镜头后查看候选图、确认状态和后续视频状态。'}
+            action={<Badge variant={isDelivered ? 'success' : 'primary'}>{isDelivered ? '已成片' : `${counts.confirmedShotImages}/${counts.shots || 0} 已确认`}</Badge>}
             bodyClassName="p-3"
           >
             {shotImageGroups.length === 0 ? (
@@ -412,10 +417,15 @@ export default function ProjectWorkbenchPage() {
               <div>
                 <div className="flex items-center justify-between text-xs text-[var(--color-text-muted)]">
                   <span>生产总进度</span>
-                  <span>{completedSteps}/9</span>
+                  <span>{isDelivered ? 9 : completedSteps}/9</span>
                 </div>
-                <ProgressBar value={Math.round((completedSteps / 9) * 100)} variant="aurora" />
+                <ProgressBar value={isDelivered ? 100 : Math.round((completedSteps / 9) * 100)} variant={isDelivered ? 'success' : 'aurora'} />
               </div>
+              {isDelivered && (
+                <div className="rounded-[var(--radius-md)] border border-[var(--color-success)]/25 bg-[var(--color-success-muted)] p-3 text-xs leading-5 text-[var(--color-text-secondary)]">
+                  当前项目已有成片和发布链路。任务队列里的旧失败记录仅作为历史排障信息，除非重新生成或重新合成，不影响当前交付判断。
+                </div>
+              )}
               <Link href={activeStep?.href || `/projects/${project.id}/story`}>
                 <Button className="w-full" variant="aurora" icon={<ArrowRight size={14} />}>打开阶段页面</Button>
               </Link>
@@ -423,7 +433,7 @@ export default function ProjectWorkbenchPage() {
                 <Button className="w-full" variant="outline" icon={<ListChecks size={14} />}>查看任务队列</Button>
               </Link>
               <div className="space-y-2">
-                {tasks.slice(0, 5).map((task) => (
+                {visibleTasks.map((task) => (
                   <div key={task.id} className="flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--bg-panel)] px-2.5 py-2">
                     <TaskStatusIcon status={task.status} />
                     <div className="min-w-0 flex-1">
@@ -432,7 +442,7 @@ export default function ProjectWorkbenchPage() {
                     </div>
                   </div>
                 ))}
-                {tasks.length === 0 && <div className="text-xs text-[var(--color-text-muted)]">暂无任务记录。</div>}
+                {visibleTasks.length === 0 && <div className="text-xs text-[var(--color-text-muted)]">暂无当前任务记录。</div>}
               </div>
             </div>
           </Panel>
@@ -465,6 +475,11 @@ export default function ProjectWorkbenchPage() {
                     {issue.severity || issue.level || 'QC'} {issue.shotNo ? `镜头 ${issue.shotNo}：` : ''}{issue.problem || '存在质量风险'}
                   </div>
                 ))}
+              </div>
+            )}
+            {historicalFailedTasks.length > 0 && (
+              <div className="mt-3 rounded-[var(--radius-md)] border border-[var(--color-border-dim)] bg-[var(--bg-panel)] p-2 text-xs leading-5 text-[var(--color-text-muted)]">
+                已隐藏 {historicalFailedTasks.length} 条历史失败任务；当前已有成片，建议只在重新生成对应阶段时再处理。
               </div>
             )}
           </Panel>

@@ -74,7 +74,13 @@ export function StoryboardShotDetail({ shot, isConfirmed }: StoryboardShotDetail
       )}
 
       {/* Prompts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {(imgP || vidP) && (
+      <details className="rounded-[var(--radius-lg)] border border-[var(--color-border-dim)] bg-[var(--bg-elevated)] p-4">
+        <summary className="cursor-pointer list-none">
+          <div className="text-sm font-semibold text-[var(--color-text-primary)]">技术 Prompt</div>
+          <div className="mt-1 text-xs text-[var(--color-text-muted)]">默认收起，审核分镜时优先看动作、台词和镜头信息。</div>
+        </summary>
+      <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
         {imgP && (imgP.enPrompt || imgP.zhPrompt) && (
           <Card className="p-4">
             <div className="text-[10px] font-semibold text-[var(--color-primary)] uppercase tracking-wider mb-2">图片 Prompt</div>
@@ -106,6 +112,8 @@ export function StoryboardShotDetail({ shot, isConfirmed }: StoryboardShotDetail
           </Card>
         )}
       </div>
+      </details>
+      )}
 
       {/* Camera & Visual details */}
       {allFields.length > 0 && (

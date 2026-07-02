@@ -2,6 +2,7 @@
  * Aliyun OSS 最小真实联调脚本（Phase 8）
  * --------------------------------------------
  * 凭证由用户在 .env.local 手动配置后运行。
+ * 必须同时设置 MEDIA_STORAGE_PROVIDER=aliyun-oss 和 MEDIA_STORAGE_ENABLE_REMOTE=true。
  * 不输出 AccessKey 或完整签名 URL。
  *
  * 验证顺序：
@@ -36,7 +37,7 @@ async function main() {
 
   const storage = getMediaStorage()
   if (storage.name !== 'aliyun-oss') {
-    console.error(`✗ Provider 不是 aliyun-oss（当前: ${storage.name}），请检查 MEDIA_STORAGE_PROVIDER`)
+    console.error(`✗ Provider 不是 aliyun-oss（当前: ${storage.name}），请检查 MEDIA_STORAGE_PROVIDER 和 MEDIA_STORAGE_ENABLE_REMOTE`)
     process.exit(1)
   }
   console.log(`✓ Provider: ${storage.name}\n`)

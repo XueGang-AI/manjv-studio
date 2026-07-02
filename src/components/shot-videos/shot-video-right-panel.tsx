@@ -103,6 +103,7 @@ export function ShotVideoRightPanel({
         {/* Actions */}
         <Card className="p-3">
           <h4 className="text-xs font-semibold text-[var(--color-text-muted)] mb-3">操作</h4>
+          <p className="mb-3 text-[11px] leading-5 text-[var(--color-text-muted)]">生成/重新生成会创建真实豆包视频任务；点击后会先出现确认弹窗。</p>
           <div className="space-y-2">
             {!hasAnyVideos && !isGenerating && (
               <Button variant="aurora" size="sm" className="w-full" icon={<Sparkles size={12} />} onClick={onGenerate}>
@@ -188,11 +189,12 @@ export function ShotVideoRightPanel({
 
       {/* Mobile toggle */}
       <button
-        className="lg:hidden fixed bottom-4 right-4 z-40 w-12 h-12 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center shadow-lg cursor-pointer"
+        className="lg:hidden fixed bottom-4 right-4 z-40 h-10 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 text-white flex items-center gap-1.5 justify-center shadow-lg cursor-pointer"
         onClick={() => setMobileOpen(true)}
         aria-label="打开工作台面板"
       >
-        <Zap size={20} />
+        <Zap size={16} />
+        <span className="text-xs font-medium">操作</span>
       </button>
 
       {/* Mobile drawer */}

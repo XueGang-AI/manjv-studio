@@ -2,7 +2,7 @@
 
 更新时间：2026-06-28
 
-> 历史记录说明：本文记录当次 60 秒真实 API 验收的实际环境，下面的旧模型名和本地媒体路径是历史产物信息，不代表当前默认配置或当前存储架构。当前默认配置以 `.env.example` 和 `src/server/model-adapters/model-config.ts` 为准；当前正式产物以 `storageObjectKey` / `storageProvider` 为准，OSS/S3 读取 URL 由 API 动态生成。
+> 历史记录说明：本文记录当次 60 秒真实 API 验收的实际环境，下面的旧模型名和本地媒体路径是历史产物信息，不代表当前默认配置或当前存储架构。当前默认配置以 `.env.example` 和 `src/server/model-adapters/model-config.ts` 为准；当前正式产物以 `storageObjectKey` / `storageProvider` 为准，读取 URL 由 API 按当前媒体存储动态生成。
 
 ## 验收对象
 
@@ -81,7 +81,7 @@
 npm test
 npx tsc --noEmit
 npm run lint
-# 历史本地文件验收命令。当前 OSS/S3 成片由 QC 服务临时下载 read URL 后 ffprobe。
+# 历史本地文件验收命令。当前媒体存储成片由 QC 服务临时下载 read URL 后 ffprobe。
 ffprobe -v error -show_entries format=duration,size:stream=index,codec_type,codec_name,width,height,r_frame_rate -of json uploads/final_videos/436d4d93-2d94-4f32-888a-e5e9e3d17ed3_ep1_1782576732814.mp4
 ```
 

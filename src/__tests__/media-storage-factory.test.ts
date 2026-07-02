@@ -1,7 +1,7 @@
 /**
  * MediaStorage Factory 单元测试（Phase 8）
  * --------------------------------------------
- * 验证 Provider 选择、production 禁止 local、aliyun-oss 配置缺失失败。
+ * 验证 Provider 选择、远程存储显式启用、aliyun-oss 配置缺失失败。
  */
 import { describe, it, expect, afterEach, beforeEach } from 'vitest'
 
@@ -26,23 +26,34 @@ describe('MediaStorage Factory', () => {
     expect(storage.name).toBe('local-fs')
   })
 
-  it('production + local 抛错', () => {
+  it('production + local 仍使用 local-fs', () => {
     process.env.NODE_ENV = 'production'
     process.env.MEDIA_STORAGE_PROVIDER = 'local'
-    expect(() => getMediaStorage()).toThrow(/生产环境禁止使用本地文件系统/)
+    const storage = getMediaStorage()
+    expect(storage.name).toBe('local-fs')
   })
 
-  it('aliyun-oss 配置缺失时抛错', () => {
+  it('远程未启用时忽略 aliyun-oss 并回退 local-fs', () => {
     process.env.NODE_ENV = 'production'
     process.env.MEDIA_STORAGE_PROVIDER = 'aliyun-oss'
+    delete process.env.MEDIA_STORAGE_ENABLE_REMOTE
+    const storage = getMediaStorage()
+    expect(storage.name).toBe('local-fs')
+  })
+
+  it('远程启用后 aliyun-oss 配置缺失时抛错', () => {
+    process.env.NODE_ENV = 'production'
+    process.env.MEDIA_STORAGE_PROVIDER = 'aliyun-oss'
+    process.env.MEDIA_STORAGE_ENABLE_REMOTE = 'true'
     delete process.env.OSS_BUCKET
     delete process.env.OSS_ACCESS_KEY_ID
     expect(() => getMediaStorage()).toThrow(/配置不完整/)
   })
 
-  it('aliyun-oss 完整配置返回 aliyun-oss provider', () => {
+  it('远程启用且 aliyun-oss 完整配置返回 aliyun-oss provider', () => {
     process.env.NODE_ENV = 'production'
     process.env.MEDIA_STORAGE_PROVIDER = 'aliyun-oss'
+    process.env.MEDIA_STORAGE_ENABLE_REMOTE = 'true'
     process.env.OSS_BUCKET = 'manjv-studio'
     process.env.OSS_REGION = 'oss-cn-hangzhou'
     process.env.OSS_PUBLIC_ENDPOINT = 'https://oss-cn-hangzhou.aliyuncs.com'

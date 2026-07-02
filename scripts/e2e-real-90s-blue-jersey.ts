@@ -495,11 +495,22 @@ async function confirmShotVideos(projectId: string, episodeId: string) {
   log(`确认视频片段：${confirmed} 个`)
 }
 
-async function assertOssBackedStorage(projectId: string, episodeId: string) {
-  const expectedProvider = process.env.MEDIA_STORAGE_PROVIDER
-  if (expectedProvider !== 'aliyun-oss') {
-    throw new Error(`MEDIA_STORAGE_PROVIDER 必须为 aliyun-oss，当前为 ${expectedProvider || '未设置'}`)
-  }
+function configuredStorageProviderName(provider = process.env.MEDIA_STORAGE_PROVIDER || 'local'): string {
+  if (provider === 'local') return 'local-fs'
+  if (provider === 's3') return 's3-compatible'
+  if (provider === 'aliyun-oss') return 'aliyun-oss'
+  throw new Error(`未知 MEDIA_STORAGE_PROVIDER：${provider}`)
+}
+
+function expectedStorageProviderName(): string {
+  const provider = process.env.MEDIA_STORAGE_PROVIDER || 'local'
+  const configuredProvider = configuredStorageProviderName(provider)
+  const remoteEnabled = process.env.MEDIA_STORAGE_ENABLE_REMOTE === 'true' || process.env.MEDIA_STORAGE_ENABLE_REMOTE === '1'
+  return configuredProvider === 'local-fs' || !remoteEnabled ? 'local-fs' : configuredProvider
+}
+
+async function assertMediaStorage(projectId: string, episodeId: string) {
+  const expectedProvider = expectedStorageProviderName()
 
   const [
     characterImages,
@@ -521,13 +532,16 @@ async function assertOssBackedStorage(projectId: string, episodeId: string) {
     minCount: number,
   ) => {
     if (records.length < minCount) throw new Error(`${name} 数量不足：${records.length}/${minCount}`)
-    const missing = records.filter(item => !item.storageObjectKey || item.storageProvider !== 'aliyun-oss')
-    if (missing.length > 0) throw new Error(`${name} 存在未转存 OSS 的记录：${missing.length}`)
-    const localUrls = records.filter(item => {
+    const missing = records.filter(item => !item.storageObjectKey || item.storageProvider !== expectedProvider)
+    if (missing.length > 0) throw new Error(`${name} 存在未写入 ${expectedProvider} 的记录：${missing.length}`)
+    const unexpectedUrls = records.filter(item => {
       const url = item.imageUrl || item.videoUrl || ''
-      return url.startsWith('/api/local-media/') || url.startsWith('/api/media/') || url.startsWith('uploads/')
+      const isLocalReadUrl = url.startsWith('/api/media/')
+      return expectedProvider === 'local-fs'
+        ? !isLocalReadUrl
+        : isLocalReadUrl || url.startsWith('/api/local-media/') || url.startsWith('uploads/')
     })
-    if (localUrls.length > 0) throw new Error(`${name} 仍返回本地 URL：${localUrls.length}`)
+    if (unexpectedUrls.length > 0) throw new Error(`${name} read URL 与 ${expectedProvider} 不匹配：${unexpectedUrls.length}`)
   }
 
   assertGroup('角色图', characterImages, 3)
@@ -536,14 +550,15 @@ async function assertOssBackedStorage(projectId: string, episodeId: string) {
   assertGroup('视频片段', confirmedShotVideos, 12)
 
   if (!finalVideo) throw new Error('未找到 READY 成片')
-  if (finalVideo.storageProvider !== 'aliyun-oss' || !finalVideo.storageObjectKey) {
-    throw new Error('最终成片未写入 OSS storageObjectKey/storageProvider')
+  if (finalVideo.storageProvider !== expectedProvider || !finalVideo.storageObjectKey) {
+    throw new Error(`最终成片未写入 ${expectedProvider} storageObjectKey/storageProvider`)
   }
   if (!finalVideo.storageObjectKey.startsWith(`projects/${projectId}/final_videos/`)) {
     throw new Error(`最终成片 objectKey 不符合 final_videos 路径：${finalVideo.storageObjectKey}`)
   }
-  if (finalVideo.videoUrl?.startsWith('/api/local-media/') || finalVideo.videoUrl?.startsWith('uploads/')) {
-    throw new Error(`最终成片仍是本地 URL：${finalVideo.videoUrl}`)
+  const finalVideoIsLocalReadUrl = finalVideo.videoUrl?.startsWith('/api/media/')
+  if (expectedProvider === 'local-fs' ? !finalVideoIsLocalReadUrl : finalVideoIsLocalReadUrl || finalVideo.videoUrl?.startsWith('/api/local-media/') || finalVideo.videoUrl?.startsWith('uploads/')) {
+    throw new Error(`最终成片 read URL 与 ${expectedProvider} 不匹配：${finalVideo.videoUrl}`)
   }
 
   return {
@@ -555,7 +570,8 @@ async function assertOssBackedStorage(projectId: string, episodeId: string) {
   }
 }
 
-async function assertNoProjectLocalArtifacts(projectId: string) {
+async function assertRemoteModeHasNoProjectLocalArtifacts(projectId: string) {
+  if (expectedStorageProviderName() === 'local-fs') return
   const fs = await import('fs')
   const path = await import('path')
   const uploadRoot = path.resolve(process.cwd(), 'uploads')
@@ -623,10 +639,10 @@ async function main() {
   log(`QC 完成：${Array.isArray(qc.data) ? qc.data.length : 0} 份报告`)
 
   const releasePackage = await post(`/api/projects/${projectId}/episodes/${episodeId}/release-package/generate`)
-  if (!releasePackage.data?.packageObjectKey) throw new Error('发布包未写入 OSS objectKey')
+  if (!releasePackage.data?.packageObjectKey) throw new Error('发布包未写入媒体存储 objectKey')
 
-  const storage = await assertOssBackedStorage(projectId, episodeId)
-  await assertNoProjectLocalArtifacts(projectId)
+  const storage = await assertMediaStorage(projectId, episodeId)
+  await assertRemoteModeHasNoProjectLocalArtifacts(projectId)
 
   console.log('\n=== 90s 蓝染球衣真实剧情验收完成 ===')
   console.log(`PROJECT_ID=${projectId}`)

@@ -109,9 +109,9 @@ Base URL: `http://localhost:3100/api`
 | 字段 | 说明 |
 |------|------|
 | `storageObjectKey` | 正式产物长期对象键，如 `projects/<projectId>/videos/...` 或 `projects/<projectId>/final_videos/...` |
-| `storageProvider` | 写入 Provider，生产应为 `aliyun-oss` |
+| `storageProvider` | 写入 Provider，默认本地为 `local-fs`；远程显式启用时可能为 `s3-compatible` 或 `aliyun-oss` |
 | `sourceUrl` / `sourceVideoUrl` | 脱敏后的供应商来源 URL，仅用于审计，不作为读取入口 |
-| `imageUrl` / `videoUrl` | API 当前响应的 read URL；OSS/S3 场景下通常是短期签名 URL |
+| `imageUrl` / `videoUrl` | API 当前响应的 read URL；local-fs 为 `/api/media/...`，OSS/S3 场景下通常是短期签名 URL |
 
 `GET /api/projects/:id/episodes/:episodeId/final-preview` 返回的 `latest` 会额外包含 `assetPackageUrl`、`assetPackageObjectKey`、`assetPackageStorageProvider`。发布包生成接口返回 `packageUrl`、`packageObjectKey`、`packageStorageProvider`。
 
@@ -166,4 +166,4 @@ QC issue 输出保留旧字段 `level/field/problem/suggestion`，并补充 `sho
 |------|------|------|
 | GET | `/api/health` | Web/API 健康检查 |
 | GET | `/api/worker/health` | DB、Redis、Worker heartbeat 综合健康检查 |
-| GET | `/api/media/:key...` | local-fs 开发媒体读取代理；生产 OSS/S3 不依赖该路由 |
+| GET | `/api/media/:key...` | local-fs 媒体读取代理；默认本地存储模式依赖该路由 |

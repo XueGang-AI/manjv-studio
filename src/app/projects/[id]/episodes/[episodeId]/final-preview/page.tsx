@@ -45,6 +45,8 @@ export default function FinalPreviewPage() {
   const [packaging, setPackaging] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [readyVideoId, setReadyVideoId] = useState<string | null>(null)
+  const [erroredVideoId, setErroredVideoId] = useState<string | null>(null)
 
   const refreshData = useCallback(async () => {
     try {
@@ -103,6 +105,8 @@ export default function FinalPreviewPage() {
   const latest = data?.latest || null
   const preflightIssues = getPreflightIssues(data)
   const allPreflightPassed = preflightIssues.every((issue) => issue.passed)
+  const videoReady = readyVideoId === latest?.id
+  const videoError = erroredVideoId === latest?.id
 
   const handleRender = async () => {
     setRendering(true)
@@ -129,6 +133,10 @@ export default function FinalPreviewPage() {
   }
 
   const handleDownload = () => {
+    if (videoError) {
+      addToast({ type: 'error', title: '下载失败', description: '当前存储链接不可读，请先检查文件链接' })
+      return
+    }
     if (!latest?.videoUrl) {
       addToast({ type: 'error', title: '下载失败', description: '视频 URL 不可用' })
       return
@@ -144,6 +152,7 @@ export default function FinalPreviewPage() {
   }
 
   const handleCopy = async () => {
+    if (videoError) return
     if (!latest?.videoUrl) return
     await navigator.clipboard.writeText(latest.videoUrl)
     addToast({ type: 'success', title: '已复制成片链接' })
@@ -189,7 +198,7 @@ export default function FinalPreviewPage() {
               </Button>
             )}
             {isRendered && latest?.videoUrl && (
-              <Button variant="aurora" onClick={handleDownload} icon={<Download size={16} />}>下载 MP4</Button>
+              <Button variant="aurora" onClick={handleDownload} disabled={videoError} icon={<Download size={16} />}>下载 MP4</Button>
             )}
           </>
         }
@@ -203,7 +212,7 @@ export default function FinalPreviewPage() {
       )}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <Panel title="成片预览" description="播放器、控制条和镜头时间线作为首屏主工作区。" bodyClassName="p-3">
             {isRendering ? (
               <div className="flex min-h-[455px] flex-col items-center justify-center rounded-[var(--radius-lg)] bg-black/35 text-center">
@@ -213,16 +222,58 @@ export default function FinalPreviewPage() {
               </div>
             ) : isRendered && latest?.videoUrl ? (
               <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-dim)] bg-black p-3">
-                <div className="flex min-h-[455px] justify-center">
-                <video
-                  key={latest.id}
-                  src={latest.videoUrl}
-                  controls
-                  preload="metadata"
-                  playsInline
-                  className="h-[min(58vh,560px)] max-h-[560px] w-auto max-w-full rounded-[var(--radius-md)] bg-black object-contain"
-                  aria-label="最终成片播放器"
-                />
+                <div className="relative flex min-h-[455px] items-center justify-center overflow-hidden rounded-[var(--radius-md)]">
+                  <div
+                    className="relative h-[min(58vh,560px)] max-h-[560px] w-auto max-w-full overflow-hidden rounded-[var(--radius-md)] bg-black"
+                    style={{ aspectRatio: (latest.aspectRatio || '9:16').replace(':', ' / ') }}
+                  >
+                    <video
+                      key={latest.id}
+                      src={latest.videoUrl}
+                      poster={latest.coverUrl || undefined}
+                      controls
+                      preload="metadata"
+                      playsInline
+                      className="absolute inset-0 h-full w-full bg-black object-contain"
+                      aria-label="最终成片播放器"
+                      onLoadedMetadata={() => {
+                        setReadyVideoId(latest.id)
+                        setErroredVideoId(null)
+                      }}
+                      onCanPlay={() => {
+                        setReadyVideoId(latest.id)
+                        setErroredVideoId(null)
+                      }}
+                      onError={() => setErroredVideoId(latest.id)}
+                    />
+                    {videoError ? (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/70 px-4 text-center">
+                        <div className="flex max-w-sm flex-col items-center gap-3">
+                          <AlertTriangle size={32} className="text-[var(--color-danger)]" />
+                          <div className="text-sm font-medium text-white">成片读取失败</div>
+                          <p className="text-xs leading-5 text-white/65">
+                            最终 MP4 记录存在，但当前存储链接不可读。请检查对象存储权限或重新获取媒体文件后再下载、播放。
+                          </p>
+                          {latest.videoUrl && (
+                            <Button size="sm" variant="outline" onClick={() => window.open(latest.videoUrl!, '_blank')} icon={<ExternalLink size={14} />}>
+                              检查文件链接
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ) : !videoReady && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/60 pointer-events-none">
+                        {latest.coverUrl && (
+                          // eslint-disable-next-line @next/next/no-img-element -- 成片封面来自运行时媒体 URL
+                          <img src={latest.coverUrl} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover opacity-30" />
+                        )}
+                        <div className="relative z-10 flex flex-col items-center gap-2 text-xs text-white/85">
+                          <Loader2 size={26} className="animate-spin text-[var(--color-info)]" />
+                          <span>正在读取成片元数据</span>
+                        </div>
+                      </div>
+                    )}
+                    </div>
                 </div>
                 <div className="mt-3 grid gap-2 rounded-[var(--radius-md)] border border-white/10 bg-white/[0.04] p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
                   <div className="min-w-0">
@@ -235,8 +286,8 @@ export default function FinalPreviewPage() {
                     <ProgressBar value={100} variant="success" />
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button size="sm" variant="outline" onClick={handleCopy} disabled={!latest.videoUrl} icon={<Copy size={14} />}>复制链接</Button>
-                    <Button size="sm" variant="aurora" onClick={handleDownload} icon={<Download size={14} />}>下载 MP4</Button>
+                    <Button size="sm" variant="outline" onClick={handleCopy} disabled={!latest.videoUrl || videoError} icon={<Copy size={14} />}>复制链接</Button>
+                    <Button size="sm" variant="aurora" onClick={handleDownload} disabled={videoError} icon={<Download size={14} />}>下载 MP4</Button>
                   </div>
                 </div>
               </div>
@@ -280,7 +331,7 @@ export default function FinalPreviewPage() {
             <CompactMetricCard label="版本数量" value={data?.finalVideos.length || 0} helper={latest ? `最新 ${formatDateTime(latest.createdAt)}` : '暂无版本'} icon={<FileJson size={15} />} tone="primary" />
           </div>
 
-          <Panel title="成片信息">
+          <Panel title="交付信息">
             {latest ? (
               <div className="space-y-3 text-sm">
                 <Info label="FinalVideo ID" value={latest.id} />
@@ -288,10 +339,16 @@ export default function FinalPreviewPage() {
                 <Info label="时长" value={formatDuration(latest.duration)} />
                 <Info label="分辨率/画幅" value={latest.aspectRatio || '-'} />
                 <Info label="帧率" value={latest.fps ? `${latest.fps} fps` : '-'} />
-                <Info label="存储 Provider" value={latest.storageProvider || '-'} />
-                <Info label="OSS Object" value={latest.storageObjectKey || '-'} />
-                <Info label="发布包" value={latest.assetPackageObjectKey || '未生成'} />
+                <Info label="发布包" value={latest.assetPackageUrl || latest.assetPackageObjectKey ? '已生成' : '未生成'} />
                 <Info label="生成时间" value={formatDateTime(latest.createdAt)} />
+                <details className="rounded-[var(--radius-md)] border border-[var(--color-border-dim)] bg-[var(--bg-panel)] p-3">
+                  <summary className="cursor-pointer text-xs font-medium text-[var(--color-text-secondary)]">技术存储信息</summary>
+                  <div className="mt-3 space-y-3">
+                    <Info label="存储 Provider" value={latest.storageProvider || '-'} />
+                    <Info label="视频 Object" value={latest.storageObjectKey || '-'} />
+                    <Info label="发布包 Object" value={latest.assetPackageObjectKey || '-'} />
+                  </div>
+                </details>
               </div>
             ) : (
               <div className="text-sm text-[var(--color-text-muted)]">暂无成片版本。</div>
@@ -301,13 +358,13 @@ export default function FinalPreviewPage() {
           <Panel title="导出发布包">
             <div className="space-y-3">
               <div className="rounded-[var(--radius-md)] bg-[var(--bg-panel)] p-3 text-xs leading-5 text-[var(--color-text-muted)]">
-                发布包会生成 manifest，上传到当前媒体存储，并写回最新 FinalVideo 的 `assetPackageUrl` 和 object key。
+                发布包会生成交付 manifest，并上传到当前媒体存储；技术 object key 可在成片信息的折叠区查看。
               </div>
               <Button className="w-full" variant="aurora" disabled={!latest || packaging} onClick={handleGeneratePackage} icon={packaging ? <Loader2 size={14} className="animate-spin" /> : <FileJson size={14} />}>
                 {packaging ? '生成中...' : '生成发布包'}
               </Button>
               <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" size="sm" disabled={!latest?.videoUrl} onClick={handleCopy} icon={<Copy size={14} />}>复制链接</Button>
+                <Button variant="outline" size="sm" disabled={!latest?.videoUrl || videoError} onClick={handleCopy} icon={<Copy size={14} />}>复制链接</Button>
                 <Button variant="outline" size="sm" disabled={!latest?.videoUrl} onClick={() => latest?.videoUrl && window.open(latest.videoUrl, '_blank')} icon={<ExternalLink size={14} />}>打开文件</Button>
               </div>
             </div>

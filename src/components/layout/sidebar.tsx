@@ -28,46 +28,96 @@ interface SidebarProps {
   projectId?: string
 }
 
+interface ProjectListResponse {
+  success?: boolean
+  data?: Array<{ id: string }>
+}
+
+function useLatestProjectId(enabled: boolean) {
+  const [state, setState] = React.useState<{ projectId?: string; resolved: boolean }>({ resolved: false })
+
+  React.useEffect(() => {
+    if (!enabled) return
+
+    const controller = new AbortController()
+
+    fetch('/api/projects', { signal: controller.signal })
+      .then((res) => res.json() as Promise<ProjectListResponse>)
+      .then((payload) => {
+        if (controller.signal.aborted) return
+        const latestProjectId = payload.success ? payload.data?.[0]?.id : undefined
+        setState({ projectId: latestProjectId, resolved: true })
+      })
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return
+        setState({ resolved: true })
+      })
+
+    return () => controller.abort()
+  }, [enabled])
+
+  return {
+    projectId: enabled ? state.projectId : undefined,
+    loading: enabled && !state.resolved,
+  }
+}
+
 export function Sidebar({ projectId: propProjectId }: SidebarProps) {
   const pathname = usePathname()
   const collapsed = false
   const [mobileOpen, setMobileOpen] = React.useState(false)
-  const projectId = propProjectId || pathname.match(/\/projects\/([^/]+)/)?.[1]
-  const isProjectWorkspace = Boolean(projectId && projectId !== 'new')
-  const projectBase = projectId ? `/projects/${projectId}` : '/projects'
-  const { finalPreviewHref, loading: episodeLoading } = usePrimaryEpisode(projectId, pathname)
+  const routeProjectId = propProjectId || pathname.match(/\/projects\/([^/]+)/)?.[1]
+  const shouldUseLatestProject = !routeProjectId && pathname === '/projects'
+  const { projectId: latestProjectId, loading: latestProjectLoading } = useLatestProjectId(shouldUseLatestProject)
+  const projectId = routeProjectId || latestProjectId
+  const hasProjectContext = Boolean(projectId && projectId !== 'new')
+  const projectBase = hasProjectContext ? `/projects/${projectId}` : '/projects'
+  const { finalPreviewHref, loading: episodeLoading } = usePrimaryEpisode(hasProjectContext ? projectId : undefined, pathname)
+  const missingProjectReason = latestProjectLoading ? '正在读取最近项目' : '当前没有可用项目'
 
   const projectNavItems: NavItem[] = [
     {
+      label: '项目列表',
+      href: '/projects',
+      icon: <Grid2X2 size={18} />,
+      match: (path) => path === '/projects',
+    },
+    {
       label: '项目工作台',
-      href: projectBase,
+      href: hasProjectContext ? projectBase : undefined,
       icon: <Grid2X2 size={18} />,
       match: (path) => path === projectBase,
+      disabledReason: missingProjectReason,
     },
     {
       label: '素材资产库',
-      href: `${projectBase}/assets`,
+      href: hasProjectContext ? `${projectBase}/assets` : undefined,
       icon: <Boxes size={18} />,
       match: (path) => path.includes(`${projectBase}/assets`),
+      disabledReason: missingProjectReason,
     },
     {
       label: '任务队列',
-      href: `${projectBase}/tasks`,
+      href: hasProjectContext ? `${projectBase}/tasks` : undefined,
       icon: <ListChecks size={18} />,
       match: (path) => path.includes(`${projectBase}/tasks`),
+      disabledReason: missingProjectReason,
     },
     {
       label: 'QC 质检',
-      href: `${projectBase}/qc`,
+      href: hasProjectContext ? `${projectBase}/qc` : undefined,
       icon: <ShieldCheck size={18} />,
       match: (path) => path.includes(`${projectBase}/qc`),
+      disabledReason: missingProjectReason,
     },
     {
       label: '成片交付',
       href: finalPreviewHref,
       icon: <Truck size={18} />,
       match: (path) => path.includes('/final-preview'),
-      disabledReason: episodeLoading ? '正在读取剧集信息' : '当前项目尚未创建剧集',
+      disabledReason: hasProjectContext
+        ? (episodeLoading ? '正在读取剧集信息' : '当前项目尚未创建剧集')
+        : missingProjectReason,
     },
   ]
 
@@ -110,7 +160,9 @@ export function Sidebar({ projectId: propProjectId }: SidebarProps) {
       <button
         type="button"
         onClick={() => setMobileOpen(true)}
+        onPointerUp={() => setMobileOpen(true)}
         aria-label="打开生产导航"
+        aria-expanded={mobileOpen}
         className="fixed left-2 top-2 z-50 inline-flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--bg-elevated)] text-[var(--color-text-primary)] shadow-[var(--shadow-panel)] md:hidden"
         title="打开生产导航"
       >
@@ -118,7 +170,7 @@ export function Sidebar({ projectId: propProjectId }: SidebarProps) {
       </button>
 
       {mobileOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true" aria-label="生产导航">
           <button
             type="button"
             aria-label="关闭生产导航"
@@ -142,28 +194,12 @@ export function Sidebar({ projectId: propProjectId }: SidebarProps) {
               </button>
             </div>
             <nav className="flex-1 overflow-y-auto px-3 py-4">
-              {isProjectWorkspace ? (
-                <div className="space-y-1">
-                  <div className="mb-3 px-3 text-[10px] font-medium uppercase tracking-widest text-[var(--color-text-muted)]">
-                    生产工作台
-                  </div>
-                  {projectNavItems.map((item) => renderNavItem(item, true))}
+              <div className="space-y-1">
+                <div className="mb-3 px-3 text-[10px] font-medium uppercase tracking-widest text-[var(--color-text-muted)]">
+                  生产工作台
                 </div>
-              ) : (
-                <Link
-                  href="/projects"
-                  onClick={() => setMobileOpen(false)}
-                  className={cn(
-                    'flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-sm transition-colors',
-                    pathname === '/projects'
-                      ? 'bg-[var(--color-primary-muted)] text-[var(--color-primary-hover)]'
-                      : 'text-[var(--color-text-secondary)] hover:bg-[var(--bg-panel)] hover:text-[var(--color-text-primary)]',
-                  )}
-                >
-                  <Grid2X2 size={18} />
-                  <span>项目列表</span>
-                </Link>
-              )}
+                {projectNavItems.map((item) => renderNavItem(item, true))}
+              </div>
             </nav>
           </aside>
         </div>
@@ -188,32 +224,14 @@ export function Sidebar({ projectId: propProjectId }: SidebarProps) {
         </div>
 
         <nav className="flex-1 overflow-y-auto px-2 py-7">
-          {isProjectWorkspace ? (
-            <div className="space-y-2">
-              {!collapsed && (
-                <div className="mb-4 px-3 text-[10px] font-medium uppercase tracking-widest text-[var(--color-text-muted)]">
-                  生产工作台
-                </div>
-              )}
-              {projectNavItems.map((item) => renderNavItem(item))}
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <Link
-                href="/projects"
-                className={cn(
-                  'flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-sm transition-colors',
-                  pathname === '/projects'
-                    ? 'bg-[var(--color-primary-muted)] text-[var(--color-primary-hover)]'
-                    : 'text-[var(--color-text-secondary)] hover:bg-[var(--bg-panel)] hover:text-[var(--color-text-primary)]',
-                  collapsed && 'justify-center px-2',
-                )}
-              >
-                <Grid2X2 size={18} />
-                {!collapsed && <span>项目列表</span>}
-              </Link>
-            </div>
-          )}
+          <div className="space-y-2">
+            {!collapsed && (
+              <div className="mb-4 px-3 text-[10px] font-medium uppercase tracking-widest text-[var(--color-text-muted)]">
+                生产工作台
+              </div>
+            )}
+            {projectNavItems.map((item) => renderNavItem(item))}
+          </div>
         </nav>
 
         {!collapsed && (

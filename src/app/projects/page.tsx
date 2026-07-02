@@ -161,7 +161,7 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="p-6 max-w-[1400px] mx-auto">
+    <div className="w-full max-w-[1400px] mx-auto p-4 sm:p-6">
       <ProjectsHeader projectCount={projects.length} />
 
       {projects.length > 0 && (

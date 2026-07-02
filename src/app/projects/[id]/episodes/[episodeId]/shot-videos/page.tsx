@@ -16,6 +16,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { AlertTriangle, Video, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useToast } from '@/components/ui/toast'
 import { ShotVideoNavigation } from '@/components/shot-videos/shot-video-navigation'
 import { ShotVideoReview } from '@/components/shot-videos/shot-video-review'
@@ -35,6 +36,7 @@ export default function ShotVideosPage() {
   const [error, setError] = useState<string | null>(null)
   const [activeShotId, setActiveShotId] = useState<string | null>(null)
   const [mobileSelectorOpen, setMobileSelectorOpen] = useState(false)
+  const [generateConfirmOpen, setGenerateConfirmOpen] = useState(false)
 
   const { addToast } = useToast()
 
@@ -181,7 +183,7 @@ export default function ShotVideosPage() {
   }
 
   return (
-    <div className="flex flex-1 overflow-hidden">
+    <div className="flex min-w-0 flex-1 flex-col overflow-hidden md:flex-row">
       {/* Desktop: side navigation */}
       <div className="hidden md:block">
         <ShotVideoNavigation
@@ -193,7 +195,7 @@ export default function ShotVideosPage() {
       </div>
 
       {/* Mobile: top shot selector */}
-      <div className="md:hidden w-full">
+      <div className="w-full shrink-0 md:hidden">
         <div className="relative border-b border-[var(--color-border-dim)] bg-[var(--bg-surface)]">
           <button
             className="w-full px-4 py-2.5 flex items-center justify-between cursor-pointer"
@@ -236,7 +238,7 @@ export default function ShotVideosPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="min-w-0 flex-1 overflow-y-auto">
         {activeGroup ? (
           <ShotVideoReview
             group={activeGroup}
@@ -259,8 +261,22 @@ export default function ShotVideosPage() {
         shots={data.shots}
         allConfirmed={data.allConfirmed}
         isGenerating={isGenerating}
-        onGenerate={handleGenerate}
+        onGenerate={() => setGenerateConfirmOpen(true)}
         onBatchCheck={handleBatchCheck}
+      />
+
+      <ConfirmDialog
+        open={generateConfirmOpen}
+        onOpenChange={setGenerateConfirmOpen}
+        variant="warning"
+        title={data.shots.some((shot) => shot.videos.length > 0) ? '生成缺失视频片段' : '生成全部视频片段'}
+        description={`将为当前剧集 ${data.shots.length} 个镜头创建真实豆包视频生成任务。已有确认视频不会被删除，新的结果会作为候选追加；此操作会消耗真实 API 额度，视频任务耗时通常更长。`}
+        confirmLabel={generating ? '创建中…' : '确认生成'}
+        loading={generating}
+        onConfirm={async () => {
+          setGenerateConfirmOpen(false)
+          await handleGenerate()
+        }}
       />
     </div>
   )

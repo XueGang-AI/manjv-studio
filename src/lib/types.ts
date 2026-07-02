@@ -32,6 +32,7 @@ export interface ProjectListItem {
   artStyle: string | null
   status: string
   modelProvider: string
+  coverImageUrl?: string | null
   createdAt: string
   updatedAt: string
 }

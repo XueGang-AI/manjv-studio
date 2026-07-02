@@ -14,7 +14,7 @@ AI 漫剧全流程生产平台 —— 从故事方案到成片 MP4，面向中�
 - **Prisma 7** + PostgreSQL 16（任务状态唯一真相源）
 - **Redis**（ioredis，Pub/Sub 事件通知层，可选，不可用时降级 DB 轮询）
 - **FFmpeg 8**（视频合成，libx264 + aac）
-- **MediaStorage**（本地开发 local-fs；生产推荐 Aliyun OSS 私有桶 + 动态签名 URL）
+- **MediaStorage**（默认 local-fs 本地持久化；S3/OSS 仅显式启用时使用）
 - **Vitest**（单元测试）
 
 ## 系统架构
@@ -40,7 +40,7 @@ Worker 进程（独立，task.worker.ts）
 - **Worker 独立进程**：不经过 Next.js，入口 `src/server/workers/task.worker.ts`，独立加载 `.env`。
 - **原子任务领取**：`claimTask` 使用条件更新 `WHERE status IN ('pending','retrying')`，PostgreSQL 行级锁防止多 Worker 重复执行同一任务。
 - **崩溃恢复**：Worker 启动时及运行期间每 30 秒扫描超时的 `running`/`retrying` 任务，重置为 `pending` 重试或标记 `failed`。
-- **媒体对象键是长期身份**：图片、视频片段、最终成片和发布包都写入媒体存储，数据库保存 `storageObjectKey` / `storageProvider`；API 读取时再生成可访问 URL，生产不依赖供应商临时 URL 或本地 `uploads/final_videos`。
+- **媒体对象键是长期身份**：图片、视频片段、最终成片和发布包都写入当前媒体存储，数据库保存 `storageObjectKey` / `storageProvider`；默认本地存储读取 URL 为 `/api/media/...`，不再默认走 OSS。
 
 ## 任务链路
 
@@ -126,11 +126,11 @@ npm run worker                # Worker（需单独进程）
 ```bash
 npm test                      # 单元测试（Vitest）
 npm run test:e2e              # Mock 全流程 E2E（22 步）
-npm run test:e2e:real         # 真实 AI API + OSS 全链路：《蓝染球衣上场那天》
+npm run test:e2e:real         # 真实 AI API + 本地媒体存储全链路：《蓝染球衣上场那天》
 npm run test:e2e:real:minimal # 真实 AI API 最小探针（本地 probes 输出，不作为上线验收）
 ```
 
-当前真实全链路验收脚本使用《蓝染球衣上场那天》，会检查角色图、场景参考图、分镜图、视频片段、最终成片和发布包均写入 `MEDIA_STORAGE_PROVIDER=aliyun-oss`，并拒绝 `/api/local-media`、`/api/media` 或 `uploads/` 形式的正式产物 URL。`2026-06-28` 的《古城最后一盏花灯》本地路径记录仅作为历史基线保留，不代表当前存储架构。
+当前真实全链路验收脚本使用《蓝染球衣上场那天》，默认检查角色图、场景参考图、分镜图、视频片段、最终成片和发布包均写入 `local-fs`，读取 URL 走 `/api/media/...`。如需远程 S3/OSS，必须同时设置 `MEDIA_STORAGE_PROVIDER` 和 `MEDIA_STORAGE_ENABLE_REMOTE=true`，脚本会按实际 provider 校验。
 
 ### Seedance 1.5 Pro 质量优化闭环
 

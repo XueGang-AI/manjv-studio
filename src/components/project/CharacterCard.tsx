@@ -177,7 +177,11 @@ export function CharacterCard({ character, confirmed, onConfirm }: Props) {
 
         {/* 固定 Prompt */}
         {(character.zhFixedPrompt || character.enFixedPrompt) && (
-          <div className="border-t pt-3 space-y-2">
+          <details className="border-t pt-3">
+            <summary className="cursor-pointer text-xs font-medium text-gray-400">
+              技术参数：固定 Prompt
+            </summary>
+            <div className="mt-3 space-y-2">
             {character.zhFixedPrompt && (
               <div>
                 <p className="text-xs font-medium text-gray-400 mb-1">中文固定 Prompt</p>
@@ -194,7 +198,8 @@ export function CharacterCard({ character, confirmed, onConfirm }: Props) {
                 </p>
               </div>
             )}
-          </div>
+            </div>
+          </details>
         )}
       </CardContent>
     </Card>

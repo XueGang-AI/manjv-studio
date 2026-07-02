@@ -60,6 +60,9 @@ export function StoryDisplay({ story, version, confirmed }: Props) {
     return null
   }
 
+  const firstEpisode = story.episode_outline?.[0]
+  const topSellingPoint = story.selling_points?.[0]
+
   return (
     <div className="space-y-6">
       {/* 版本信息 */}
@@ -69,6 +72,23 @@ export function StoryDisplay({ story, version, confirmed }: Props) {
           {confirmed && <Badge variant="success">已确认</Badge>}
         </div>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Target size={18} className="text-indigo-500" />
+            确认摘要
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <dl className="grid gap-3 md:grid-cols-2">
+            <Field label="核心冲突" value={story.basic_info?.core_conflict || firstEpisode?.core_plot || '-'} />
+            <Field label="平台/受众" value={[story.basic_info?.platform, story.basic_info?.target_audience].filter(Boolean).join(' · ') || '-'} />
+            <Field label="第一集重点" value={firstEpisode ? `第 ${firstEpisode.episode_no} 集：${firstEpisode.title || firstEpisode.core_plot}` : '-'} />
+            <Field label="主卖点" value={topSellingPoint || '-'} />
+          </dl>
+        </CardContent>
+      </Card>
 
       {/* 基础信息 */}
       {story.basic_info && (

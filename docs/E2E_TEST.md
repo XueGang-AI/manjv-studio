@@ -60,20 +60,17 @@ codec:           h264
 audio:           aac
 ```
 
-Mock 默认使用 `MEDIA_STORAGE_PROVIDER=local`，正式产物对象会写入 `uploads/media/projects/...`，读取 URL 走 `/api/media/...`。如果本地开发切到 OSS/S3 Provider，Mock 脚本会跳过本地 ffprobe 文件检查。
+Mock 默认使用 `MEDIA_STORAGE_PROVIDER=local`，正式产物对象会写入 `uploads/media/projects/...`，读取 URL 走 `/api/media/...`。远程 S3/OSS 默认关闭，只有 `MEDIA_STORAGE_ENABLE_REMOTE=true` 时才会启用。
 
-## 真实 API + OSS 全链路验收
+## 真实 API + 本地媒体存储全链路验收
 
-正式真实验收使用《蓝染球衣上场那天》，覆盖 90 秒主流程、OSS 持久化、QC 和发布包。运行前要求 `.env` 中配置 Ark 与 Aliyun OSS，并关闭 Mock：
+正式真实验收使用《蓝染球衣上场那天》，覆盖 90 秒主流程、本地媒体持久化、QC 和发布包。运行前要求 `.env` 中配置 Ark，并关闭 Mock；媒体默认写入本地 `uploads/media`：
 
 ```env
 USE_MOCK_MODEL=false
-MEDIA_STORAGE_PROVIDER=aliyun-oss
+MEDIA_STORAGE_PROVIDER=local
+MEDIA_STORAGE_ENABLE_REMOTE=false
 ARK_API_KEY=...
-OSS_BUCKET=...
-OSS_PUBLIC_ENDPOINT=...
-OSS_ACCESS_KEY_ID=...
-OSS_ACCESS_KEY_SECRET=...
 ```
 
 运行：
@@ -105,12 +102,12 @@ npm run test:e2e:real:blue:resume
 12. 确认分镜图
 13. Ark/Seedance 创建视频异步任务（确认分镜图作为 `first_frame`）
 14. 轮询远端任务直到 completed
-15. 视频片段从 Ark 返回 URL 转存到 OSS，写入 `ShotVideo.storageObjectKey`
+15. 视频片段从 Ark 返回 URL 转存到当前媒体存储，写入 `ShotVideo.storageObjectKey`
 16. FFmpeg 使用存储 read URL 合成最终 MP4
-17. 最终 MP4 上传到 OSS `projects/<projectId>/final_videos/...`，本地临时输出清理
-18. QC 使用 OSS read URL 下载临时文件执行 ffprobe / loudness / 黑屏 / 冻结检查
-19. 发布包 manifest 上传到 OSS `projects/<projectId>/release_packages/...`
-20. 脚本校验角色图、场景参考图、分镜图、视频片段、成片、发布包均为 `storageProvider=aliyun-oss`，且正式 URL 不得为 `/api/local-media`、`/api/media` 或 `uploads/`
+17. 最终 MP4 转存到 `uploads/media/projects/<projectId>/final_videos/...`，渲染临时输出清理
+18. QC 使用 `/api/media/...` read URL 下载临时文件执行 ffprobe / loudness / 黑屏 / 冻结检查
+19. 发布包 manifest 写入 `uploads/media/projects/<projectId>/release_packages/...`
+20. 脚本按当前 provider 校验角色图、场景参考图、分镜图、视频片段、成片、发布包；默认应为 `storageProvider=local-fs`
 
 ### 真实接口注意事项
 
@@ -119,28 +116,31 @@ npm run test:e2e:real:blue:resume
 - 单片段成片也必须走 FFmpeg `concatVideos()` 两阶段规范化链路。生产成片应上传到媒体存储并写入 `FinalVideo.storageObjectKey`，API 读取时动态生成 read URL。
 - 成片阶段默认启用 loudnorm 响度归一化；如需排障可临时设置 `FFMPEG_NORMALIZE_AUDIO=false`，但真实验收应保持默认开启。
 
-### 当前 90 秒 OSS QA 基线
+### 当前 90 秒本地媒体 QA 基线
 
 - 题材：《蓝染球衣上场那天》，非遗蓝染 / 山地足球 / 返乡直播运营。
 - 模型：文本 `doubao-seed-2-0-pro-260215`，图片 `doubao-seedream-5-0-260128`，视频 `doubao-seedance-1-5-pro-251215`。
 - 验收脚本：`npm run test:e2e:real`。
 - 必须通过的存储断言：
-  - `MEDIA_STORAGE_PROVIDER=aliyun-oss`
-  - 角色图、场景参考图、分镜图、视频片段均有 `storageObjectKey` 和 `storageProvider=aliyun-oss`
+  - `MEDIA_STORAGE_PROVIDER=local`
+  - `MEDIA_STORAGE_ENABLE_REMOTE=false`
+  - 角色图、场景参考图、分镜图、视频片段均有 `storageObjectKey` 和 `storageProvider=local-fs`
   - 最终成片 object key 以 `projects/<projectId>/final_videos/` 开头
   - 发布包返回 `packageObjectKey`
-  - 项目本地目录 `uploads/media/projects/<projectId>` 不存在
+  - read URL 使用 `/api/media/...`
 
 ### 历史 90 秒本地 QA 基线
 
 - 题材：《古城最后一盏花灯》，文旅 / 非遗 / 返乡创业，9 个 10 秒镜头。
 - 模型：文本 `doubao-seed-2-0-pro-260215`，图片 `doubao-seedream-5-0-260128`，视频 `doubao-seedance-1-5-pro-251215`，Ark base `https://ark.cn-beijing.volces.com/api/plan`。
-- 产物：当时输出到本地 `uploads/final_videos/...`，ffprobe 显示约 `90.488005s`、`1080x1920`、H.264、AAC。该记录仅保留为历史质量基线，不代表当前存储架构。
+- 产物：当时输出到本地 `uploads/final_videos/...`，ffprobe 显示约 `90.488005s`、`1080x1920`、H.264、AAC。该记录仅保留为历史质量基线；当前本地媒体存储使用 `uploads/media/projects/...` 作为正式对象目录。
 - QA 结论：可接受，通过；P2 问题集中在个别镜头发型/脸型轻微漂移、直播 UI 图形接近平台符号、音量偏低。媒体文件和逐帧素材属于生成产物，不纳入 Git。
 
 ## 真实 API 最小探针
 
-`npm run test:e2e:real:minimal` 保留为 Ark 图片/视频接口与本地 FFmpeg 的最小探针，输出在 `uploads/probes/`，不验证完整 Worker 链路、OSS 持久化或发布包，不作为上线验收结论。
+如确需远程 S3/OSS 验收，必须额外设置 `MEDIA_STORAGE_ENABLE_REMOTE=true` 和对应 provider 凭证。脚本会按实际 provider 校验，但远程读取可能产生请求费和流量费。
+
+`npm run test:e2e:real:minimal` 保留为 Ark 图片/视频接口与本地 FFmpeg 的最小探针，输出在 `uploads/probes/`，不验证完整 Worker 链路、媒体持久化或发布包，不作为上线验收结论。
 
 ### 问题驱动重跑验证
 

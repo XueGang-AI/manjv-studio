@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useEffect, useState, useCallback } from 'react'
-import { AlertCircle, Video, Loader2, RefreshCw } from 'lucide-react'
+import { AlertCircle, ExternalLink, Video, Loader2, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { remoteStatusLabel, isRemotePending, isRemoteTerminal, type ShotVideoItem } from './shot-videos-types'
 
@@ -19,8 +19,8 @@ export function ShotVideoPlayer({
   video, posterUrl, isConfirmed, onRegenerate, onCheckTask, regenerating, checkingTask,
 }: ShotVideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const [loadError, setLoadError] = useState(false)
-  const [loadStarted, setLoadStarted] = useState(false)
+  const [loadErrorVideoId, setLoadErrorVideoId] = useState<string | null>(null)
+  const [metadataLoadedVideoId, setMetadataLoadedVideoId] = useState<string | null>(null)
 
   // Pause old video when switching
   useEffect(() => {
@@ -30,13 +30,13 @@ export function ShotVideoPlayer({
   }, [video?.id])
 
   const handleVideoError = useCallback(() => {
-    setLoadError(true)
-  }, [])
+    setLoadErrorVideoId(video?.id || null)
+  }, [video?.id])
 
-  const handleLoadStart = useCallback(() => {
-    setLoadStarted(true)
-    setLoadError(false)
-  }, [])
+  const handleLoadedMetadata = useCallback(() => {
+    setMetadataLoadedVideoId(video?.id || null)
+    setLoadErrorVideoId(null)
+  }, [video?.id])
 
   // No video record at all
   if (!video) {
@@ -56,6 +56,8 @@ export function ShotVideoPlayer({
   const remoteIsTimedOut = hasRemoteTask && (video.remoteStatus || '').toLowerCase() === 'timeout'
   const remoteIsCompleted = hasRemoteTask && isRemoteTerminal(video.remoteStatus) && !remoteIsFailed && !remoteIsTimedOut
   const videoAvailable = !!(video.videoUrl && (remoteIsCompleted || !hasRemoteTask))
+  const loadError = loadErrorVideoId === video.id
+  const metadataLoaded = metadataLoadedVideoId === video.id
 
   // Remote task still processing
   if (remoteIsPending) {
@@ -151,15 +153,24 @@ export function ShotVideoPlayer({
   if (loadError) {
     return (
       <div className="aspect-video bg-[var(--bg-panel)] rounded-[var(--radius-lg)] flex items-center justify-center">
-        <div className="text-center">
+        <div className="max-w-sm px-4 text-center">
           <AlertCircle size={40} className="text-[var(--color-danger)] mx-auto mb-3" />
-          <p className="text-sm text-[var(--color-danger)] mb-1">视频加载失败</p>
-          <p className="text-[10px] text-[var(--color-text-muted)] mb-3">文件可能已失效或格式不受支持</p>
-          {!isConfirmed && (
+          <p className="mb-1 text-sm font-medium text-[var(--color-danger)]">视频读取失败</p>
+          <p className="mb-3 text-xs leading-5 text-[var(--color-text-muted)]">
+            已有视频记录存在，但当前存储链接不可读。请检查对象存储权限或重新获取媒体文件后再播放。
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {video.videoUrl && (
+              <Button variant="outline" size="sm" icon={<ExternalLink size={12} />} onClick={() => window.open(video.videoUrl!, '_blank')}>
+                检查文件链接
+              </Button>
+            )}
+            {!isConfirmed && (
             <Button variant="outline" size="sm" icon={<RefreshCw size={12} className={regenerating ? 'animate-spin' : ''} />} onClick={onRegenerate} disabled={regenerating}>
               {regenerating ? '重新生成中…' : '重新生成'}
             </Button>
-          )}
+            )}
+          </div>
         </div>
       </div>
     )
@@ -179,12 +190,19 @@ export function ShotVideoPlayer({
         className="w-full aspect-video"
         aria-label={`镜头视频播放`}
         onError={handleVideoError}
-        onLoadStart={handleLoadStart}
+        onLoadedMetadata={handleLoadedMetadata}
+        onCanPlay={handleLoadedMetadata}
       />
-      {/* Loading overlay before metadata loads */}
-      {!loadStarted && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/60 pointer-events-none">
-          <Loader2 size={32} className="text-[var(--color-accent-cyan)] animate-spin" />
+      {!metadataLoaded && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/55 pointer-events-none">
+          {posterUrl && (
+            // eslint-disable-next-line @next/next/no-img-element -- 远端对象存储 poster URL
+            <img src={posterUrl} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover opacity-35" />
+          )}
+          <div className="relative z-10 flex flex-col items-center gap-2 text-xs text-white/85">
+            <Loader2 size={24} className="text-[var(--color-accent-cyan)] animate-spin" />
+            <span>正在读取视频元数据</span>
+          </div>
         </div>
       )}
     </div>

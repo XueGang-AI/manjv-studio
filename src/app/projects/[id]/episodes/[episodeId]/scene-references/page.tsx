@@ -11,6 +11,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, ArrowRight, Loader2, MapPinned, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useToast } from '@/components/ui/toast'
 import { SceneReferenceSection, type SceneReferenceItem } from '@/components/scene-references/scene-reference-section'
 import { useTaskSSE, type TaskEventType, type TaskUpdateEvent } from '@/lib/hooks/use-task-sse'
@@ -26,6 +27,7 @@ export default function SceneReferencesPage() {
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [generateConfirmOpen, setGenerateConfirmOpen] = useState(false)
 
   const refreshScenes = useCallback(async () => {
     try {
@@ -121,7 +123,7 @@ export default function SceneReferencesPage() {
           <Button
             variant="aurora"
             size="sm"
-            onClick={handleGenerate}
+            onClick={() => setGenerateConfirmOpen(true)}
             disabled={generating}
             icon={generating ? <Loader2 size={14} className="animate-spin" /> : <MapPinned size={14} />}
           >
@@ -157,6 +159,20 @@ export default function SceneReferencesPage() {
           emptyHint="尚未生成；点击上方生成场景参考图，完成后再进入分镜图。"
         />
       )}
+
+      <ConfirmDialog
+        open={generateConfirmOpen}
+        onOpenChange={setGenerateConfirmOpen}
+        variant="warning"
+        title={scenes.length > 0 ? '补齐场景参考图' : '生成场景参考图'}
+        description={`将为当前剧集的 ${scenes.length || '全部'} 个场景创建真实豆包图片生成任务。已有场景图会保留，缺失场景会补齐；此操作会消耗真实 API 额度。`}
+        confirmLabel={generating ? '创建中…' : '确认生成'}
+        loading={generating}
+        onConfirm={async () => {
+          setGenerateConfirmOpen(false)
+          await handleGenerate()
+        }}
+      />
     </div>
   )
 }

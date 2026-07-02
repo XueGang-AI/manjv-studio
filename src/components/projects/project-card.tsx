@@ -88,9 +88,11 @@ interface ProjectCardProps {
 
 export function ProjectCardV3({ project, onDelete }: ProjectCardProps) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [coverError, setCoverError] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const { step, total } = getStepInfo(project.status)
   const progressPct = (step / total) * 100
+  const hasCover = Boolean(project.coverImageUrl && !coverError)
 
   // Close menu on outside click
   useEffect(() => {
@@ -114,27 +116,30 @@ export function ProjectCardV3({ project, onDelete }: ProjectCardProps) {
     return () => document.removeEventListener('keydown', handleKey)
   }, [menuOpen])
 
-  const providerLabel = '豆包'
-  const providerVariant = 'violet' as const
-
   return (
     <Card hover className="overflow-hidden group">
       {/* Cover area */}
       <div className="h-32 relative overflow-hidden" style={{ background: getCoverGradient(project.projectName) }}>
+        {hasCover && (
+          // eslint-disable-next-line @next/next/no-img-element -- 项目封面来自运行时签名对象存储 URL，不能静态配置 remotePatterns
+          <img
+            src={project.coverImageUrl || ''}
+            alt={`${project.projectName} 项目封面`}
+            className="absolute inset-0 h-full w-full object-cover"
+            loading="eager"
+            onError={() => setCoverError(true)}
+          />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/72 via-black/20 to-black/10" aria-hidden="true" />
         {/* Decorative grid dots */}
-        <div className="absolute left-3 top-3 bottom-3 flex flex-col gap-1.5 opacity-20" aria-hidden="true">
+        {!hasCover && <div className="absolute left-3 top-3 bottom-3 flex flex-col gap-1.5 opacity-20" aria-hidden="true">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="w-1 h-1.5 rounded-[1px] bg-white/60" />
           ))}
-        </div>
+        </div>}
 
-        {/* Provider badge */}
-        <div className="absolute top-3 right-3">
-          <Badge variant={providerVariant} dot>{providerLabel}</Badge>
-        </div>
-
-        {/* Hover overlay with CTA */}
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+        {/* Always-visible CTA; hover only strengthens contrast. */}
+        <div className="absolute right-3 top-3 opacity-95 transition-opacity group-hover:opacity-100">
           <Link href={`/projects/${project.id}`}>
             <Button variant="aurora" size="sm" icon={<Play size={12} />}>继续创作</Button>
           </Link>
@@ -169,9 +174,9 @@ export function ProjectCardV3({ project, onDelete }: ProjectCardProps) {
 
         {/* Footer: time + menu */}
         <div className="flex items-center justify-between pt-1 text-xs text-[var(--color-text-muted)]">
-          <span className="flex items-center gap-1">
-            <Clock size={11} />
-            {formatRelativeTime(project.updatedAt)}
+          <span className="flex min-w-0 items-center gap-1">
+            <Clock size={11} className="shrink-0" />
+            <span className="truncate">{formatRelativeTime(project.updatedAt)} · 固定豆包链路</span>
           </span>
           <div className="relative" ref={menuRef}>
             <button

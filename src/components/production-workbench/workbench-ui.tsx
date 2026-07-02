@@ -1,7 +1,7 @@
 'use client'
 
-import type { ReactNode } from 'react'
-import { AlertCircle, CheckCircle2, Circle, Clock, Image as ImageIcon, Loader2 } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { AlertCircle, CheckCircle2, Circle, Clock, ExternalLink, Image as ImageIcon, Loader2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { ProgressBar } from '@/components/ui/progress-bar'
@@ -135,24 +135,81 @@ export function WorkbenchImage({
   className,
   imgClassName,
   fallback,
+  loading = 'eager',
+  showOpenAction = true,
+  compact = false,
 }: {
   src?: string | null
   alt: string
   className?: string
   imgClassName?: string
   fallback?: ReactNode
+  loading?: 'eager' | 'lazy'
+  showOpenAction?: boolean
+  compact?: boolean
 }) {
+  const [imageState, setImageState] = useState<{ src?: string | null; state: 'idle' | 'loading' | 'loaded' | 'error' }>({
+    src,
+    state: src ? 'loading' : 'idle',
+  })
+  const state = imageState.src === src ? imageState.state : src ? 'loading' : 'idle'
+
   if (!src) {
     return (
       <div className={cn('flex items-center justify-center overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border-dim)] bg-[var(--bg-input)] text-[var(--color-text-muted)]', className)}>
-        {fallback || <ImageIcon size={22} />}
+        {fallback || (
+          <div className="flex flex-col items-center gap-2 text-center text-xs">
+            <ImageIcon size={22} />
+            <span>暂无预览</span>
+          </div>
+        )}
       </div>
     )
   }
+
+  if (state === 'error') {
+    return (
+      <div className={cn('relative flex items-center justify-center overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border-dim)] bg-[var(--bg-input)] text-[var(--color-text-muted)]', className)}>
+        <div className={cn('flex flex-col items-center text-center text-xs', compact ? 'gap-1 px-1.5' : 'max-w-[220px] gap-2 px-3')}>
+          <AlertCircle size={22} className="text-[var(--color-warning)]" />
+          <span className={cn('font-medium text-[var(--color-text-secondary)]', compact && 'text-[10px] leading-4')}>{compact ? '不可读' : '素材读取失败'}</span>
+          {!compact && (
+            <span className="text-[11px] leading-5 text-[var(--color-text-muted)]">
+              已有媒体记录存在，但当前存储链接不可读。
+            </span>
+          )}
+          {!compact && showOpenAction && (
+            <a
+              href={src}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--color-border-dim)] px-2 py-1 text-[11px] text-[var(--color-text-secondary)] hover:border-[var(--color-border-bright)] hover:text-[var(--color-text-primary)]"
+            >
+              检查文件链接 <ExternalLink size={11} />
+            </a>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className={cn('overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border-dim)] bg-[var(--bg-input)]', className)}>
+    <div className={cn('relative overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border-dim)] bg-[var(--bg-input)]', className)}>
+      {state === 'loading' && (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-[var(--bg-input)] text-xs text-[var(--color-text-muted)]">
+          <Loader2 size={18} className="animate-spin text-[var(--color-info)]" />
+          <span>读取预览</span>
+        </div>
+      )}
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt={alt} className={cn('h-full w-full object-cover', imgClassName)} loading="lazy" />
+      <img
+        src={src}
+        alt={alt}
+        className={cn('h-full w-full object-cover', imgClassName)}
+        loading={loading}
+        onLoad={() => setImageState({ src, state: 'loaded' })}
+        onError={() => setImageState({ src, state: 'error' })}
+      />
     </div>
   )
 }

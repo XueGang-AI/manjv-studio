@@ -57,15 +57,18 @@ Worker 是独立进程，入口已主动加载 `.env`。生产部署需要单独
 | `UPLOAD_DIR` | 本地开发 local-fs 根目录；FFmpeg/QC 临时目录；探针输出目录 | `./uploads` |
 | `PUBLIC_ASSET_BASE_URL` | 公共资源访问前缀 | `http://localhost:3100/assets` |
 | `MEDIA_STORAGE_PROVIDER` | 媒体存储 Provider：`local` / `s3` / `aliyun-oss` | `local` |
+| `MEDIA_STORAGE_ENABLE_REMOTE` | 是否允许启用远程 S3/OSS provider；默认关闭，避免旧 OSS 配置继续产生费用 | `false` |
 | `FFMPEG_PATH` | FFmpeg 可执行文件路径 | `ffmpeg` |
 | `FFPROBE_PATH` | ffprobe 可执行文件路径 | `ffprobe` |
 | `FFMPEG_NORMALIZE_AUDIO` | 成片阶段是否启用 loudnorm 响度归一化 | `true` |
 
-正式产物的长期身份是 `storageObjectKey`，不是读取 URL。角色图、场景参考图、分镜图、视频片段、最终成片和发布包都应先写入媒体存储，再把 `storageObjectKey` / `storageProvider` 写入数据库；API 返回前按需生成 read URL。生产环境不要把供应商临时签名 URL 或本地 `uploads/` 路径当作正式产物保存。
+正式产物的长期身份是 `storageObjectKey`，不是读取 URL。角色图、场景参考图、分镜图、视频片段、最终成片和发布包都应先写入当前媒体存储，再把 `storageObjectKey` / `storageProvider` 写入数据库；API 返回前按需生成 read URL。当前默认低成本模式为 `local-fs`，文件写入 `UPLOAD_DIR/media`，读取 URL 走 `/api/media/...`，不会主动访问 OSS。
+
+如果部署在云平台，`local-fs` 需要挂载持久化磁盘；无持久化磁盘的平台重启后会丢失媒体文件。远程 S3/OSS 仅在明确接受请求费/流量费时启用。
 
 ### S3-compatible Provider
 
-`MEDIA_STORAGE_PROVIDER=s3` 时使用通用 S3 接口，适合 AWS S3、MinIO、TOS、R2 等兼容服务：
+`MEDIA_STORAGE_PROVIDER=s3` 且 `MEDIA_STORAGE_ENABLE_REMOTE=true` 时使用通用 S3 接口，适合 AWS S3、MinIO、TOS、R2 等兼容服务：
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
@@ -79,7 +82,7 @@ Worker 是独立进程，入口已主动加载 `.env`。生产部署需要单独
 
 ### Aliyun OSS Provider
 
-`MEDIA_STORAGE_PROVIDER=aliyun-oss` 是当前生产推荐配置。Bucket 建议保持私有，服务端用 RAM 用户凭证上传，浏览器和 Ark 读取前由服务端生成 OSS V4 签名 URL。
+`MEDIA_STORAGE_PROVIDER=aliyun-oss` 且 `MEDIA_STORAGE_ENABLE_REMOTE=true` 时启用阿里云 OSS。Bucket 建议保持私有，服务端用 RAM 用户凭证上传，浏览器和 Ark 读取前由服务端生成 OSS V4 签名 URL。未设置 `MEDIA_STORAGE_ENABLE_REMOTE=true` 时，即使 `.env` 里保留 OSS 配置，运行时也会回退到 `local-fs`。
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|

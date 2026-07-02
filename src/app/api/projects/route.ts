@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { validateProjectForm, formatValidationErrors } from '@/lib/validators'
+import { toLocalMediaReadUrl } from '@/server/services/local-media-read-url'
+import { resolveMediaReadUrl } from '@/server/services/media-persist'
 
 /**
  * GET /api/projects
@@ -22,9 +24,43 @@ export async function GET() {
         modelProvider: true,
         createdAt: true,
         updatedAt: true,
+        finalVideos: {
+          where: { coverUrl: { not: null } },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { coverUrl: true },
+        },
+        shotImages: {
+          where: { isConfirmed: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            imageUrl: true,
+            storageObjectKey: true,
+          },
+        },
+        characterImages: {
+          where: { isConfirmed: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            imageUrl: true,
+            storageObjectKey: true,
+          },
+        },
       },
     })
-    return NextResponse.json({ success: true, data: projects })
+    const data = await Promise.all(projects.map(async ({ shotImages, characterImages, finalVideos, ...project }) => {
+      const coverSource = shotImages[0] || characterImages[0]
+      const coverImageUrl = coverSource
+        ? await resolveMediaReadUrl(
+          coverSource.storageObjectKey,
+          toLocalMediaReadUrl(coverSource.imageUrl) || coverSource.imageUrl,
+        )
+        : finalVideos[0]?.coverUrl || null
+      return { ...project, coverImageUrl }
+    }))
+    return NextResponse.json({ success: true, data })
   } catch (error) {
     console.error('Failed to fetch projects:', error)
     return NextResponse.json(

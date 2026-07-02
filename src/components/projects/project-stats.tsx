@@ -28,7 +28,7 @@ export function ProjectStats({ projects }: ProjectStatsProps) {
   ]
 
   return (
-    <div className="grid grid-cols-3 gap-4 mb-8">
+    <div className="grid grid-cols-1 gap-3 mb-6 sm:grid-cols-3 sm:gap-4 sm:mb-8">
       {stats.map(s => (
         <Card key={s.label} className="p-4">
           <div className="flex items-start justify-between mb-3">

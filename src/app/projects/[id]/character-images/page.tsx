@@ -5,6 +5,8 @@ import { useParams, useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { WorkbenchImage } from '@/components/production-workbench/workbench-ui'
 import {
   RefreshCw, CheckCircle2, AlertTriangle,
   ArrowLeft, ArrowRight, ImageIcon, Loader2, X,
@@ -46,6 +48,8 @@ export default function CharacterImagesPage() {
   const [genMode, setGenMode] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [generateConfirmMode, setGenerateConfirmMode] = useState<string | null>(null)
+  const [regenerateTarget, setRegenerateTarget] = useState<{ type: 'character' | 'image'; id: string; label: string } | null>(null)
 
   const fetchData = useCallback(async () => {
     try {
@@ -166,16 +170,16 @@ export default function CharacterImagesPage() {
           )}
           {!hasImages && !isGenerating && (
             <>
-              <Button variant="outline" onClick={() => handleGenerate('quick')} disabled={isGenerating}>
+              <Button variant="outline" onClick={() => setGenerateConfirmMode('quick')} disabled={isGenerating}>
                 <Zap size={16} className="mr-1 text-[var(--accent-primary)]" /> 快速模式
               </Button>
-              <Button onClick={() => handleGenerate('consistency')} disabled={isGenerating}>
+              <Button onClick={() => setGenerateConfirmMode('consistency')} disabled={isGenerating}>
                 <Shield size={16} className="mr-1" /> 生成基础参考图组 (5张)
               </Button>
             </>
           )}
           {hasImages && !allConfirmed && (
-            <Button variant="outline" onClick={() => handleGenerate('consistency')} disabled={isGenerating}>
+            <Button variant="outline" onClick={() => setGenerateConfirmMode('consistency')} disabled={isGenerating}>
               <RefreshCw size={16} className={`mr-1 ${isGenerating ? 'animate-spin' : ''}`} /> 补全参考图
             </Button>
           )}
@@ -213,8 +217,8 @@ export default function CharacterImagesPage() {
           <h3 className="text-lg font-medium text-[var(--text-secondary)] mb-2">尚未生成角色参考图</h3>
           <p className="text-[var(--text-tertiary)] mb-6 text-center max-w-md">选择快速模式生成 1 张主参考图，或一致性模式生成 5 个角度</p>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => handleGenerate('quick')}><Zap size={16} className="mr-1 text-[var(--accent-primary)]" /> 快速模式 (1张)</Button>
-            <Button onClick={() => handleGenerate('consistency')}><Shield size={16} className="mr-1" /> 一致性模式 (5张)</Button>
+            <Button variant="outline" onClick={() => setGenerateConfirmMode('quick')}><Zap size={16} className="mr-1 text-[var(--accent-primary)]" /> 快速模式 (1张)</Button>
+            <Button onClick={() => setGenerateConfirmMode('consistency')}><Shield size={16} className="mr-1" /> 一致性模式 (5张)</Button>
           </div>
         </CardContent></Card>
       )}
@@ -234,8 +238,8 @@ export default function CharacterImagesPage() {
                 <h3 className="font-semibold text-[var(--text-primary)]">{charGroup.character.name}</h3>
                 <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
                   <Badge variant="info" className="text-xs">{charGroup.character.roleType}</Badge>
-                  <span className={confirmedCount >= 5 ? 'text-[var(--status-success)]' : 'text-[var(--status-warning)]'}>
-                    参考图: {confirmedCount}/5{hasConsistency ? ' ✅' : ''}
+                  <span className={confirmedCount > 0 ? 'text-[var(--status-success)]' : 'text-[var(--status-warning)]'}>
+                    {hasConsistency ? `多角度 ${confirmedCount}/5` : confirmedCount > 0 ? '主参考图已确认' : '等待参考图'}
                   </span>
                 </div>
               </div>
@@ -246,7 +250,7 @@ export default function CharacterImagesPage() {
                 {actionLoading === charGroup.character.id ? <Loader2 size={14} className="animate-spin mr-1" /> : <CheckCircle2 size={14} className="mr-1" />}
                 确认全部
               </Button>
-              <Button variant="outline" size="sm" onClick={() => handleRegenerate(charGroup.character.id)}
+              <Button variant="outline" size="sm" onClick={() => setRegenerateTarget({ type: 'character', id: charGroup.character.id, label: charGroup.character.name })}
                 disabled={actionLoading === charGroup.character.id}>
                 <RefreshCw size={14} className={`mr-1 ${actionLoading === charGroup.character.id ? 'animate-spin' : ''}`} />
                 重新生成
@@ -267,10 +271,7 @@ export default function CharacterImagesPage() {
                     }`}
                   >
                     <div className="aspect-[9/16] bg-[var(--bg-panel)] relative">
-                      {/* eslint-disable-next-line @next/next/no-img-element -- 动态远端对象存储 URL，next.config 未配置 images.remotePatterns，且需原生 onError 做失效占位，与 shot-image-review 既有约定一致 */}
-                      <img src={img.imageUrl} alt={refLabel} className="w-full h-full object-cover"
-                        onError={(e) => { (e.target as HTMLImageElement).src = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="270" height="480" fill="%23211f1c"><rect width="270" height="480"/><text x="135" y="240" text-anchor="middle" fill="%237f7870" font-size="14">Image</text></svg>` }}
-                      />
+                      <WorkbenchImage src={img.imageUrl} alt={refLabel} className="h-full w-full rounded-none border-0" />
                       {isConfirmed && <div className="absolute top-1 right-1 bg-[var(--status-success)] text-white rounded-full p-0.5" aria-label="已确认"><CheckCircle2 size={12} /></div>}
                       {isSelected && !isConfirmed && <div className="absolute top-1 right-1 bg-[var(--accent-primary)] text-[var(--text-inverse)] rounded-full p-0.5" aria-label="已选择"><CheckCircle2 size={12} /></div>}
                     </div>
@@ -290,7 +291,7 @@ export default function CharacterImagesPage() {
                             </Button>
                           )}
                           <Button size="sm" variant="outline" className="text-[10px] h-6 px-1"
-                            onClick={() => handleRegenerateSingle(img.id, charGroup.character.id)} disabled={!!actionLoading}
+                            onClick={() => setRegenerateTarget({ type: 'image', id: img.id, label: `${charGroup.character.name} · ${refLabel}` })} disabled={!!actionLoading}
                             title="重新生成该角度">
                             {actionLoading === `single-${img.id}` ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />}
                           </Button>
@@ -298,7 +299,7 @@ export default function CharacterImagesPage() {
                       ) : (
                         <div className="flex gap-0.5">
                           <Button size="sm" variant="outline" className="flex-1 text-[10px] h-6 px-1"
-                            onClick={() => handleRegenerateSingle(img.id, charGroup.character.id)} disabled={!!actionLoading}
+                            onClick={() => setRegenerateTarget({ type: 'image', id: img.id, label: `${charGroup.character.name} · ${refLabel}` })} disabled={!!actionLoading}
                             title="重新生成该角度">
                             {actionLoading === `single-${img.id}` ? <Loader2 size={10} className="animate-spin" /> : <><RefreshCw size={10} className="mr-0.5" />重生成</>}
                           </Button>
@@ -325,6 +326,41 @@ export default function CharacterImagesPage() {
           </Button>
         )}
       </div>
+
+      <ConfirmDialog
+        open={!!generateConfirmMode}
+        onOpenChange={(open) => { if (!open) setGenerateConfirmMode(null) }}
+        variant="warning"
+        title={generateConfirmMode === 'consistency' ? '生成 5 角度参考图组' : '生成主参考图'}
+        description={generateConfirmMode === 'consistency'
+          ? `将为 ${characters.length} 个角色生成多角度参考图组，已有图片会保留或追加为候选；此操作会消耗真实豆包图片 API 额度。`
+          : `将为 ${characters.length} 个角色生成 1 张主参考图，适合当前单模型生产链路的快速确认；此操作会消耗真实豆包图片 API 额度。`
+        }
+        confirmLabel={generating ? '创建中…' : '确认生成'}
+        loading={generating}
+        onConfirm={async () => {
+          const mode = generateConfirmMode
+          setGenerateConfirmMode(null)
+          if (mode) await handleGenerate(mode)
+        }}
+      />
+
+      <ConfirmDialog
+        open={!!regenerateTarget}
+        onOpenChange={(open) => { if (!open) setRegenerateTarget(null) }}
+        variant="warning"
+        title="重新生成角色参考图"
+        description={`将为「${regenerateTarget?.label || ''}」创建新的真实豆包图片生成请求。旧图会保留，但本次操作会消耗 API 额度。`}
+        confirmLabel="确认重新生成"
+        loading={!!actionLoading}
+        onConfirm={async () => {
+          const target = regenerateTarget
+          setRegenerateTarget(null)
+          if (!target) return
+          if (target.type === 'character') await handleRegenerate(target.id)
+          else await handleRegenerateSingle(target.id, '')
+        }}
+      />
     </div>
   )
 }

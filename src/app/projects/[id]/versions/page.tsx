@@ -9,7 +9,7 @@ import { RotateCcw, GitBranch, CheckCircle2, Clock, RefreshCw } from 'lucide-rea
 
 const TYPE_LABELS: Record<string, string> = {
   STORY_PACKAGE: '故事方案', CHARACTER_SET: '角色设定', CHARACTER_IMAGE_SET: '角色图',
-  STORYBOARD: '分镜脚本', SHOT_IMAGE_SET: '分镜图', SHOT_VIDEO_SET: '视频片段',
+  STORYBOARD: '分镜脚本', SCENE_REFERENCE_SET: '场景参考图', SHOT_IMAGE_SET: '分镜图', SHOT_VIDEO_SET: '视频片段',
   VOICE_SCRIPT: '配音文案', FINAL_VIDEO: '成片视频',
 }
 const CHANGE_LABELS: Record<string, string> = {
@@ -44,7 +44,8 @@ export default function VersionsPage() {
   useEffect(() => { queueMicrotask(() => fetchVersions()) }, [fetchVersions])
 
   const handleRollback = async (verId: string) => {
-    if (!confirm('确认回退到此版本？这将恢复当时的项目状态。')) return
+    const version = versions.find((item) => item.id === verId)
+    if (!confirm(`确认回退到「${version ? TYPE_LABELS[version.entityType] || version.entityType : '该'} v${version?.version ?? ''}」？这会恢复当时的项目快照，可能影响后续步骤的确认状态；已生成的媒体文件不会因为回退按钮被物理删除。`)) return
     setActionLoading(verId)
     await fetch(`/api/projects/${projectId}/versions/${verId}/rollback`, { method: 'POST' })
     await fetchVersions()
@@ -52,6 +53,8 @@ export default function VersionsPage() {
   }
 
   const handleSetCurrent = async (verId: string) => {
+    const version = versions.find((item) => item.id === verId)
+    if (!confirm(`确认将「${version ? TYPE_LABELS[version.entityType] || version.entityType : '该'} v${version?.version ?? ''}」设为当前版本？这会改变当前审核口径，但不会重新生成素材。`)) return
     setActionLoading(verId)
     await fetch(`/api/projects/${projectId}/versions/${verId}/set-current`, { method: 'POST' })
     await fetchVersions()

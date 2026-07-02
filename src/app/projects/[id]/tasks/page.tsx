@@ -152,6 +152,8 @@ export default function TasksPage() {
   }
 
   const handleRetry = async (taskId: string) => {
+    const task = tasks.find((item) => item.id === taskId)
+    if (!confirm(`确定重试「${task ? TASK_LABELS[task.taskType] || task.taskType : '该任务'}」？重试会重新进入 Worker 队列，图片/视频/成片类任务可能再次消耗真实生成或合成资源。`)) return
     setActionLoading(taskId)
     setError(null)
     try {
@@ -182,7 +184,7 @@ export default function TasksPage() {
   }
 
   const handleDelete = async (taskId: string) => {
-    if (!confirm('确定删除该任务及其日志？此操作不可恢复。')) return
+    if (!confirm('确定删除该任务及其日志？此操作只清理任务记录，不删除已生成的图片、视频或成片文件；删除后不可恢复。')) return
     setActionLoading(taskId)
     setError(null)
     try {
@@ -204,7 +206,7 @@ export default function TasksPage() {
   const handleClearFinished = async () => {
     const finishedCount = tasks.filter((task) => TERMINAL_STATUSES.includes(task.status)).length
     if (finishedCount === 0) return
-    if (!confirm(`确定清除 ${finishedCount} 个已结束任务？此操作不可恢复。`)) return
+    if (!confirm(`确定清除 ${finishedCount} 个已结束任务？此操作只清理任务记录和日志，不删除已生成的图片、视频或成片文件；清除后不可恢复。`)) return
     setActionLoading('clear')
     setError(null)
     try {
@@ -340,7 +342,11 @@ export default function TasksPage() {
                         <div className="space-y-2 bg-[var(--bg-surface)] px-2.5 py-2.5">
                           {task.errorMessage && (
                             <div className="rounded-[var(--radius-md)] bg-[var(--color-danger-muted)] p-3 text-xs text-[var(--color-danger)]">
-                              {task.errorMessage}
+                              <div className="font-medium">{taskBusinessMessage(task)}</div>
+                              <details className="mt-2 text-[var(--color-text-muted)]">
+                                <summary className="cursor-pointer">查看原始错误</summary>
+                                <div className="mt-1 break-words font-mono">{task.errorMessage}</div>
+                              </details>
                             </div>
                           )}
                           <div className="grid gap-3 text-xs md:grid-cols-4">
@@ -397,7 +403,7 @@ export default function TasksPage() {
         </div>
 
         <div className="space-y-3">
-          <Panel title="Worker 健康矩阵" action={<StatusPill status={health?.status || 'unknown'} label={health?.status || 'unknown'} />} bodyClassName="p-3">
+          <Panel title="Worker 健康矩阵" action={<StatusPill status={health?.status || 'unknown'} label={workerHealthLabel(health?.status)} />} bodyClassName="p-3">
             <div className="grid grid-cols-2 gap-2">
               {health?.checks ? Object.entries(health.checks).map(([name, check]) => (
                 <div key={name} className="rounded-[var(--radius-md)] border border-[var(--color-border-dim)] bg-[var(--bg-panel)] p-2.5 text-sm">
@@ -425,6 +431,11 @@ export default function TasksPage() {
               <div className="text-xs text-[var(--color-text-muted)]">
                 Worker 数：{health?.workers?.length ?? 0} · SSE：{streamConnected ? '已连接' : '未连接'}
               </div>
+              {health?.status && health.status !== 'healthy' && (
+                <div className="rounded-[var(--radius-md)] bg-[var(--color-warning-muted)] p-2 text-xs leading-5 text-[var(--color-warning)]">
+                  {health.status === 'unknown' ? '当前无法确认 Worker 心跳；已完成产物仍可浏览，新的生成任务需要 Worker 恢复后才会执行。' : 'Worker 处于降级状态；浏览和下载不受影响，生成/重试类任务可能排队等待。'}
+                </div>
+              )}
             </div>
           </Panel>
 
@@ -439,7 +450,13 @@ export default function TasksPage() {
                   <StatusPill status={activeTask.status} />
                 </div>
                 <div className="rounded-[var(--radius-md)] bg-[var(--bg-panel)] p-3 text-xs leading-5 text-[var(--color-text-secondary)]">
-                  {activeTask.errorMessage || '当前选中任务没有错误信息。'}
+                  {taskBusinessMessage(activeTask)}
+                  {activeTask.errorMessage && (
+                    <details className="mt-2 text-[var(--color-text-muted)]">
+                      <summary className="cursor-pointer">查看原始错误</summary>
+                      <div className="mt-1 break-words font-mono">{activeTask.errorMessage}</div>
+                    </details>
+                  )}
                 </div>
                 <Info label="创建时间" value={formatDateTime(activeTask.createdAt)} />
                 <Info label="重试次数" value={`${activeTask.retryCount}/${activeTask.maxRetries}`} />
@@ -461,4 +478,26 @@ function Info({ label, value }: { label: string; value: string }) {
       <div className="mt-1 truncate font-mono text-[var(--color-text-primary)]">{value}</div>
     </div>
   )
+}
+
+function workerHealthLabel(status?: string | null) {
+  if (status === 'healthy') return '正常'
+  if (status === 'degraded') return '降级'
+  if (status === 'unhealthy') return '异常'
+  return '待确认'
+}
+
+function taskBusinessMessage(task: TaskItem) {
+  if (!task.errorMessage) return '当前选中任务没有错误信息。'
+  const label = TASK_LABELS[task.taskType] || task.taskType
+  if (/UnsupportedModel|EndpointNotFound|404|doubao-seedance-1\.5-pro|doubao-seedance-2\.0/i.test(task.errorMessage)) {
+    return `${label} 失败：历史视频模型或接口配置不可用。若当前项目已有成片，可作为历史失败记录处理；只有重新生成该阶段时才需要重试。`
+  }
+  if (/rate|429|quota|余额|额度/i.test(task.errorMessage)) {
+    return `${label} 失败：疑似额度或限流问题。重试前先确认是否需要再次消耗真实 API。`
+  }
+  if (/timeout|timed out|超时/i.test(task.errorMessage)) {
+    return `${label} 超时：可先检查 Worker 和远端任务状态，避免重复提交。`
+  }
+  return `${label} 失败：请根据下方原始错误判断是否需要重试。`
 }

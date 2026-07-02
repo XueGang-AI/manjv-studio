@@ -3,6 +3,7 @@
 import { Image as ImageIcon, MapPinned } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
+import { WorkbenchImage } from '@/components/production-workbench/workbench-ui'
 
 export interface SceneReferenceImage {
   id: string
@@ -76,15 +77,14 @@ export function SceneReferenceSection({
               <div className="grid grid-cols-2 gap-2 p-2">
                 {scene.sceneImages.length > 0 ? scene.sceneImages.slice(0, 4).map(image => (
                   <div key={image.id} className="relative aspect-[3/4] rounded-[var(--radius-sm)] overflow-hidden bg-[var(--bg-elevated)]">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <WorkbenchImage
                       src={image.imageUrl}
-                      alt={`${scene.name} ${image.referenceType || '场景'}`}
-                      className="h-full w-full object-cover"
+                      alt={`${scene.name} ${referenceTypeLabel(image.referenceType)}`}
+                      className="h-full w-full rounded-[var(--radius-sm)] border-0"
                       loading="lazy"
                     />
                     <span className="absolute left-1 top-1 rounded bg-black/55 px-1.5 py-0.5 text-[9px] text-white">
-                      {image.referenceType || '场景'}
+                      {referenceTypeLabel(image.referenceType)}
                     </span>
                   </div>
                 )) : (
@@ -100,4 +100,14 @@ export function SceneReferenceSection({
       </Card>
     </div>
   )
+}
+
+function referenceTypeLabel(value: string | null) {
+  const map: Record<string, string> = {
+    establishing: '环境全景',
+    key_angle: '关键角度',
+    layout: '空间布局',
+    mood: '光影氛围',
+  }
+  return value ? map[value] || value : '场景'
 }

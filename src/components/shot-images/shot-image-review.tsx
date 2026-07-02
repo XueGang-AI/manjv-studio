@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useCallback } from 'react'
-import { Check, Image as ImageIcon, RefreshCw, Copy, AlertCircle, ZoomIn } from 'lucide-react'
+import { useState } from 'react'
+import { Check, Image as ImageIcon, RefreshCw, Copy, ZoomIn } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -10,12 +10,7 @@ import { useToast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
 import { getImageGroupStatus, STATUS_LABELS, type ShotGroup, type ShotImageItem } from './shot-images-types'
 import { RegenerationIssuePanel, type RegenerationIssueType } from '@/components/regeneration/regeneration-issue-panel'
-
-// Track loading/error state per image
-interface ImageLoadState {
-  loading: boolean
-  error: boolean
-}
+import { WorkbenchImage } from '@/components/production-workbench/workbench-ui'
 
 function createClientRequestId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -38,9 +33,6 @@ export function ShotImageReview({ group, isConfirmed, isGenerating, projectId, e
   const status = getImageGroupStatus(group, isGenerating)
   const { addToast } = useToast()
 
-  // Per-image load state
-  const [imageStates, setImageStates] = useState<Record<string, ImageLoadState>>({})
-
   // Confirm dialog for single image
   const [confirmTarget, setConfirmTarget] = useState<ShotImageItem | null>(null)
   const [confirming, setConfirming] = useState(false)
@@ -49,20 +41,13 @@ export function ShotImageReview({ group, isConfirmed, isGenerating, projectId, e
   const [regenerating, setRegenerating] = useState(false)
   const [issueTypes, setIssueTypes] = useState<RegenerationIssueType[]>([])
   const [fixNote, setFixNote] = useState('')
+  const [regenerateOpen, setRegenerateOpen] = useState(false)
 
   // Prompt expand
   const [promptExpanded, setPromptExpanded] = useState(false)
 
   // Preview modal
   const [previewImage, setPreviewImage] = useState<ShotImageItem | null>(null)
-
-  const handleImageLoad = useCallback((id: string) => {
-    setImageStates(prev => ({ ...prev, [id]: { loading: false, error: false } }))
-  }, [])
-
-  const handleImageError = useCallback((id: string) => {
-    setImageStates(prev => ({ ...prev, [id]: { loading: false, error: true } }))
-  }, [])
 
   const handleSelect = async (imageId: string) => {
     try {
@@ -128,7 +113,7 @@ export function ShotImageReview({ group, isConfirmed, isGenerating, projectId, e
   return (
     <div className="p-4 md:p-6 space-y-5">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="w-8 h-8 rounded-[var(--radius-md)] flex items-center justify-center text-sm font-bold text-white" style={{ background: confirmed ? 'var(--color-success)' : 'var(--gradient-aurora)' }}>
@@ -145,7 +130,7 @@ export function ShotImageReview({ group, isConfirmed, isGenerating, projectId, e
           </div>
         </div>
         {!isConfirmed && images.length > 0 && (
-          <Button variant="outline" size="sm" icon={<RefreshCw size={12} className={regenerating ? 'animate-spin' : ''} />} onClick={handleRegenerate} disabled={regenerating || isGenerating}>
+          <Button variant="outline" size="sm" icon={<RefreshCw size={12} className={regenerating ? 'animate-spin' : ''} />} onClick={() => setRegenerateOpen(true)} disabled={regenerating || isGenerating}>
             {regenerating ? '生成中…' : '重新生成'}
           </Button>
         )}
@@ -166,14 +151,13 @@ export function ShotImageReview({ group, isConfirmed, isGenerating, projectId, e
         <div className={cn(
           'grid gap-3',
           images.length === 1 ? 'grid-cols-1 max-w-sm' :
-          images.length === 2 ? 'grid-cols-2' :
-          images.length === 3 ? 'grid-cols-3' :
-          'grid-cols-2 lg:grid-cols-4'
+          images.length === 2 ? 'grid-cols-1 sm:grid-cols-2' :
+          images.length === 3 ? 'grid-cols-1 sm:grid-cols-3' :
+          'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'
         )}>
           {images.map(img => {
             const isSelected = selectedImage?.id === img.id
             const isImgConfirmed = img.isConfirmed
-            const loadState = imageStates[img.id] ?? { loading: true, error: false }
 
             return (
               <div key={img.id} className={cn(
@@ -183,29 +167,12 @@ export function ShotImageReview({ group, isConfirmed, isGenerating, projectId, e
                 'border-[var(--color-border-dim)] hover:border-[var(--color-border-bright)]'
               )}>
                 <div className="aspect-[3/4] bg-[var(--bg-panel)] relative">
-                  {/* Skeleton while loading */}
-                  {loadState.loading && (
-                    <div className="absolute inset-0 flex items-center justify-center animate-pulse">
-                      <ImageIcon size={24} className="text-[var(--color-text-muted)]" />
-                    </div>
-                  )}
-
-                  {/* Error fallback */}
-                  {loadState.error ? (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-                      <AlertCircle size={24} className="text-[var(--color-danger)]" />
-                      <p className="text-xs text-[var(--color-text-muted)]">图片加载失败</p>
-                    </div>
-                  ) : (
-                    <img
-                      src={img.imageUrl}
-                      alt={`镜头 ${shot.shotNo} 候选图`}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                      onLoad={() => handleImageLoad(img.id)}
-                      onError={() => handleImageError(img.id)}
-                    />
-                  )}
+                  <WorkbenchImage
+                    src={img.imageUrl}
+                    alt={`镜头 ${shot.shotNo} 候选图`}
+                    className="h-full w-full rounded-none border-0"
+                    loading="eager"
+                  />
 
                   {/* Status overlay */}
                   {isImgConfirmed && (
@@ -224,7 +191,7 @@ export function ShotImageReview({ group, isConfirmed, isGenerating, projectId, e
                   )}
 
                   {/* Zoom button */}
-                  {!loadState.error && !loadState.loading && (
+                  {img.imageUrl && (
                     <button
                       className="absolute top-2 left-2 w-6 h-6 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-white hover:bg-black/60"
                       onClick={() => setPreviewImage(img)}
@@ -235,7 +202,7 @@ export function ShotImageReview({ group, isConfirmed, isGenerating, projectId, e
                   )}
 
                   {/* Hover actions */}
-                  {!isConfirmed && !isImgConfirmed && !loadState.error && (
+                  {!isConfirmed && !isImgConfirmed && (
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-end p-2 opacity-0 group-hover:opacity-100">
                       <div className="flex gap-1.5 w-full">
                         {images.length > 1 && !isSelected && (
@@ -289,40 +256,43 @@ export function ShotImageReview({ group, isConfirmed, isGenerating, projectId, e
         </Card>
       )}
 
-      {/* Prompt section */}
-      {shot.imagePrompt && (shot.imagePrompt.enPrompt || shot.imagePrompt.zhPrompt) && (
-        <Card className="p-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="text-[10px] font-semibold text-[var(--color-primary)] uppercase tracking-wider">图片 Prompt</div>
-            <div className="flex items-center gap-1">
-              <button onClick={() => copyPrompt(shot.imagePrompt!.enPrompt || shot.imagePrompt!.zhPrompt || '')} className="p-1 rounded hover:bg-[var(--bg-panel)] transition-colors cursor-pointer text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]" title="复制 Prompt" aria-label="复制 Prompt">
-                <Copy size={12} />
-              </button>
-              <button onClick={() => setPromptExpanded(!promptExpanded)} className="text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] cursor-pointer">
-                {promptExpanded ? '收起' : '展开'}
-              </button>
-            </div>
-          </div>
-          <p className={cn(
-            'text-xs text-[var(--color-text-secondary)] leading-relaxed',
-            !promptExpanded && 'max-h-16 overflow-hidden'
-          )}>
-            {shot.imagePrompt.enPrompt || shot.imagePrompt.zhPrompt}
-          </p>
-          {shot.imagePrompt.negativePrompt && promptExpanded && (
-            <div className="mt-2 pt-2 border-t border-[var(--color-border-dim)] text-[10px] text-[var(--color-text-muted)]">
-              Negative: {shot.imagePrompt.negativePrompt}
-            </div>
-          )}
-        </Card>
-      )}
-
       {/* Shot action description */}
       {shot.action && (
         <Card className="p-4">
           <div className="text-[10px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-2">动作描述</div>
           <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed">{shot.action}</p>
         </Card>
+      )}
+
+      {/* Prompt section */}
+      {shot.imagePrompt && (shot.imagePrompt.enPrompt || shot.imagePrompt.zhPrompt) && (
+        <details className="rounded-[var(--radius-lg)] border border-[var(--color-border-dim)] bg-[var(--bg-elevated)] p-4">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-semibold text-[var(--color-text-primary)]">技术参数：图片 Prompt</div>
+              <div className="mt-1 text-[11px] text-[var(--color-text-muted)]">默认收起，审核画面时不占用主视图。</div>
+            </div>
+            <div className="flex items-center gap-1">
+              <button onClick={() => copyPrompt(shot.imagePrompt!.enPrompt || shot.imagePrompt!.zhPrompt || '')} className="p-1 rounded hover:bg-[var(--bg-panel)] transition-colors cursor-pointer text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]" title="复制 Prompt" aria-label="复制 Prompt">
+                <Copy size={12} />
+              </button>
+            </div>
+          </summary>
+          <p className={cn(
+            'mt-3 text-xs text-[var(--color-text-secondary)] leading-relaxed',
+            !promptExpanded && 'max-h-16 overflow-hidden'
+          )}>
+            {shot.imagePrompt.enPrompt || shot.imagePrompt.zhPrompt}
+          </p>
+          <button onClick={() => setPromptExpanded(!promptExpanded)} className="mt-2 text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] cursor-pointer">
+            {promptExpanded ? '收起长文本' : '展开完整文本'}
+          </button>
+          {shot.imagePrompt.negativePrompt && promptExpanded && (
+            <div className="mt-2 pt-2 border-t border-[var(--color-border-dim)] text-[10px] text-[var(--color-text-muted)]">
+              Negative: {shot.imagePrompt.negativePrompt}
+            </div>
+          )}
+        </details>
       )}
 
       {/* Confirm dialog for single image */}
@@ -337,6 +307,20 @@ export function ShotImageReview({ group, isConfirmed, isGenerating, projectId, e
         onConfirm={handleConfirm}
       />
 
+      <ConfirmDialog
+        open={regenerateOpen}
+        onOpenChange={setRegenerateOpen}
+        variant="warning"
+        title="重新生成分镜图候选"
+        description={`将为镜头 ${shot.shotNo}「${shot.shotName || ''}」追加新的真实豆包图片候选。已有确认图不会被删除，但本次操作会消耗 API 额度。`}
+        confirmLabel={regenerating ? '生成中…' : '确认重新生成'}
+        loading={regenerating}
+        onConfirm={async () => {
+          setRegenerateOpen(false)
+          await handleRegenerate()
+        }}
+      />
+
       {/* Image preview overlay */}
       {previewImage && (
         <div
@@ -346,10 +330,11 @@ export function ShotImageReview({ group, isConfirmed, isGenerating, projectId, e
           aria-label="图片预览"
         >
           <div className="relative max-w-4xl max-h-[90vh]" onClick={e => e.stopPropagation()}>
-            <img
+            <WorkbenchImage
               src={previewImage.imageUrl}
               alt={`镜头 ${shot.shotNo} 大图预览`}
-              className="max-w-full max-h-[85vh] object-contain rounded-[var(--radius-lg)]"
+              className="h-[85vh] w-[min(90vw,900px)] rounded-[var(--radius-lg)] border-0"
+              imgClassName="object-contain"
             />
             <button
               className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-[var(--bg-elevated)] border border-[var(--color-border-dim)] flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] cursor-pointer transition-colors"

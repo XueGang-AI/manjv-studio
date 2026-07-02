@@ -29,13 +29,22 @@ export async function GET(
           toLocalMediaReadUrl(video.videoUrl) || video.videoUrl,
         ),
       })))
+      const confirmedImage = shot.shotImages[0]
+        ? {
+            ...shot.shotImages[0],
+            imageUrl: await resolveMediaReadUrl(
+              shot.shotImages[0].storageObjectKey,
+              toLocalMediaReadUrl(shot.shotImages[0].imageUrl) || shot.shotImages[0].imageUrl,
+            ),
+          }
+        : null
 
       return {
         shot: {
           id: shot.id, shotNo: shot.shotNo, shotName: shot.shotName,
           startTime: shot.startTime, endTime: shot.endTime,
           videoPrompt: shot.videoPrompts[0] || null,
-          confirmedImage: shot.shotImages[0] || null,
+          confirmedImage,
         },
         videos,
         selectedVideo: videos.find(v => v.isSelected) || null,

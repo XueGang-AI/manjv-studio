@@ -18,6 +18,7 @@ AI 漫剧全流程生产平台。9 步工作流已全部实现：
 - **Prisma 7** + PostgreSQL 16 — `datasource.url` 在 `prisma.config.ts`，不在 schema 里
 - **FFmpeg 8**（视频合成，libx264 + aac）
 - **Vitest**（单元测试）
+- **MediaStorage**：当前默认 `local-fs` 本地持久化，远程 S3/OSS 仅在显式启用时使用
 - AI: Ark/豆包系列，通过 AdapterFactory 统一调用
 
 ## 进程架构（核心）
@@ -146,6 +147,10 @@ adapterFactory.getVideoAdapter(provider)  // IVideoAdapter
 ### 11. 自动 QC 与发布包
 
 规则 QC 由 `qcService` 执行。QC issue 输出 `issueType`、`severity`、`recommendedAction`，覆盖参考图数量、手机屏幕禁用项、成片音轨、响度、黑屏和冻结风险。`/automation/auto-confirm` 在 QC 达标后自动确认角色图、分镜图、视频片段；缺少未来阶段产物时不阻断当前阶段自动确认。`/release-package/generate` 在成片完成后生成发布 manifest，并写回 `FinalVideo.assetPackageUrl`。
+
+### 12. 媒体存储默认本地化
+
+当前成本策略是 **默认不使用 OSS**。`MEDIA_STORAGE_PROVIDER=local` 写入 `UPLOAD_DIR/media`，API 读取走 `/api/media/...`。远程 `s3` / `aliyun-oss` 即使配置了凭证，也必须额外设置 `MEDIA_STORAGE_ENABLE_REMOTE=true` 才会生效，避免旧 OSS 配置继续产生请求费和公网流量费。若部署到云环境，必须为 `UPLOAD_DIR` 挂载持久化磁盘，否则重启会丢失媒体文件。
 
 ## 不可破坏的约束
 
