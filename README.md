@@ -98,6 +98,7 @@ npm install --cache ~/.npm-cache-new
 cp .env.example .env          # 填写 DATABASE_URL 等
 npm run db:push               # 推送 Prisma schema
 npm run db:seed               # 种子数据 + Prompt 模板同步
+npm run data:integrity        # 只读检查重复 seed 项目与本地媒体文件完整性
 ```
 
 ### 运行

@@ -3,13 +3,12 @@
 // Tests the configured Ark text model via
 // POST https://ark.cn-beijing.volces.com/api/plan/v3/chat/completions
 // ============================================
-import { config } from 'dotenv'
+import 'dotenv/config'
 import {
   DEFAULT_ARK_API_BASE_URL,
   DEFAULT_ARK_TEXT_MODEL,
   normalizeArkBaseUrl,
 } from '../../src/server/model-adapters/model-config'
-config()
 
 const BASE = normalizeArkBaseUrl(process.env.ARK_API_BASE_URL || DEFAULT_ARK_API_BASE_URL)
 const KEY = process.env.ARK_API_KEY || ''

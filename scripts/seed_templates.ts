@@ -14,6 +14,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const PROMPTS_DIR = path.resolve(__dirname, '../prompts')
+type JsonValue = import('@prisma/client').Prisma.InputJsonValue
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({
@@ -112,10 +113,12 @@ async function main() {
 
   let created = 0
   let updated = 0
+  let skipped = 0
   let errors = 0
 
   for (const filePath of promptFiles) {
     const info = parsePromptFile(filePath)
+    const nextOutputSchema = outputSchemaFromInfo(info)
 
     try {
       const existing = await prisma.promptTemplate.findUnique({
@@ -123,6 +126,18 @@ async function main() {
       })
 
       if (existing) {
+        if (
+          existing.template === info.content &&
+          existing.category === info.category &&
+          JSON.stringify(existing.variables || []) === JSON.stringify(info.variables) &&
+          JSON.stringify(existing.outputSchema || null) === JSON.stringify(nextOutputSchema || null) &&
+          existing.sourceFile === info.sourceFile
+        ) {
+          skipped++
+          console.log(`  ⏭️  Skipped: ${info.category}/${info.name}`)
+          continue
+        }
+
         // Update existing
         await prisma.promptTemplate.update({
           where: { name: info.name },
@@ -130,7 +145,7 @@ async function main() {
             template: info.content,
             category: info.category,
             variables: info.variables,
-            outputSchema: outputSchemaFromInfo(info),
+            outputSchema: nextOutputSchema as unknown as JsonValue,
             version: { increment: 1 },
             sourceFile: info.sourceFile,
             updatedAt: new Date(),
@@ -146,7 +161,7 @@ async function main() {
             category: info.category,
             description: extractDescription(info.content, info.name),
             template: info.content,
-            outputSchema: outputSchemaFromInfo(info),
+            outputSchema: nextOutputSchema as unknown as JsonValue,
             variables: info.variables,
             version: 1,
             enabled: true,
@@ -166,8 +181,9 @@ async function main() {
   console.log(`📊 Seed Results:`)
   console.log(`   Created: ${created}`)
   console.log(`   Updated: ${updated}`)
+  console.log(`   Skipped: ${skipped}`)
   console.log(`   Errors:  ${errors}`)
-  console.log(`   Total:   ${created + updated}`)
+  console.log(`   Total:   ${created + updated + skipped}`)
   console.log(`${'='.repeat(60)}`)
 }
 

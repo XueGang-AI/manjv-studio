@@ -15,7 +15,7 @@ import prisma from '@/lib/prisma'
 import fs from 'fs'
 import { ffmpegService, sanitizeError, RenderError } from '@/server/services/ffmpeg.service'
 import { taskService } from '@/server/queues/task-queue.service'
-import { persistLocalVideoFile, persistVideoFromUrl, resolveMediaReadUrl } from '@/server/services/media-persist'
+import { persistLocalVideoFile, persistVideoFromUrl, resolveMediaRenderSource } from '@/server/services/media-persist'
 import { emitTaskEvent, taskToUpdateEvent } from '../task-events'
 
 export interface FinalRenderInput {
@@ -98,7 +98,7 @@ export async function handleFinalRender(taskId: string): Promise<void> {
     if (ffAvailable) {
       await updateProgress(10)
       const renderInputs = await Promise.all(confirmedVideos.map(async v => ({
-          videoUrl: await resolveMediaReadUrl(v.storageObjectKey, v.videoUrl) || '',
+          videoUrl: await resolveMediaRenderSource(v.storageObjectKey, v.videoUrl) || '',
           duration: v.duration || 5,
         })))
       result = await ffmpegService.concatVideos({
@@ -112,7 +112,7 @@ export async function handleFinalRender(taskId: string): Promise<void> {
     } else {
       result = {
         success: true,
-        outputPath: await resolveMediaReadUrl(confirmedVideos[0]?.storageObjectKey, confirmedVideos[0]?.videoUrl) || '',
+        outputPath: await resolveMediaRenderSource(confirmedVideos[0]?.storageObjectKey, confirmedVideos[0]?.videoUrl) || '',
         duration: confirmedVideos[0]?.duration || 5,
       }
     }

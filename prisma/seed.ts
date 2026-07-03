@@ -32,24 +32,34 @@ async function main() {
   })
   console.log('✅ Created default user:', user.email)
 
-  // 创建测试项目
-  const project = await prisma.project.create({
-    data: {
-      userId: user.id,
-      projectName: '雨夜重生（测试项目）',
-      storyType: '现代霸总虐恋',
-      background: '现代都市，珠宝设计行业',
-      mainCharacters: ['林若雪', '顾辰'],
-      coreConflict: '爱情与复仇的对立',
-      storySummary: '林若雪被前男友背叛并失去工作，在暴雨夜遇到神秘总裁顾辰。顾辰帮助她重回珠宝行业巅峰，两人逐渐相爱，但林若雪发现顾辰家族可能与母亲的死有关。',
-      artStyle: '韩漫',
-      targetPlatform: '抖音',
-      episodeCount: 10,
-      episodeDuration: 90,
-      aspectRatio: '9:16',
-      status: 'DRAFT',
-    },
+  // 创建或更新测试项目。按默认用户 + 项目名查找，避免重复 seed 生成多个同名项目。
+  const testProjectData = {
+    userId: user.id,
+    projectName: '雨夜重生（测试项目）',
+    storyType: '现代霸总虐恋',
+    background: '现代都市，珠宝设计行业',
+    mainCharacters: ['林若雪', '顾辰'],
+    coreConflict: '爱情与复仇的对立',
+    storySummary: '林若雪被前男友背叛并失去工作，在暴雨夜遇到神秘总裁顾辰。顾辰帮助她重回珠宝行业巅峰，两人逐渐相爱，但林若雪发现顾辰家族可能与母亲的死有关。',
+    artStyle: '韩漫',
+    targetPlatform: '抖音',
+    episodeCount: 10,
+    episodeDuration: 90,
+    aspectRatio: '9:16',
+    status: 'DRAFT',
+  }
+  const existingProject = await prisma.project.findFirst({
+    where: { userId: user.id, projectName: testProjectData.projectName },
+    orderBy: { createdAt: 'asc' },
   })
+  const project = existingProject
+    ? await prisma.project.update({
+        where: { id: existingProject.id },
+        data: testProjectData,
+      })
+    : await prisma.project.create({
+        data: testProjectData,
+      })
   console.log('✅ Created test project:', project.projectName)
 
   // 创建默认模型配置

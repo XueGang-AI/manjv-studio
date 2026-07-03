@@ -8,6 +8,7 @@ import { getRuntimeModelName } from '@/server/model-adapters/model-config'
 import { promptTemplateService } from '@/server/services/prompt-template.service'
 import { persistImageWithPolicy } from '@/server/services/media-persist'
 import { taskService } from '@/server/queues/task-queue.service'
+import { withWorkerRetry } from '../handler-utils'
 import { emitTaskEvent, taskToUpdateEvent } from '../task-events'
 import type { ImageGenerationRequest, TextGenerationRequest } from '@/server/model-adapters/types'
 
@@ -119,7 +120,11 @@ export async function handleSceneReferences(taskId: string): Promise<void> {
         temperature: 0.6,
         maxTokens: 2048,
       }
-      const textResponse = await textAdapter.generate(scenePromptRequest)
+      const textResponse = await withWorkerRetry(
+        () => textAdapter.generate(scenePromptRequest),
+        3,
+        `${scene.name}/scene_prompt`,
+      )
       const scenePrompt = parseScenePrompt(textResponse.json, textResponse.rawText)
 
       const created = []
@@ -133,16 +138,30 @@ export async function handleSceneReferences(taskId: string): Promise<void> {
           numOutputs: 1,
         }
 
-        const imageResponse = await imageAdapter.generate(genReq)
+        const imageResponse = await withWorkerRetry(
+          () => imageAdapter.generate(genReq),
+          3,
+          `${scene.name}/${referenceType}`,
+        )
         const img = imageResponse.images[0]
         if (!img) continue
 
         const createdImage = await (async () => {
-          const outcome = await persistImageWithPolicy(
-            img.url,
-            projectId,
-            'image',
-            `episodes/${episodeId}/scenes/${scene.id}`,
+          const outcome = await withWorkerRetry(
+            async () => {
+              const result = await persistImageWithPolicy(
+                img.url,
+                projectId,
+                'image',
+                `episodes/${episodeId}/scenes/${scene.id}`,
+              )
+              if (!result.persisted && result.imageUrl === '') {
+                throw new Error(result.error || '图片转存失败')
+              }
+              return result
+            },
+            3,
+            `${scene.name}/${referenceType}/persist`,
           )
           if (!outcome.persisted && outcome.imageUrl === '') {
             console.error(`[worker:scene-references] Scene ${scene.name}: persist failed: ${outcome.error}`)

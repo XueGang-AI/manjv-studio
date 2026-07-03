@@ -42,6 +42,24 @@ export interface QCResult {
   rewrite_instruction: string
 }
 
+export function sortShotsForTimeline(shots: unknown[]): unknown[] {
+  return [...shots].sort((a, b) => {
+    const shotA = a as Record<string, unknown>
+    const shotB = b as Record<string, unknown>
+    const shotNoA = toSortableNumber(shotA.shotNo ?? shotA.shot_no)
+    const shotNoB = toSortableNumber(shotB.shotNo ?? shotB.shot_no)
+    if (shotNoA !== shotNoB) return shotNoA - shotNoB
+
+    const startA = toSortableNumber(shotA.startTime ?? shotA.start_time)
+    const startB = toSortableNumber(shotB.startTime ?? shotB.start_time)
+    return startA - startB
+  })
+}
+
+function toSortableNumber(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER
+}
+
 export class QCService {
   private normalizeIssue(issue: QCIssue): QCIssue {
     return {
@@ -161,7 +179,7 @@ export class QCService {
     if (episodeId) {
       const episode = await prisma.episode.findFirst({
         where: { id: episodeId, projectId },
-        include: { shots: { include: { imagePrompts: true, videoPrompts: true } } },
+        include: { shots: { orderBy: { shotNo: 'asc' }, include: { imagePrompts: true, videoPrompts: true } } },
       })
       if (episode) {
         results.push(await this.qcStoryboard(projectId, episodeId, episode))
@@ -241,7 +259,7 @@ export class QCService {
   /** 分镜脚本 QC */
   async qcStoryboard(projectId: string, episodeId: string, episode: Record<string,unknown>): Promise<QCResult> {
     const issues: QCIssue[] = []
-    const shots = (episode.shots as unknown[]) || []
+    const shots = sortShotsForTimeline((episode.shots as unknown[]) || [])
 
     if (!episode.title) issues.push({ level: 'medium', field: 'episode.title', problem: '缺少集名', suggestion: '补充集名' })
     if (!episode.coreTask) issues.push({ level: 'medium', field: 'episode.coreTask', problem: '缺少核心任务', suggestion: '定义本集核心剧情任务' })

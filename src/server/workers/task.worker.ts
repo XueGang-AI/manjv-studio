@@ -6,8 +6,7 @@
 // Worker 是独立进程，不经过 Next.js，不会自动加载 .env，
 // 必须在所有 import 之前手动加载环境变量。
 
-import { config } from 'dotenv'
-config()
+import 'dotenv/config'
 
 import prisma from '@/lib/prisma'
 import { handleStoryPackage } from './handlers/story-package.handler'

@@ -9,6 +9,7 @@ import { persistImageWithPolicy } from '@/server/services/media-persist'
 import { resolveImageUrlForModel } from '@/server/services/media-reference-url'
 import type { ImageGenerationRequest } from '@/server/model-adapters/types'
 import { taskService } from '@/server/queues/task-queue.service'
+import { withWorkerRetry } from '../handler-utils'
 import { emitTaskEvent, taskToUpdateEvent } from '../task-events'
 
 type JsonValue = import('@prisma/client').Prisma.InputJsonValue
@@ -123,7 +124,7 @@ export async function handleCharacterImages(taskId: string): Promise<void> {
 
         let response: Awaited<ReturnType<typeof imageAdapter.generate>>
         try {
-          response = await withRetry(() => imageAdapter.generate(genReq), 3, `${char.name || char.id}/${refType}`)
+          response = await withWorkerRetry(() => imageAdapter.generate(genReq), 3, `${char.name || char.id}/${refType}`)
         } catch (singleError) {
           const message = `${char.name || char.id}/${refType}: ${(singleError as Error).message}`
           generationErrors.push(message)
@@ -225,23 +226,6 @@ export async function handleCharacterImages(taskId: string): Promise<void> {
     const failed = await taskService.failTask(taskId, errorMsg)
     await emitTaskEvent('task.failed', taskToUpdateEvent(failed))
   }
-}
-
-async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, label = ''): Promise<T> {
-  let lastError: Error | null = null
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      return await fn()
-    } catch (error) {
-      lastError = error as Error
-      if (attempt < maxRetries) {
-        const delay = attempt * 2000
-        console.warn(`[Retry] ${label} attempt ${attempt}/${maxRetries} failed, retrying in ${delay}ms: ${lastError.message}`)
-        await new Promise(r => setTimeout(r, delay))
-      }
-    }
-  }
-  throw lastError!
 }
 
 async function updateProgress(taskId: string, index: number, total: number): Promise<void> {

@@ -477,6 +477,9 @@ model GenerationTask {
   project Project @relation(fields: [projectId], references: [id])
   taskLogs TaskLog[]
 
+  @@index([status, taskType, createdAt], map: "generation_tasks_status_type_created_at_idx")
+  @@index([projectId, updatedAt], map: "generation_tasks_project_updated_at_idx")
+  @@index([projectId, createdAt], map: "generation_tasks_project_created_at_idx")
   @@map("generation_tasks")
 }
 
@@ -494,6 +497,7 @@ model TaskLog {
 
   task GenerationTask @relation(fields: [taskId], references: [id])
 
+  @@index([taskId, createdAt], map: "task_logs_task_created_at_idx")
   @@map("task_logs")
 }
 

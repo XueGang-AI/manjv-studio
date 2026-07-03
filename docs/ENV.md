@@ -12,6 +12,16 @@
 | `NODE_ENV` | 运行环境 | `development` |
 | `NEXT_PUBLIC_APP_URL` | 前端访问地址 | `http://localhost:3100` |
 
+## 访问控制
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `APP_AUTH_REQUIRED` | Basic Auth 开关：`auto` / `true` / `false`。`auto` 下 production 默认开启，development/test 默认关闭 | `auto` |
+| `APP_BASIC_AUTH_USER` | Basic Auth 用户名；启用认证时必填 | 空 |
+| `APP_BASIC_AUTH_PASSWORD` | Basic Auth 密码；启用认证时必填 | 空 |
+
+生产环境默认 fail-closed：`APP_AUTH_REQUIRED=auto` 且 `NODE_ENV=production` 时，如果未配置用户名或密码，页面和 API 会返回 503，避免固定默认用户的写接口直接暴露到公网。健康检查 `/api/health` 和 `/api/worker/health` 保持不拦截，便于部署平台探活。若部署在受信任内网并由外层网关完成鉴权，可显式设置 `APP_AUTH_REQUIRED=false`。
+
 ## 模型模式
 
 | 变量 | 说明 | 默认值 |
@@ -65,6 +75,8 @@ Worker 是独立进程，入口已主动加载 `.env`。生产部署需要单独
 正式产物的长期身份是 `storageObjectKey`，不是读取 URL。角色图、场景参考图、分镜图、视频片段、最终成片和发布包都应先写入当前媒体存储，再把 `storageObjectKey` / `storageProvider` 写入数据库；API 返回前按需生成 read URL。当前默认低成本模式为 `local-fs`，文件写入 `UPLOAD_DIR/media`，读取 URL 走 `/api/media/...`，不会主动访问 OSS。
 
 如果部署在云平台，`local-fs` 需要挂载持久化磁盘；无持久化磁盘的平台重启后会丢失媒体文件。远程 S3/OSS 仅在明确接受请求费/流量费时启用。
+
+历史远程媒体切回本地默认存储后，可先运行 `npm run data:integrity` 做只读检查。默认模式只读取数据库和 `UPLOAD_DIR/media`，不会请求远程 OSS/S3，也不会输出签名 URL；如存在空壳重复 seed 测试项目，脚本会提示显式 apply 命令，非空项目不会自动删除。写入/下载操作必须直接运行 `npx tsx scripts/repair-data-integrity.ts --apply ...`，不要在默认 `npm run data:integrity` 后追加 `--apply`。若确认接受远程请求/流量成本，可显式运行 `npx tsx scripts/repair-data-integrity.ts --apply --restore-missing-local-media --restore-limit=10`，从数据库中的 legacy URL 分批下载缺失对象到 `UPLOAD_DIR/media`。
 
 ### S3-compatible Provider
 

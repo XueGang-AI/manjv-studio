@@ -266,7 +266,59 @@ export async function resolveMediaReadUrl(
   legacyUrl: string | null | undefined,
 ): Promise<string | null> {
   if (storageObjectKey) {
+    if (mediaStorage.name === 'local-fs') {
+      const exists = await mediaStorage.exists(storageObjectKey)
+      if (!exists) {
+        return legacyUrl && !isLocalMediaReadUrl(legacyUrl) ? legacyUrl : null
+      }
+    }
     return getReadUrl(storageObjectKey)
   }
   return legacyUrl || null
+}
+
+export async function resolveMediaRenderSource(
+  storageObjectKey: string | null | undefined,
+  legacyUrl: string | null | undefined,
+): Promise<string | null> {
+  if (mediaStorage.name === 'local-fs') {
+    const objectKey = storageObjectKey || objectKeyFromLocalMediaReadUrl(legacyUrl)
+    if (objectKey && await mediaStorage.exists(objectKey)) {
+      return mediaStorage.resolveLocalPath(objectKey)
+    }
+  }
+
+  return resolveMediaReadUrl(storageObjectKey, legacyUrl)
+}
+
+function objectKeyFromLocalMediaReadUrl(url: string | null | undefined): string | null {
+  if (!url) return null
+  const pathOnly = parseUrlPath(url)
+  const prefix = '/api/media/'
+  if (!pathOnly.startsWith(prefix)) return null
+
+  try {
+    return pathOnly
+      .slice(prefix.length)
+      .split('/')
+      .map(segment => decodeURIComponent(segment))
+      .join('/')
+  } catch {
+    return null
+  }
+}
+
+function parseUrlPath(url: string): string {
+  if (/^https?:\/\//i.test(url)) {
+    try {
+      return new URL(url).pathname
+    } catch {
+      return ''
+    }
+  }
+  return url.split('?')[0].split('#')[0]
+}
+
+function isLocalMediaReadUrl(url: string): boolean {
+  return url.startsWith('/api/media/') || url.startsWith('/api/local-media/') || url.startsWith('uploads/')
 }

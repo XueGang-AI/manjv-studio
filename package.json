@@ -15,10 +15,12 @@
     "db:seed": "npx tsx prisma/seed.ts && npx tsx scripts/seed_templates.ts",
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset",
+    "data:integrity": "npx tsx scripts/repair-data-integrity.ts --dry-run",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "npx tsx scripts/e2e-mock-flow.ts",
     "test:e2e:real": "npx tsx scripts/e2e-real-90s-blue-jersey.ts",
+    "test:e2e:real:30s": "npx tsx scripts/e2e-real-30s-umbrella-night.ts",
     "test:e2e:real:minimal": "npx tsx scripts/e2e-real-minimal.ts",
     "test:e2e:real:blue:resume": "npx tsx scripts/resume-real-90s-blue-jersey.ts",
     "probe:ark:text": "npx tsx scripts/probes/probe-ark-text.ts",
@@ -42,6 +44,11 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "tailwind-merge": "^3.6.0"
+  },
+  "overrides": {
+    "@hono/node-server": "1.19.13",
+    "esbuild": "0.28.1",
+    "postcss": "8.5.16"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

@@ -7,6 +7,7 @@ import {
   getArkBaseUrl,
   getArkVideoBaseUrl,
   getRuntimeModelName,
+  normalizeArkModelName,
   normalizeArkBaseUrl,
 } from '@/server/model-adapters/model-config'
 
@@ -70,5 +71,18 @@ describe('Ark 运行模型配置', () => {
 
     process.env.ARK_VIDEO_API_BASE_URL = 'https://ark.cn-beijing.volces.com/api/plan'
     expect(getArkVideoBaseUrl()).toBe('https://ark.cn-beijing.volces.com/api/plan/v3')
+  })
+
+  it('兼容旧的点号 Ark 模型名并映射到已验证默认模型', () => {
+    expect(normalizeArkModelName('text', 'doubao-seed-2.0-pro')).toBe(DEFAULT_ARK_TEXT_MODEL)
+    expect(normalizeArkModelName('image', 'doubao-seedream-5.0-lite')).toBe(DEFAULT_ARK_IMAGE_MODEL)
+    expect(normalizeArkModelName('video', 'doubao-seedance-1.5-pro')).toBe(DEFAULT_ARK_VIDEO_MODEL)
+
+    process.env.ARK_TEXT_MODEL = 'doubao-seed-2.0-pro'
+    process.env.ARK_IMAGE_MODEL = 'doubao-seedream-5.0-lite'
+    process.env.ARK_VIDEO_MODEL = 'doubao-seedance-1.5-pro'
+    expect(getRuntimeModelName('text')).toBe(DEFAULT_ARK_TEXT_MODEL)
+    expect(getRuntimeModelName('image')).toBe(DEFAULT_ARK_IMAGE_MODEL)
+    expect(getRuntimeModelName('video')).toBe(DEFAULT_ARK_VIDEO_MODEL)
   })
 })

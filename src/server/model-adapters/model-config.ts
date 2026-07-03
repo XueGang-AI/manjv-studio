@@ -33,15 +33,15 @@ export function getArkVideoBaseUrl(): string {
 }
 
 export function getArkTextModel(): string {
-  return process.env.ARK_TEXT_MODEL || DEFAULT_ARK_TEXT_MODEL
+  return normalizeArkModelName('text', process.env.ARK_TEXT_MODEL || DEFAULT_ARK_TEXT_MODEL)
 }
 
 export function getArkImageModel(): string {
-  return process.env.ARK_IMAGE_MODEL || DEFAULT_ARK_IMAGE_MODEL
+  return normalizeArkModelName('image', process.env.ARK_IMAGE_MODEL || DEFAULT_ARK_IMAGE_MODEL)
 }
 
 export function getArkVideoModel(): string {
-  return process.env.ARK_VIDEO_MODEL || DEFAULT_ARK_VIDEO_MODEL
+  return normalizeArkModelName('video', process.env.ARK_VIDEO_MODEL || DEFAULT_ARK_VIDEO_MODEL)
 }
 
 export function getRuntimeModelName(type: RuntimeModelType): string {
@@ -55,5 +55,29 @@ export function normalizeArkBaseUrl(baseUrl: string): string {
   if (normalized.endsWith('/api/plan') || normalized.endsWith('/api/coding')) {
     return `${normalized}/v3`
   }
+  return normalized
+}
+
+export function normalizeArkModelName(type: RuntimeModelType, modelName: string): string {
+  const normalized = modelName.trim()
+  const key = normalized.toLowerCase()
+
+  if (type === 'text' && ['doubao-seed-2.0-pro', 'doubao-seed-2-0-pro'].includes(key)) {
+    return DEFAULT_ARK_TEXT_MODEL
+  }
+
+  if (type === 'image' && [
+    'doubao-seedream-5.0',
+    'doubao-seedream-5.0-lite',
+    'doubao-seedream-5-0',
+    'doubao-seedream-5-0-lite',
+  ].includes(key)) {
+    return DEFAULT_ARK_IMAGE_MODEL
+  }
+
+  if (type === 'video' && ['doubao-seedance-1.5-pro', 'doubao-seedance-1-5-pro'].includes(key)) {
+    return DEFAULT_ARK_VIDEO_MODEL
+  }
+
   return normalized
 }

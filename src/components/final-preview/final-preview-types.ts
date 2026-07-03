@@ -94,3 +94,18 @@ export function getPreflightIssues(data: FinalPreviewData | null): Array<{ key: 
 
   return issues
 }
+
+export function getMp4LinkCheck(
+  videoUrl: string | null | undefined,
+  videoReady: boolean,
+  videoError: boolean,
+): { key: string; label: string; passed: boolean; detail: string } | null {
+  if (!videoUrl) return null
+  if (videoError) {
+    return { key: 'mp4_link', label: 'MP4 链接', passed: false, detail: '不可读' }
+  }
+  if (!videoReady) {
+    return { key: 'mp4_link', label: 'MP4 链接', passed: false, detail: '读取中' }
+  }
+  return { key: 'mp4_link', label: 'MP4 链接', passed: true, detail: '可访问' }
+}

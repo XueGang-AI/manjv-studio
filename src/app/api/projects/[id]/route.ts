@@ -152,27 +152,28 @@ export async function DELETE(
       )
     }
 
-    // 按从属顺序级联删除关联数据
-    // 先删除子表数据
-    await prisma.generationTask.deleteMany({ where: { projectId: id } })
-    await prisma.shotVideo.deleteMany({ where: { projectId: id } })
-    await prisma.videoPrompt.deleteMany({ where: { projectId: id } })
-    await prisma.shotImage.deleteMany({ where: { projectId: id } })
-    await prisma.imagePrompt.deleteMany({ where: { projectId: id } })
-    await prisma.shot.deleteMany({ where: { projectId: id } })
-    await prisma.voiceScript.deleteMany({ where: { projectId: id } })
-    await prisma.finalVideo.deleteMany({ where: { projectId: id } })
-    await prisma.episode.deleteMany({ where: { projectId: id } })
-    await prisma.characterImage.deleteMany({ where: { projectId: id } })
-    await prisma.character.deleteMany({ where: { projectId: id } })
-    await prisma.storyPackage.deleteMany({ where: { projectId: id } })
-    await prisma.taskLog.deleteMany({ where: { task: { projectId: id } } })
-    await prisma.projectVersion.deleteMany({ where: { projectId: id } })
-    await prisma.qCReport.deleteMany({ where: { projectId: id } })
-    await prisma.assetFile.deleteMany({ where: { projectId: id } })
-
-    // 最后删除项目本身
-    await prisma.project.delete({ where: { id } })
+    await prisma.$transaction(async (tx) => {
+      // 先删除有外键依赖的叶子节点，避免手工级联顺序造成约束失败。
+      await tx.taskLog.deleteMany({ where: { task: { projectId: id } } })
+      await tx.generationTask.deleteMany({ where: { projectId: id } })
+      await tx.shotVideo.deleteMany({ where: { projectId: id } })
+      await tx.videoPrompt.deleteMany({ where: { projectId: id } })
+      await tx.shotImage.deleteMany({ where: { projectId: id } })
+      await tx.imagePrompt.deleteMany({ where: { projectId: id } })
+      await tx.voiceScript.deleteMany({ where: { projectId: id } })
+      await tx.shot.deleteMany({ where: { projectId: id } })
+      await tx.sceneImage.deleteMany({ where: { projectId: id } })
+      await tx.scene.deleteMany({ where: { projectId: id } })
+      await tx.finalVideo.deleteMany({ where: { projectId: id } })
+      await tx.episode.deleteMany({ where: { projectId: id } })
+      await tx.characterImage.deleteMany({ where: { projectId: id } })
+      await tx.character.deleteMany({ where: { projectId: id } })
+      await tx.storyPackage.deleteMany({ where: { projectId: id } })
+      await tx.projectVersion.deleteMany({ where: { projectId: id } })
+      await tx.qCReport.deleteMany({ where: { projectId: id } })
+      await tx.assetFile.deleteMany({ where: { projectId: id } })
+      await tx.project.delete({ where: { id } })
+    })
 
     return NextResponse.json({ success: true, message: '项目已删除' })
   } catch (error) {

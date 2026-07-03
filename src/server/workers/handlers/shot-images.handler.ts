@@ -18,6 +18,7 @@ import {
   selectReferenceImageUrls,
   type CharacterReferenceEntry,
 } from '@/server/services/shot-regeneration-quality'
+import { withWorkerRetry } from '../handler-utils'
 import { emitTaskEvent, taskToUpdateEvent } from '../task-events'
 import type { ImageGenerationRequest } from '@/server/model-adapters/types'
 
@@ -211,13 +212,27 @@ export async function handleShotImages(taskId: string): Promise<void> {
 
       console.log(`[worker:shot-images] Shot #${shot.shotNo}: ${references.length} character refs, ${sceneReferences.length} scene refs, ${genReq.referenceImages?.length || 0} sent`)
 
-      const response = await imageAdapter.generate(genReq)
+      const response = await withWorkerRetry(
+        () => imageAdapter.generate(genReq),
+        3,
+        `shot-${shot.shotNo}/image`,
+      )
 
       // Phase 7.1：统一持久化 + policy。Worker 通过 dotenv 加载 env，factory 可用。
       const { persistImageWithPolicy } = await import('@/server/services/media-persist')
       const createdImages = (await Promise.all(
         response.images.map(async (img) => {
-          const outcome = await persistImageWithPolicy(img.url, projectId, 'image')
+          const outcome = await withWorkerRetry(
+            async () => {
+              const result = await persistImageWithPolicy(img.url, projectId, 'image')
+              if (!result.persisted && result.imageUrl === '') {
+                throw new Error(result.error || '图片转存失败')
+              }
+              return result
+            },
+            3,
+            `shot-${shot.shotNo}/image-persist`,
+          )
           if (!outcome.persisted && outcome.imageUrl === '') {
             // production 转存失败：不创建该 ShotImage，记录错误
             console.error(`[worker:shot-images] Shot #${shot.shotNo}: persist failed (prod, skipped): ${outcome.error}`)

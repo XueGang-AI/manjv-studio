@@ -21,7 +21,7 @@ import { Badge } from '@/components/ui/badge'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useToast } from '@/components/ui/toast'
 import { ProgressBar } from '@/components/ui/progress-bar'
-import { getPreflightIssues, getRenderStatus, type FinalPreviewData } from '@/components/final-preview/final-preview-types'
+import { getMp4LinkCheck, getPreflightIssues, getRenderStatus, type FinalPreviewData } from '@/components/final-preview/final-preview-types'
 import { useTaskSSE, type TaskEventType, type TaskUpdateEvent } from '@/lib/hooks/use-task-sse'
 import {
   CompactMetricCard,
@@ -107,6 +107,7 @@ export default function FinalPreviewPage() {
   const allPreflightPassed = preflightIssues.every((issue) => issue.passed)
   const videoReady = readyVideoId === latest?.id
   const videoError = erroredVideoId === latest?.id
+  const mp4LinkCheck = getMp4LinkCheck(latest?.videoUrl, videoReady, videoError)
 
   const handleRender = async () => {
     setRendering(true)
@@ -365,7 +366,7 @@ export default function FinalPreviewPage() {
               </Button>
               <div className="grid grid-cols-2 gap-2">
                 <Button variant="outline" size="sm" disabled={!latest?.videoUrl || videoError} onClick={handleCopy} icon={<Copy size={14} />}>复制链接</Button>
-                <Button variant="outline" size="sm" disabled={!latest?.videoUrl} onClick={() => latest?.videoUrl && window.open(latest.videoUrl, '_blank')} icon={<ExternalLink size={14} />}>打开文件</Button>
+                <Button variant="outline" size="sm" disabled={!latest?.videoUrl || videoError} onClick={() => latest?.videoUrl && window.open(latest.videoUrl, '_blank')} icon={<ExternalLink size={14} />}>打开文件</Button>
               </div>
             </div>
           </Panel>
@@ -381,13 +382,13 @@ export default function FinalPreviewPage() {
                   <span className={issue.passed ? 'text-[var(--color-success)]' : 'text-[var(--color-warning)]'}>{issue.detail}</span>
                 </div>
               ))}
-              {latest?.videoUrl && (
+              {mp4LinkCheck && (
                 <div className="flex items-center justify-between rounded-[var(--radius-md)] bg-[var(--bg-panel)] px-3 py-2 text-sm">
                   <span className="flex items-center gap-2 text-[var(--color-text-secondary)]">
-                    <CheckCircle2 size={14} className="text-[var(--color-success)]" />
-                    MP4 链接
+                    {mp4LinkCheck.passed ? <CheckCircle2 size={14} className="text-[var(--color-success)]" /> : <AlertTriangle size={14} className="text-[var(--color-warning)]" />}
+                    {mp4LinkCheck.label}
                   </span>
-                  <span className="text-[var(--color-success)]">可访问</span>
+                  <span className={mp4LinkCheck.passed ? 'text-[var(--color-success)]' : 'text-[var(--color-warning)]'}>{mp4LinkCheck.detail}</span>
                 </div>
               )}
             </div>

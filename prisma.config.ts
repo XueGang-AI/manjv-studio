@@ -1,6 +1,7 @@
 // ============================================
 // Prisma 7 配置文件
 // ============================================
+import 'dotenv/config'
 import { defineConfig, env } from 'prisma/config'
 
 export default defineConfig({
@@ -10,6 +11,6 @@ export default defineConfig({
   },
   migrations: {
     path: 'prisma/migrations',
-    seed: 'npx tsx prisma/seed.ts',
+    seed: 'npx tsx prisma/seed.ts && npx tsx scripts/seed_templates.ts',
   },
 })
