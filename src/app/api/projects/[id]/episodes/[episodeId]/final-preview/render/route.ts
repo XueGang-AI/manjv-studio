@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { taskService } from '@/server/queues/task-queue.service'
 import { emitTaskEvent, taskToUpdateEvent } from '@/server/workers/task-events'
+import { normalizeTransitionMode } from '@/server/services/video-transition-plan'
 
 /**
  * POST — 创建最终成片合成任务（Worker 异步执行）
@@ -21,6 +22,8 @@ export async function POST(
 ) {
   try {
     const { id: projectId, episodeId } = await params
+    const body = await request.json().catch(() => ({})) as Record<string, unknown>
+    const transitionMode = normalizeTransitionMode(body.transitionMode)
 
     const project = await prisma.project.findUnique({ where: { id: projectId } })
     if (!project) return NextResponse.json({ success: false, error: '项目不存在' }, { status: 404 })
@@ -72,7 +75,12 @@ export async function POST(
       episodeId,
       taskType: 'RENDER_FINAL_VIDEO',
       modelName: 'FFmpeg',
-      input: { episodeId, aspectRatio: project.aspectRatio || '9:16', shot_count: confirmedVideos.length },
+      input: {
+        episodeId,
+        aspectRatio: project.aspectRatio || '9:16',
+        shot_count: confirmedVideos.length,
+        transitionMode,
+      },
     })
 
     // 推送任务创建事件

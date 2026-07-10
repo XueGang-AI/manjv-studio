@@ -5,6 +5,8 @@ export const REGENERATION_ISSUE_TYPES = [
   'hair_inconsistent',
   'scene_drift',
   'phone_fake_ui_text',
+  'fake_text_or_map',
+  'invalid_composition',
   'large_motion_or_hand_deform',
   'audio_issue',
   'other',
@@ -48,6 +50,22 @@ export type ShotPromptContext = {
   sceneTime?: string | null
   emotion?: string | null
   dialogue?: string | null
+  continuityContext?: ShotContinuityContext | null
+}
+
+export type ShotContinuityNeighbor = {
+  shotNo?: number | null
+  action?: string | null
+  continuityIn?: string
+  continuityOut?: string
+}
+
+export type ShotContinuityContext = {
+  sceneKey?: string
+  continuityIn?: string
+  continuityOut?: string
+  previous?: ShotContinuityNeighbor
+  next?: ShotContinuityNeighbor
 }
 
 export type ScenePromptContext = {
@@ -59,6 +77,11 @@ export type ScenePromptContext = {
 
 export type RegenerationQualityOptions = {
   issueTypes?: RegenerationIssueType[]
+  fixNote?: string
+}
+
+export type RegenerationRepairHint = {
+  issueTypes: RegenerationIssueType[]
   fixNote?: string
 }
 
@@ -90,6 +113,24 @@ const ISSUE_ALIASES: Record<string, RegenerationIssueType> = {
   '手机伪 UI/文字': 'phone_fake_ui_text',
   '手机伪UI/文字': 'phone_fake_ui_text',
   '手机伪文字': 'phone_fake_ui_text',
+  fake_text_or_map: 'fake_text_or_map',
+  fake_map: 'fake_text_or_map',
+  fake_signage: 'fake_text_or_map',
+  fake_station_map: 'fake_text_or_map',
+  '伪文字': 'fake_text_or_map',
+  '乱码文字': 'fake_text_or_map',
+  '伪地图': 'fake_text_or_map',
+  '站内伪地图': 'fake_text_or_map',
+  '墙面伪文字': 'fake_text_or_map',
+  '导视牌伪文字': 'fake_text_or_map',
+  invalid_composition: 'invalid_composition',
+  partial_black_region: 'invalid_composition',
+  black_border: 'invalid_composition',
+  dead_frame_area: 'invalid_composition',
+  '无效构图': 'invalid_composition',
+  '黑边': 'invalid_composition',
+  '大面积黑边': 'invalid_composition',
+  '局部黑屏': 'invalid_composition',
   large_motion_or_hand_deform: 'large_motion_or_hand_deform',
   hand_deform: 'large_motion_or_hand_deform',
   motion_too_large: 'large_motion_or_hand_deform',
@@ -106,6 +147,8 @@ const ISSUE_LABELS: Record<RegenerationIssueType, string> = {
   hair_inconsistent: '发型一致性修复',
   scene_drift: '场景漂移修复',
   phone_fake_ui_text: '手机伪 UI/文字修复',
+  fake_text_or_map: '伪文字/伪地图修复',
+  invalid_composition: '黑边/无效构图修复',
   large_motion_or_hand_deform: '动作幅度和手部修复',
   audio_issue: '音频问题标记',
   other: '自定义修复说明',
@@ -129,6 +172,140 @@ export function sanitizeFixNote(raw: unknown, maxLength = 500): string {
   if (raw === undefined || raw === null) return ''
   if (typeof raw !== 'string') return ''
   return raw.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, maxLength)
+}
+
+export function buildRegenerationRepairHint(issue: {
+  issueType?: unknown
+  field?: unknown
+  problem?: unknown
+  suggestion?: unknown
+  recommendedAction?: unknown
+}): RegenerationRepairHint {
+  const issueText = [
+    issue.issueType,
+    issue.field,
+    issue.problem,
+    issue.suggestion,
+  ].filter((item): item is string => typeof item === 'string').join(' ').toLowerCase()
+  const action = typeof issue.recommendedAction === 'string' ? issue.recommendedAction : ''
+  const issueTypes = new Set<RegenerationIssueType>()
+  if (action !== 'rerun_shot_image' && action !== 'rerun_shot_video') {
+    return { issueTypes: [] }
+  }
+
+  if (/partial_black|black_border|invalid_composition|visual_quality|blackdetect|black_frames|黑边|黑屏|无效画面|无效构图/.test(issueText)) {
+    issueTypes.add('invalid_composition')
+  }
+  if (/phone|screen|livestream|prompt_phone_safety|手机|直播|屏幕|平台|对勾|爱心|点赞/.test(issueText)) {
+    issueTypes.add('phone_fake_ui_text')
+  }
+  if (/fake_text|fake_map|fake_signage|station_map|garbled|readable text|map|signage|文字|伪文字|乱码|伪地图|导视|地图|二维码|标牌|海报/.test(issueText)) {
+    issueTypes.add('fake_text_or_map')
+  }
+  if (/character|identity|face|人物|角色|换脸|脸型|年龄感/.test(issueText)) {
+    issueTypes.add('character_drift')
+  }
+  if (/hair|发型|刘海|发量/.test(issueText)) {
+    issueTypes.add('hair_inconsistent')
+  }
+  if (/scene|location|background|场景|地点|空间|布局|道具/.test(issueText)) {
+    issueTypes.add('scene_drift')
+  }
+  if (/freeze|motion|hand|动作|冻结|手部|变形/.test(issueText)) {
+    issueTypes.add('large_motion_or_hand_deform')
+  }
+  if (/audio|loudness|音频|响度/.test(issueText)) {
+    issueTypes.add('audio_issue')
+  }
+
+  if (issueTypes.size === 0 && (action === 'rerun_shot_image' || action === 'rerun_shot_video')) {
+    issueTypes.add('other')
+  }
+
+  const fixNote = sanitizeFixNote(
+    [issue.problem, issue.suggestion].filter((item): item is string => typeof item === 'string' && item.trim().length > 0).join('；'),
+    400,
+  )
+
+  return {
+    issueTypes: [...issueTypes],
+    fixNote: fixNote || undefined,
+  }
+}
+
+function cleanText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function normalizeContinuityKey(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s,，。.:：;；、|｜/\\-]+/g, '')
+}
+
+function visualRecord(value: unknown): JsonRecord {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : {}
+}
+
+function getPromptSceneKey(shot: Pick<ShotPromptContext, 'visual' | 'location' | 'sceneTime'>): string {
+  const visual = visualRecord(shot.visual)
+  const explicit = cleanText(visual.scene_key) || cleanText(visual.sceneKey)
+  if (explicit) return normalizeContinuityKey(explicit)
+  const location = cleanText(shot.location)
+  const sceneTime = cleanText(shot.sceneTime)
+  if (!location && !sceneTime) return ''
+  return normalizeContinuityKey(`${location}|${sceneTime}`)
+}
+
+function getContinuityIn(shot: Pick<ShotPromptContext, 'visual'>): string {
+  const visual = visualRecord(shot.visual)
+  return cleanText(visual.continuity_in) || cleanText(visual.continuityIn)
+}
+
+function getContinuityOut(shot: Pick<ShotPromptContext, 'visual'>): string {
+  const visual = visualRecord(shot.visual)
+  return cleanText(visual.continuity_out) || cleanText(visual.continuityOut)
+}
+
+function continuityNeighbor(shot: ShotPromptContext): ShotContinuityNeighbor {
+  return {
+    shotNo: shot.shotNo,
+    action: shot.action || shot.details || null,
+    continuityIn: getContinuityIn(shot) || undefined,
+    continuityOut: getContinuityOut(shot) || undefined,
+  }
+}
+
+export function buildShotContinuityContext(
+  shots: ShotPromptContext[],
+  index: number,
+): ShotContinuityContext | null {
+  const current = shots[index]
+  if (!current) return null
+
+  const sceneKey = getPromptSceneKey(current)
+  const continuityIn = getContinuityIn(current)
+  const continuityOut = getContinuityOut(current)
+  const previous = shots[index - 1]
+  const next = shots[index + 1]
+  const context: ShotContinuityContext = {
+    sceneKey: sceneKey || undefined,
+    continuityIn: continuityIn || undefined,
+    continuityOut: continuityOut || undefined,
+  }
+
+  if (previous && sceneKey && getPromptSceneKey(previous) === sceneKey) {
+    context.previous = continuityNeighbor(previous)
+  }
+  if (next && sceneKey && getPromptSceneKey(next) === sceneKey) {
+    context.next = continuityNeighbor(next)
+  }
+
+  if (!context.sceneKey && !context.continuityIn && !context.continuityOut && !context.previous && !context.next) {
+    return null
+  }
+  return context
 }
 
 export function buildIssueFixOverlay(options: RegenerationQualityOptions = {}): IssueFixOverlay {
@@ -158,6 +335,18 @@ export function buildIssueFixOverlay(options: RegenerationQualityOptions = {}): 
       recommendedMotionStrength = 'low'
       lines.push('手机/直播画面返工：手机屏幕只能出现抽象光点、柔和反光、不可读色块或模糊界面；禁止平台 UI、红色对勾、爱心、点赞图标、logo、水印、字幕、可读文字和伪中文。')
       for (const term of ['readable text', 'fake Chinese text', 'garbled Chinese characters', 'platform UI', 'red check mark', 'heart icon', 'like icon', 'logo', 'watermark', 'subtitle']) negativeTerms.add(term)
+    }
+    if (issueType === 'fake_text_or_map') {
+      requiresImageRerun = true
+      recommendedMotionStrength = 'low'
+      lines.push('伪文字/伪地图返工：墙面标牌、站内导视、地图、海报、票务信息和屏幕内容只能保留不可读色块、抽象线条、模糊图形或纯装饰纹理；禁止任何可读文字、乱码中文、伪地图线路、伪二维码、字幕、logo、水印和平台 UI。')
+      for (const term of ['readable text', 'fake map', 'station map', 'garbled Chinese text', 'fake signage', 'poster text', 'subtitles', 'QR code', 'logo', 'watermark']) negativeTerms.add(term)
+    }
+    if (issueType === 'invalid_composition') {
+      requiresImageRerun = true
+      recommendedMotionStrength = 'low'
+      lines.push('黑边/无效构图返工：画面必须完整填满竖屏构图，上中下都有有效环境和主体信息；不得出现上半屏或左右大面积纯黑、空白、遮挡、分屏、海报边框或主体被挤到局部区域。')
+      for (const term of ['large black area', 'black border', 'empty top half', 'dead frame area', 'split screen', 'poster border', 'letterbox artifact', 'subject squeezed into lower frame']) negativeTerms.add(term)
     }
     if (issueType === 'large_motion_or_hand_deform') {
       recommendedMotionStrength = 'low'
@@ -329,6 +518,30 @@ export function matchShotCharacterReferences(
   return matched
 }
 
+function buildContinuityPromptSection(shot: ShotPromptContext): string {
+  const visual = visualRecord(shot.visual)
+  const context = shot.continuityContext || null
+  const sceneKey = cleanText(visual.scene_key) || cleanText(visual.sceneKey) || context?.sceneKey || ''
+  const continuityIn = context?.continuityIn || getContinuityIn(shot)
+  const continuityOut = context?.continuityOut || getContinuityOut(shot)
+  const lines: string[] = []
+
+  if (sceneKey || continuityIn || continuityOut) {
+    lines.push(`scene_key: ${sceneKey || '未提供'}。入镜状态：${continuityIn || '延续上一镜头'}。出镜状态：${continuityOut || '保持可衔接'}。`)
+  }
+  if (context?.previous) {
+    lines.push(`上一同场景镜头 #${context.previous.shotNo || '?'}：${context.previous.continuityOut || context.previous.action || '保持上一镜头出镜状态'}。`)
+  }
+  if (context?.next) {
+    lines.push(`下一同场景镜头 #${context.next.shotNo || '?'}：${context.next.continuityIn || context.next.action || '为下一镜头入镜状态预留衔接'}。`)
+  }
+  if (context?.previous || context?.next) {
+    lines.push('相邻同场景镜头必须保持同一人物身份、服装、发型、道具位置、空间布局和站位关系；动作只做可衔接的小幅变化，不要随机换角度、换地点或重置人物位置。')
+  }
+
+  return lines.length > 0 ? `\n\n[跨镜连续性硬约束]\n  ${lines.join('\n  ')}` : ''
+}
+
 export function buildShotImagePrompt(
   basePrompt: string,
   shot: ShotPromptContext,
@@ -373,9 +586,10 @@ export function buildShotImagePrompt(
 
   const cameraText = typeof shot.camera === 'object' && shot.camera ? JSON.stringify(shot.camera) : ''
   const visualText = typeof shot.visual === 'object' && shot.visual ? JSON.stringify(shot.visual) : ''
+  enhanced += buildContinuityPromptSection(shot)
   enhanced += `\n\n[镜头执行]\n  镜头 #${shot.shotNo}${shot.shotName ? `：${shot.shotName}` : ''}。动作：${shot.action || shot.details || basePrompt}。情绪：${shot.emotion || '克制、明确'}。镜头：${cameraText || '稳定短剧镜头'}。视觉：${visualText || '清晰叙事画面'}。`
 
-  enhanced += `\n\n[画面安全规则]\n  竖屏 ${styleStr} 漫剧成片首帧，单一连续镜头，不要漫画分格，不要拼贴，不要海报排版。\n  手机、直播屏幕和任何电子屏只允许抽象光点、不可读色块、模糊反光或简化图形；禁止字幕、水印、logo、平台 UI、红色对勾、爱心、点赞图标、随机 UI 文字、可读文字或乱码中文。\n  手部只做简单可信姿势，脸部不夸张变形，背景人物如无必要必须虚化且不抢主角。\n\nStyle: ${styleStr}, Korean manhwa, cinematic lighting, high quality, consistent character design, stable environment identity`
+  enhanced += `\n\n[画面安全规则]\n  竖屏 ${styleStr} 漫剧成片首帧，单一连续镜头，不要漫画分格，不要拼贴，不要海报排版。\n  手机、直播屏幕和任何电子屏只允许抽象光点、不可读色块、模糊反光或简化图形；墙面标牌、站内导视、地图、海报和票务信息只能作为不可读色块或抽象线条。禁止字幕、水印、logo、平台 UI、红色对勾、爱心、点赞图标、随机 UI 文字、可读文字、乱码中文、伪地图线路或伪二维码。\n  手部只做简单可信姿势，脸部不夸张变形，背景人物如无必要必须虚化且不抢主角。\n\nStyle: ${styleStr}, Korean manhwa, cinematic lighting, high quality, consistent character design, stable environment identity`
   return enhanced
 }
 
@@ -383,16 +597,32 @@ export function buildShotImageNegativePrompt(baseNegative?: string | null, optio
   const overlay = buildIssueFixOverlay(options)
   return [
     baseNegative,
-    'ugly, deformed, bad anatomy, bad proportions, low quality, blurry, pixelated, distorted face, identity change, different hairstyle, different outfit, inconsistent background, unstable room layout, extra people, extra fingers, missing fingers, asymmetric eyes, bad hands, warped body, split screen, comic panel grid, poster layout, watermark, text, logo, random UI text, garbled Chinese characters, platform UI, red check mark, heart icon',
+    'ugly, deformed, bad anatomy, bad proportions, low quality, blurry, pixelated, distorted face, identity change, different hairstyle, different outfit, inconsistent background, unstable room layout, extra people, extra fingers, missing fingers, asymmetric eyes, bad hands, warped body, split screen, comic panel grid, poster layout, watermark, text, logo, random UI text, garbled Chinese characters, fake signage, fake map, station map, QR code, platform UI, red check mark, heart icon',
     ...overlay.negativeTerms,
   ].filter(Boolean).join(', ')
 }
 
-export function selectReferenceImageUrls(characterUrls: string[], sceneUrls: string[]): string[] {
+export function selectReferenceImageUrls(characterUrls: string[], sceneUrls: string[], characterNames: string[] = []): string[] {
+  const firstByCharacter: string[] = []
+  const remainingCharacterUrls: string[] = []
+  const seenCharacters = new Set<string>()
+
+  for (let i = 0; i < characterUrls.length; i++) {
+    const url = characterUrls[i]
+    const characterName = characterNames[i]?.trim() || `__character_${i}`
+    if (!url) continue
+    if (!seenCharacters.has(characterName)) {
+      seenCharacters.add(characterName)
+      firstByCharacter.push(url)
+    } else {
+      remainingCharacterUrls.push(url)
+    }
+  }
+
   const ordered = [
-    ...characterUrls.slice(0, 2),
+    ...firstByCharacter,
     ...sceneUrls.slice(0, 2),
-    ...characterUrls.slice(2),
+    ...remainingCharacterUrls,
     ...sceneUrls.slice(2),
   ]
   const unique: string[] = []
@@ -414,6 +644,7 @@ export function buildSeedanceConsistencyPrompt(
   options: RegenerationQualityOptions = {},
 ): string {
   const overlay = buildIssueFixOverlay(options)
+  const continuitySection = buildContinuityPromptSection(shot).trim()
   const cameraText = typeof shot.camera === 'object' && shot.camera ? JSON.stringify(shot.camera) : ''
   const visualText = typeof shot.visual === 'object' && shot.visual ? JSON.stringify(shot.visual) : ''
   const storyAction = shot.action || shot.details || basePrompt
@@ -426,7 +657,8 @@ export function buildSeedanceConsistencyPrompt(
     'Use the input image as the exact first frame and the only visual anchor. Preserve the same character identity, face shape, bangs outline, hairstyle, outfit, accessories, body proportions, lighting, color palette, props, and environment layout for the entire clip.',
     'Do not change the character into another person. Do not change hair, clothes, age, face, room structure, stall/table/bridge/water/light positions, or background props. Do not add new main characters.',
     'No cutaway, no scene transition, no camera jump, no comic panels, no poster layout. Keep one continuous shot.',
-    'Phone and livestream screens may show only abstract light spots, soft reflections, unreadable color blocks, or blurred interface shapes. Do not create readable text, fake subtitles, garbled Chinese characters, platform UI, red check marks, heart/like icons, watermarks, or logos.',
+    'Phone and livestream screens may show only abstract light spots, soft reflections, unreadable color blocks, or blurred interface shapes. Wall signs, station maps, posters, tickets, labels, and route boards must stay as unreadable blocks or abstract lines. Do not create readable text, fake subtitles, garbled Chinese characters, fake maps, QR codes, platform UI, red check marks, heart/like icons, watermarks, or logos.',
+    continuitySection,
     overlay.promptSection,
     '',
     '[镜头动作]',
@@ -443,7 +675,7 @@ export function buildSeedanceNegativePrompt(baseNegative?: string | null, option
   const overlay = buildIssueFixOverlay(options)
   return [
     baseNegative,
-    'identity change, face morphing, different hairstyle, different outfit, age change, unstable background, room layout change, scene transition, camera cut, camera jump, extra main character, warped hands, bad fingers, body distortion, flickering, fake subtitles, readable text, garbled Chinese text, platform UI, red check mark, heart icon, like icon, watermark, logo',
+    'identity change, face morphing, different hairstyle, different outfit, age change, unstable background, room layout change, scene transition, camera cut, camera jump, extra main character, warped hands, bad fingers, body distortion, flickering, fake subtitles, readable text, garbled Chinese text, fake signage, fake map, station map, QR code, platform UI, red check mark, heart icon, like icon, watermark, logo',
     ...overlay.negativeTerms,
   ].filter(Boolean).join(', ')
 }

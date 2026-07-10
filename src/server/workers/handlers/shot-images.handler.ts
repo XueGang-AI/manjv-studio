@@ -9,9 +9,12 @@ import prisma from '@/lib/prisma'
 import { adapterFactory } from '@/server/model-adapters/adapter.factory'
 import { getRuntimeModelName } from '@/server/model-adapters/model-config'
 import { taskService } from '@/server/queues/task-queue.service'
+import { resolveMediaRenderSource } from '@/server/services/media-persist'
 import { resolveImageUrlForModel } from '@/server/services/media-reference-url'
+import { analyzeImageVisualQuality, toStoredVisualQuality } from '@/server/services/media-visual-qc.service'
 import {
   buildCharacterAppearanceMap,
+  buildShotContinuityContext,
   buildShotImageNegativePrompt,
   buildShotImagePrompt,
   matchShotCharacterReferences,
@@ -21,6 +24,7 @@ import {
 import { withWorkerRetry } from '../handler-utils'
 import { emitTaskEvent, taskToUpdateEvent } from '../task-events'
 import type { ImageGenerationRequest } from '@/server/model-adapters/types'
+type JsonValue = import('@prisma/client').Prisma.InputJsonValue
 
 export interface ShotImagesInput {
   episodeId: string
@@ -117,6 +121,19 @@ export async function handleShotImages(taskId: string): Promise<void> {
     })
 
     if (shots.length === 0) throw new Error('没有镜头数据')
+    const shotPromptContexts = shots.map(shot => ({
+      shotNo: shot.shotNo,
+      shotName: shot.shotName,
+      characters: shot.characters,
+      action: shot.action,
+      details: shot.details,
+      camera: shot.camera,
+      visual: shot.visual,
+      location: shot.location,
+      sceneTime: shot.sceneTime,
+      emotion: shot.emotion,
+      dialogue: shot.dialogue,
+    }))
 
     await taskService.updateProgress(taskId, 10)
 
@@ -147,6 +164,7 @@ export async function handleShotImages(taskId: string): Promise<void> {
 
       const imgPrompt = shot.imagePrompts[0]
       const basePrompt = imgPrompt?.enPrompt || imgPrompt?.zhPrompt || shot.action || ''
+      const continuityContext = buildShotContinuityContext(shotPromptContexts, i)
 
       const prompt = buildShotImagePrompt(basePrompt, {
         shotNo: shot.shotNo,
@@ -159,6 +177,7 @@ export async function handleShotImages(taskId: string): Promise<void> {
         location: shot.location,
         sceneTime: shot.sceneTime,
         emotion: shot.emotion,
+        continuityContext,
       }, style, charAppearanceByName, shot.scene)
       const negative = buildShotImageNegativePrompt(imgPrompt?.negativePrompt || baseNegative)
 
@@ -202,7 +221,11 @@ export async function handleShotImages(taskId: string): Promise<void> {
         }))
       )).filter((url): url is string => !!url)
 
-      const referenceImageUrls = selectReferenceImageUrls(characterReferenceUrls, sceneReferenceUrls)
+      const referenceImageUrls = selectReferenceImageUrls(
+        characterReferenceUrls,
+        sceneReferenceUrls,
+        references.map(ref => ref.character_name),
+      )
 
       if (referenceImageUrls.length > 0) {
         genReq.referenceImages = referenceImageUrls
@@ -238,6 +261,16 @@ export async function handleShotImages(taskId: string): Promise<void> {
             console.error(`[worker:shot-images] Shot #${shot.shotNo}: persist failed (prod, skipped): ${outcome.error}`)
             return null
           }
+          let visualQuality: ReturnType<typeof toStoredVisualQuality> | null = null
+          const renderSource = await resolveMediaRenderSource(outcome.storageObjectKey, outcome.imageUrl)
+          if (renderSource && !/^https?:\/\//i.test(renderSource)) {
+            try {
+              visualQuality = toStoredVisualQuality(await analyzeImageVisualQuality(renderSource))
+            } catch (error) {
+              console.warn(`[worker:shot-images] Shot #${shot.shotNo}: visual QC unavailable: ${(error as Error).message}`)
+            }
+          }
+
           return prisma.shotImage.create({
             data: {
               shotId: shot.id, projectId,
@@ -255,7 +288,9 @@ export async function handleShotImages(taskId: string): Promise<void> {
                 character_reference_image_count: references.length,
                 scene_reference_image_count: sceneReferences.length,
                 sent_reference_image_count: genReq.referenceImages?.length || 0,
-              },
+                continuity_context: continuityContext || null,
+                visual_quality: visualQuality,
+              } as unknown as JsonValue,
               isSelected: false, isConfirmed: false,
             },
           })

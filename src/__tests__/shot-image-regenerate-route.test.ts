@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server'
 
 const mocks = vi.hoisted(() => ({
   prisma: {
-    shot: { findFirst: vi.fn() },
+    shot: { findFirst: vi.fn(), findMany: vi.fn() },
     project: { findUnique: vi.fn() },
     shotImage: { findMany: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
     imagePrompt: { findFirst: vi.fn() },
@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   generate: vi.fn(),
   resolveImageUrlForModel: vi.fn(),
   persistImageWithPolicy: vi.fn(),
+  resolveMediaRenderSource: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({ default: mocks.prisma }))
@@ -30,6 +31,7 @@ vi.mock('@/server/services/media-reference-url', () => ({
 }))
 vi.mock('@/server/services/media-persist', () => ({
   persistImageWithPolicy: mocks.persistImageWithPolicy,
+  resolveMediaRenderSource: mocks.resolveMediaRenderSource,
 }))
 
 const { POST } = await import('@/app/api/projects/[id]/episodes/[episodeId]/shots/[shotId]/images/regenerate/route')
@@ -64,6 +66,22 @@ beforeEach(() => {
     sceneTime: '夜晚',
     emotion: '专注',
   })
+  mocks.prisma.shot.findMany.mockResolvedValue([
+    {
+      id: 'shot-1',
+      shotNo: 6,
+      shotName: '灯坊返工',
+      characters: ['许澄'],
+      action: '许澄低头修补鱼龙花灯',
+      details: null,
+      camera: { shot_size: '近景' },
+      visual: { scene_key: 'lantern_workshop', continuity_in: '许澄站在案台前' },
+      location: '花灯工坊',
+      sceneTime: '夜晚',
+      emotion: '专注',
+      dialogue: null,
+    },
+  ])
   mocks.prisma.project.findUnique.mockResolvedValue({
     id: 'project-1',
     modelProvider: 'ark',
@@ -119,6 +137,7 @@ beforeEach(() => {
     storageProvider: 'local',
     sourceUrl: url,
   }))
+  mocks.resolveMediaRenderSource.mockResolvedValue(null)
   mocks.prisma.shotImage.create.mockImplementation(async ({ data }) => ({ id: `candidate-${data.seed}`, ...data }))
 })
 
@@ -148,6 +167,7 @@ describe('单镜头分镜图重生成', () => {
           generation_method: 'single_regenerate_candidate',
           client_request_id: 'req-1',
           issue_types: ['character_drift', 'hair_inconsistent'],
+          visual_quality: null,
         }),
       }),
     }))

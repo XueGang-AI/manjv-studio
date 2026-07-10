@@ -15,6 +15,7 @@ import {
   VideoTaskWaitResult,
   RemoteVideoTaskStatus,
 } from './types'
+import { isSeedanceLastFrameEnabled } from '@/server/services/seedance-last-frame'
 import fs from 'fs'
 import path from 'path'
 
@@ -26,6 +27,11 @@ export interface ArkVideoAdapterOptions {
 
 const DEFAULT_MODEL = 'doubao-seedance-1-5-pro-251215'
 const DEFAULT_RESOLUTION = '720p'
+
+/** @deprecated Prefer isSeedanceLastFrameEnabled from seedance-last-frame service */
+export function isArkLastFrameEnabled(): boolean {
+  return isSeedanceLastFrameEnabled()
+}
 
 export class ArkVideoAdapter extends BaseVideoAdapter {
   private baseUrl: string
@@ -114,6 +120,15 @@ export class ArkVideoAdapter extends BaseVideoAdapter {
         type: 'image_url',
         image_url: { url: request.inputImage },
         role: 'first_frame',
+      })
+    }
+
+    const wantsLastFrame = !!request.inputImage && !!request.lastImage && isArkLastFrameEnabled()
+    if (wantsLastFrame) {
+      content.push({
+        type: 'image_url',
+        image_url: { url: request.lastImage },
+        role: 'last_frame',
       })
     }
 

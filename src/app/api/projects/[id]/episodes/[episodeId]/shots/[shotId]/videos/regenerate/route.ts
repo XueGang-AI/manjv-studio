@@ -9,8 +9,18 @@ import type { VideoGenerationRequest } from '@/server/model-adapters/types'
 import { checkImageAccessible } from '@/server/services/media-resource-check'
 import { getReadUrl } from '@/server/services/media-persist'
 import { UPLOAD_DIR } from '@/server/services/ffmpeg-utils'
-import { resolveStructuredReferenceImagesForModel } from '@/server/services/media-reference-url'
 import {
+  resolveImageUrlForModel,
+  resolveStructuredReferenceImagesForModel,
+} from '@/server/services/media-reference-url'
+import { deriveTransitionPlan } from '@/server/services/video-transition-plan'
+import {
+  isSeedanceLastFrameEnabled,
+  resolveSeedanceInputMode,
+  shouldAttachSeedanceLastFrame,
+} from '@/server/services/seedance-last-frame'
+import {
+  buildShotContinuityContext,
   buildIssueFixOverlay,
   buildSeedanceConsistencyPrompt,
   buildSeedanceNegativePrompt,
@@ -121,6 +131,40 @@ export async function POST(
     // ─── 归属校验：shot 必须属于 episode 且属于 project ───
     const shot = await prisma.shot.findFirst({ where: { id: shotId, episodeId, projectId } })
     if (!shot) return safeError('镜头不存在', 404)
+    const episodeShots = await prisma.shot.findMany({
+      where: { projectId, episodeId },
+      orderBy: { shotNo: 'asc' },
+      select: {
+        id: true,
+        shotNo: true,
+        shotName: true,
+        sceneId: true,
+        characters: true,
+        action: true,
+        details: true,
+        camera: true,
+        visual: true,
+        location: true,
+        sceneTime: true,
+        emotion: true,
+        dialogue: true,
+        technicalNotes: true,
+        shotImages: {
+          where: { isConfirmed: true },
+          take: 1,
+          select: {
+            imageUrl: true,
+            sourceUrl: true,
+            storageObjectKey: true,
+          },
+        },
+      },
+    })
+    const shotIndex = episodeShots.findIndex(item => item.id === shotId)
+    const continuityContext = buildShotContinuityContext(episodeShots, shotIndex)
+    const transitionPlan = deriveTransitionPlan(episodeShots)
+    const transition = shotIndex >= 0 ? transitionPlan[shotIndex] : undefined
+    const nextConfirmedImage = shotIndex >= 0 ? episodeShots[shotIndex + 1]?.shotImages[0] : undefined
 
     const project = await prisma.project.findUnique({ where: { id: projectId } })
     if (!project) return safeError('项目不存在', 404)
@@ -226,6 +270,7 @@ export async function POST(
       location: shot.location,
       sceneTime: shot.sceneTime,
       dialogue: shot.dialogue,
+      continuityContext,
     }, duration, effectiveMotion, { issueTypes, fixNote })
     const negativePrompt = buildSeedanceNegativePrompt(vidPrompt?.negativePrompt, { issueTypes, fixNote })
 
@@ -274,19 +319,51 @@ export async function POST(
       ? confirmedImage.referenceImages
       : []
     const referenceImageUrls = await resolveStructuredReferenceImagesForModel(inheritedReferenceImages, 4)
+    // first/last frame mode cannot mix reference_image (Seedance mutual exclusion)
+    const sentReferenceImageUrls = inputImageUrl ? [] : referenceImageUrls
+
+    const lastFrameEnvEnabled = isSeedanceLastFrameEnabled()
+    let lastImageUrl: string | undefined
+    if (shouldAttachSeedanceLastFrame({
+      enabled: lastFrameEnvEnabled,
+      hasFirstFrame: !!inputImageUrl,
+      transitionType: transition?.type,
+      hasNextFrameImage: !!nextConfirmedImage,
+    }) && nextConfirmedImage) {
+      lastImageUrl = await resolveImageUrlForModel({
+        imageUrl: nextConfirmedImage.imageUrl,
+        sourceUrl: nextConfirmedImage.sourceUrl,
+        storageObjectKey: nextConfirmedImage.storageObjectKey,
+      }) || undefined
+    }
+    const inputMode = resolveSeedanceInputMode({
+      hasFirstFrame: !!inputImageUrl,
+      hasLastFrame: !!lastImageUrl,
+    })
 
     const genReq: VideoGenerationRequest = {
       taskType: 'image_to_video',
       prompt: finalPrompt,
       negativePrompt,
       inputImage: inputImageUrl || undefined,
-      referenceImages: referenceImageUrls,
+      lastImage: lastImageUrl,
+      referenceImages: sentReferenceImageUrls,
       duration,
       aspectRatio: (project.aspectRatio || '9:16') as '9:16',
       motionStrength: effectiveMotion,
       fps: 24,
       voiceText: (shot.dialogue as string) || undefined,
       generateAudio: true,
+      transition,
+    }
+
+    const lastFrameAuditParams = {
+      seedance_input_mode: inputMode,
+      available_reference_image_count: referenceImageUrls.length,
+      sent_reference_image_count: sentReferenceImageUrls.length,
+      transition_to_next: transition || null,
+      last_frame_env_enabled: lastFrameEnvEnabled,
+      last_frame_enabled: !!lastImageUrl,
     }
 
     const videoAdapter = adapterFactory.getVideoAdapter(modelProvider)
@@ -334,11 +411,12 @@ export async function POST(
             duration: response.videos[0]?.duration || duration,
             params: {
               aspect_ratio: project.aspectRatio,
-              sent_reference_image_count: referenceImageUrls.length,
+              ...lastFrameAuditParams,
               issue_types: issueTypes,
               applied_fixes: overlay.appliedFixes,
               fix_note: fixNote || undefined,
               motion_strength: effectiveMotion,
+              continuity_context: continuityContext || null,
             } as unknown as JsonValue,
             isSelected: false, isConfirmed: false,
             clientRequestId: clientRequestId ?? undefined,
@@ -358,6 +436,8 @@ export async function POST(
           reused: false,
           appliedFixes: overlay.appliedFixes,
           requiresImageRerun: overlay.requiresImageRerun,
+          lastFrameEnabled: !!lastImageUrl,
+          seedanceInputMode: inputMode,
         },
       })
     }
@@ -405,11 +485,12 @@ export async function POST(
           params: {
             aspect_ratio: project.aspectRatio,
             generation_method: 'async_task',
-            sent_reference_image_count: referenceImageUrls.length,
+            ...lastFrameAuditParams,
             issue_types: issueTypes,
             applied_fixes: overlay.appliedFixes,
             fix_note: fixNote || undefined,
             motion_strength: effectiveMotion,
+            continuity_context: continuityContext || null,
           } as unknown as JsonValue,
           // 标记为排队中：作为"当前尝试"。旧视频不受影响。
           remoteStatus: 'queued',
@@ -452,6 +533,8 @@ export async function POST(
           reused: false,
           appliedFixes: overlay.appliedFixes,
           requiresImageRerun: overlay.requiresImageRerun,
+          lastFrameEnabled: !!lastImageUrl,
+          seedanceInputMode: inputMode,
         },
       })
     } catch (remoteErr) {

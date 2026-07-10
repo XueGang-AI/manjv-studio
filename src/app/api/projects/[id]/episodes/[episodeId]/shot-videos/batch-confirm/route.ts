@@ -1,5 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
+import {
+  analyzePersistedVideoVisualQuality,
+  hasBlockingVisualIssues,
+  toStoredVisualQuality,
+} from '@/server/services/media-visual-qc.service'
+
+type JsonValue = import('@prisma/client').Prisma.InputJsonValue
+
+type ShotVideoCandidate = {
+  id: string
+  videoUrl: string | null
+  storageObjectKey: string | null
+  duration: number | null
+  params: unknown
+}
+
+function mergeVisualQualityParams(params: unknown, visualQuality: ReturnType<typeof toStoredVisualQuality>): JsonValue {
+  const base = params && typeof params === 'object' && !Array.isArray(params)
+    ? params as Record<string, unknown>
+    : {}
+  return { ...base, visual_quality: visualQuality } as unknown as JsonValue
+}
+
+async function isShotVideoVisuallyUsable(candidate: ShotVideoCandidate): Promise<boolean> {
+  if (!candidate.videoUrl) return false
+  try {
+    const visualQuality = await analyzePersistedVideoVisualQuality(
+      candidate.storageObjectKey,
+      candidate.videoUrl,
+      { duration: candidate.duration, sampleIntervalSeconds: 1, maxSamples: 40 },
+    )
+    if (!visualQuality) return true
+    const storedVisualQuality = toStoredVisualQuality(visualQuality)
+    await prisma.shotVideo.update({
+      where: { id: candidate.id },
+      data: { params: mergeVisualQualityParams(candidate.params, storedVisualQuality) },
+    })
+    return !hasBlockingVisualIssues(visualQuality)
+  } catch (error) {
+    console.warn(`[shot-videos/batch-confirm] visual QC unavailable for ${candidate.id}: ${(error as Error).message}`)
+    return true
+  }
+}
 
 /**
  * POST /api/projects/:id/episodes/:episodeId/shot-videos/batch-confirm
@@ -28,6 +71,7 @@ export async function POST(
 
     let confirmedCount = 0
     let skippedCount = 0
+    let blockedVisualQualityCount = 0
 
     for (const shot of shots) {
       const selected = shot.shotVideos[0]
@@ -40,6 +84,11 @@ export async function POST(
         continue
       }
       if (!selected.videoUrl) {
+        skippedCount++
+        continue
+      }
+      if (!await isShotVideoVisuallyUsable(selected)) {
+        blockedVisualQualityCount++
         skippedCount++
         continue
       }
@@ -57,7 +106,7 @@ export async function POST(
     }
 
     // 更新项目状态
-    if (confirmedCount > 0 && confirmedCount + skippedCount === shots.length) {
+    if (confirmedCount > 0 && blockedVisualQualityCount === 0 && confirmedCount + skippedCount === shots.length) {
       await prisma.project.update({
         where: { id: projectId },
         data: { status: 'SHOT_VIDEO_CONFIRMED' },
@@ -80,8 +129,9 @@ export async function POST(
       data: {
         confirmed: confirmedCount,
         skipped: skippedCount,
+        blockedVisualQuality: blockedVisualQualityCount,
         total: shots.length,
-        projectStatus: confirmedCount + skippedCount === shots.length
+        projectStatus: blockedVisualQualityCount === 0 && confirmedCount + skippedCount === shots.length
           ? 'SHOT_VIDEO_CONFIRMED'
           : 'SHOT_VIDEO_PENDING_CONFIRM',
       },

@@ -16,10 +16,17 @@ import { emitTaskEvent, taskToUpdateEvent } from '../task-events'
 import { resolveImageUrlForModel, resolveStructuredReferenceImagesForModel } from '@/server/services/media-reference-url'
 import { persistVideoFromUrl, resolveMediaReadUrl } from '@/server/services/media-persist'
 import {
+  buildShotContinuityContext,
   buildSeedanceConsistencyPrompt,
   buildSeedanceNegativePrompt,
   normalizeMotionStrength,
 } from '@/server/services/shot-regeneration-quality'
+import { deriveTransitionPlan } from '@/server/services/video-transition-plan'
+import {
+  isSeedanceLastFrameEnabled,
+  resolveSeedanceInputMode,
+  shouldAttachSeedanceLastFrame,
+} from '@/server/services/seedance-last-frame'
 import type { VideoGenerationRequest } from '@/server/model-adapters/types'
 
 type JsonValue = import('@prisma/client').Prisma.InputJsonValue
@@ -90,6 +97,21 @@ export async function handleShotVideos(taskId: string): Promise<void> {
     const videoAdapter = adapterFactory.getVideoAdapter(project.modelProvider)
     const aspectRatio = (project.aspectRatio || '9:16') as '9:16'
     const isMock = process.env.USE_MOCK_MODEL === 'true'
+    const transitionPlan = deriveTransitionPlan(shots)
+    const lastFrameEnabled = isSeedanceLastFrameEnabled()
+    const shotPromptContexts = shots.map(shot => ({
+      shotNo: shot.shotNo,
+      shotName: shot.shotName,
+      characters: shot.characters,
+      action: shot.action,
+      details: shot.details,
+      camera: shot.camera,
+      visual: shot.visual,
+      location: shot.location,
+      sceneTime: shot.sceneTime,
+      emotion: shot.emotion,
+      dialogue: shot.dialogue,
+    }))
 
     // ─── 阶段 1：为每个镜头创建视频生成任务 ─────────────────────────
     //
@@ -151,11 +173,32 @@ export async function handleShotVideos(taskId: string): Promise<void> {
         sourceUrl: confirmedImage?.sourceUrl,
         storageObjectKey: confirmedImage?.storageObjectKey,
       })
+      const transition = transitionPlan[i]
+      let lastImageUrl: string | undefined
+      const nextConfirmedImage = shots[i + 1]?.shotImages[0]
+      const attachLastFrame = shouldAttachSeedanceLastFrame({
+        enabled: lastFrameEnabled,
+        hasFirstFrame: !!inputImageUrl,
+        transitionType: transition?.type,
+        hasNextFrameImage: !!nextConfirmedImage,
+      })
+      if (attachLastFrame && nextConfirmedImage) {
+        lastImageUrl = await resolveImageUrlForModel({
+          imageUrl: nextConfirmedImage.imageUrl,
+          sourceUrl: nextConfirmedImage.sourceUrl,
+          storageObjectKey: nextConfirmedImage.storageObjectKey,
+        }) || undefined
+      }
       const inheritedReferenceImages = Array.isArray(confirmedImage?.referenceImages)
         ? confirmedImage.referenceImages
         : []
       const referenceImageUrls = await resolveStructuredReferenceImagesForModel(inheritedReferenceImages, 4)
+      // first/last frame mode cannot mix reference_image (Seedance mutual exclusion)
       const sentReferenceImageUrls = inputImageUrl ? [] : referenceImageUrls
+      const inputMode = resolveSeedanceInputMode({
+        hasFirstFrame: !!inputImageUrl,
+        hasLastFrame: !!lastImageUrl,
+      })
 
       const motionStrength = normalizeMotionStrength(
         (vidPrompt?.motionStrength as 'low' | 'medium' | 'high') || 'medium',
@@ -172,6 +215,7 @@ export async function handleShotVideos(taskId: string): Promise<void> {
           dialogue: shot.dialogue,
         },
       )
+      const continuityContext = buildShotContinuityContext(shotPromptContexts, i)
       prompt = buildSeedanceConsistencyPrompt(prompt, {
         shotNo: shot.shotNo,
         shotName: shot.shotName,
@@ -183,6 +227,7 @@ export async function handleShotVideos(taskId: string): Promise<void> {
         location: shot.location,
         sceneTime: shot.sceneTime,
         dialogue: shot.dialogue,
+        continuityContext,
       }, duration, motionStrength)
 
       const negativePrompt = buildSeedanceNegativePrompt(vidPrompt?.negativePrompt)
@@ -192,6 +237,7 @@ export async function handleShotVideos(taskId: string): Promise<void> {
         prompt,
         negativePrompt,
         inputImage: inputImageUrl,
+        lastImage: lastImageUrl,
         referenceImages: sentReferenceImageUrls,
         duration,
         aspectRatio,
@@ -199,6 +245,7 @@ export async function handleShotVideos(taskId: string): Promise<void> {
         fps: 24,
         voiceText: (shot.dialogue as string) || undefined,
         generateAudio: true,
+        transition,
       }
 
       if (!isMock) {
@@ -223,9 +270,13 @@ export async function handleShotVideos(taskId: string): Promise<void> {
             params: {
               aspect_ratio: aspectRatio,
               generation_method: 'async_task',
-              seedance_input_mode: inputImageUrl ? 'first_frame' : 'reference_media',
+              seedance_input_mode: inputMode,
               available_reference_image_count: referenceImageUrls.length,
               sent_reference_image_count: sentReferenceImageUrls.length,
+              transition_to_next: transition || null,
+              last_frame_env_enabled: lastFrameEnabled,
+              last_frame_enabled: !!lastImageUrl,
+              continuity_context: continuityContext || null,
             } as unknown as JsonValue,
             remoteTaskId: createResult.taskId,
             remoteStatus: createResult.status,
@@ -258,9 +309,13 @@ export async function handleShotVideos(taskId: string): Promise<void> {
               params: {
                 ...v.params,
                 aspect_ratio: aspectRatio,
-                seedance_input_mode: inputImageUrl ? 'first_frame' : 'reference_media',
+                seedance_input_mode: inputMode,
                 available_reference_image_count: referenceImageUrls.length,
                 sent_reference_image_count: sentReferenceImageUrls.length,
+                transition_to_next: transition || null,
+                last_frame_env_enabled: lastFrameEnabled,
+                last_frame_enabled: !!lastImageUrl,
+                continuity_context: continuityContext || null,
               } as unknown as JsonValue,
               isSelected: idx === 0 && autoSelect, isConfirmed: false,
             },

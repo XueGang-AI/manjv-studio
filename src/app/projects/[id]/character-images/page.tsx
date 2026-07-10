@@ -117,11 +117,8 @@ export default function CharacterImagesPage() {
   const handleRegenerate = async (charId: string) => {
     setActionLoading(charId)
     try {
-      // 根据角色现有图片数量推断 mode：5张以上用 consistency，否则用 quick
-      const charGroup = characters.find(c => c.character.id === charId)
-      const refTypes = ['front_full_body', 'front_half_body', 'left_side', 'right_side', 'back_view']
-      const hasConsistency = charGroup ? refTypes.every(t => charGroup.images.some(i => i.referenceType === t)) : false
-      const mode = hasConsistency ? 'consistency' : 'quick'
+      // 默认补齐多角度一致性参考图；快速模式只在顶部按钮中显式触发。
+      const mode = 'consistency'
 
       const res = await fetch(`/api/projects/${projectId}/characters/${charId}/images/regenerate?mode=${mode}`, { method: 'POST' })
       const data = await res.json()

@@ -27,7 +27,7 @@ export async function POST(
   try {
     const { id: projectId } = await params
     const url = new URL(request.url)
-    const mode = url.searchParams.get('mode') || 'quick'
+    const mode = url.searchParams.get('mode') || 'consistency'
     const types: RefType[] = mode === 'consistency'
       ? ['front_full_body', 'front_half_body', 'left_side', 'right_side', 'back_view']
       : ['front_full_body']

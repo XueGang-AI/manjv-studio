@@ -4,8 +4,14 @@ import { adapterFactory } from '@/server/model-adapters/adapter.factory'
 import { getRuntimeModelName } from '@/server/model-adapters/model-config'
 import { resolveImageUrlForModel } from '@/server/services/media-reference-url'
 import {
+  analyzePersistedImageVisualQuality,
+  hasBlockingVisualIssues,
+  toStoredVisualQuality,
+} from '@/server/services/media-visual-qc.service'
+import {
   buildCharacterAppearanceMap,
   buildIssueFixOverlay,
+  buildShotContinuityContext,
   buildShotImageNegativePrompt,
   buildShotImagePrompt,
   matchShotCharacterReferences,
@@ -96,6 +102,28 @@ export async function POST(
 
     const shot = await prisma.shot.findFirst({ where: { id: shotId, episodeId, projectId } })
     if (!shot) return safeError('镜头不存在', 404)
+    const episodeShots = await prisma.shot.findMany({
+      where: { projectId, episodeId },
+      orderBy: { shotNo: 'asc' },
+      select: {
+        id: true,
+        shotNo: true,
+        shotName: true,
+        characters: true,
+        action: true,
+        details: true,
+        camera: true,
+        visual: true,
+        location: true,
+        sceneTime: true,
+        emotion: true,
+        dialogue: true,
+      },
+    })
+    const continuityContext = buildShotContinuityContext(
+      episodeShots,
+      episodeShots.findIndex(item => item.id === shotId),
+    )
 
     const project = await prisma.project.findUnique({ where: { id: projectId } })
     if (!project) return safeError('项目不存在', 404)
@@ -189,6 +217,7 @@ export async function POST(
       location: shot.location,
       sceneTime: shot.sceneTime,
       emotion: shot.emotion,
+      continuityContext,
     }, style, charAppearanceByName, scene, { issueTypes, fixNote })
 
     const negative = buildShotImageNegativePrompt(imgPrompt?.negativePrompt, { issueTypes, fixNote })
@@ -218,7 +247,11 @@ export async function POST(
       }))
     )).filter((url): url is string => !!url)
 
-    const referenceImageUrls = selectReferenceImageUrls(characterReferenceUrls, sceneReferenceUrls)
+    const referenceImageUrls = selectReferenceImageUrls(
+      characterReferenceUrls,
+      sceneReferenceUrls,
+      references.map(ref => ref.character_name),
+    )
     if (referenceImageUrls.length > 0) {
       genReq.referenceImages = referenceImageUrls
     }
@@ -237,12 +270,25 @@ export async function POST(
           console.error(`[shot-images/regenerate] persist failed (prod, skipped): ${outcome.error}`)
           return null
         }
+        let visualQuality: ReturnType<typeof toStoredVisualQuality> | null = null
+        let visualQualityBlocked = false
+        try {
+          const visualQualityResult = await analyzePersistedImageVisualQuality(outcome.storageObjectKey, outcome.imageUrl)
+          if (visualQualityResult) {
+            visualQuality = toStoredVisualQuality(visualQualityResult)
+            visualQualityBlocked = hasBlockingVisualIssues(visualQualityResult)
+          }
+        } catch (error) {
+          console.warn(`[shot-images/regenerate] visual QC unavailable: ${(error as Error).message}`)
+        }
         return {
           img,
           storageObjectKey: outcome.storageObjectKey,
           storageProvider: outcome.storageProvider,
           imageUrlForDb: outcome.imageUrl,
           sourceUrlForAudit: outcome.sourceUrl,
+          visualQuality,
+          visualQualityBlocked,
         }
       })
     )).filter((x): x is NonNullable<typeof x> => x !== null)
@@ -251,7 +297,7 @@ export async function POST(
       return safeError('图片转存失败，旧图已保留', 500)
     }
 
-    const created = await Promise.all(persistedImages.map(({ img, storageObjectKey, storageProvider, imageUrlForDb, sourceUrlForAudit }) =>
+    const created = await Promise.all(persistedImages.map(({ img, storageObjectKey, storageProvider, imageUrlForDb, sourceUrlForAudit, visualQuality }) =>
       prisma.shotImage.create({
         data: {
           shotId,
@@ -278,12 +324,15 @@ export async function POST(
             applied_fixes: overlay.appliedFixes,
             fix_note: fixNote || undefined,
             client_request_id: clientRequestId || undefined,
+            continuity_context: continuityContext || null,
+            visual_quality: visualQuality,
           } as unknown as JsonValue,
           isSelected: false,
           isConfirmed: false,
         },
       })
     ))
+    const blockedVisualQualityCount = persistedImages.filter(image => image.visualQualityBlocked).length
 
     return NextResponse.json({
       success: true,
@@ -294,7 +343,8 @@ export async function POST(
         candidateId: created[0]?.id,
         reused: false,
         appliedFixes: overlay.appliedFixes,
-        requiresImageRerun: false,
+        requiresImageRerun: blockedVisualQualityCount > 0 && blockedVisualQualityCount === created.length,
+        blockedVisualQualityCount,
       },
     })
   } catch (error) {

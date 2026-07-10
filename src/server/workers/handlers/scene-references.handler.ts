@@ -10,6 +10,7 @@ import { persistImageWithPolicy } from '@/server/services/media-persist'
 import { taskService } from '@/server/queues/task-queue.service'
 import { withWorkerRetry } from '../handler-utils'
 import { emitTaskEvent, taskToUpdateEvent } from '../task-events'
+import { getShotContinuityKey } from '@/server/services/video-transition-plan'
 import type { ImageGenerationRequest, TextGenerationRequest } from '@/server/model-adapters/types'
 
 type JsonValue = import('@prisma/client').Prisma.InputJsonValue
@@ -28,7 +29,7 @@ interface SceneGroup {
   shotIds: string[]
 }
 
-const SCENE_REFERENCE_TYPES = ['establishing', 'key_angle'] as const
+const SCENE_REFERENCE_TYPES = ['establishing', 'key_angle', 'detail_props'] as const
 
 export async function handleSceneReferences(taskId: string): Promise<void> {
   const existingTask = await prisma.generationTask.findUnique({ where: { id: taskId } })
@@ -251,13 +252,18 @@ function buildSceneGroups(shots: Array<{
   location: string | null
   action: string | null
   emotion: string | null
+  visual?: unknown
 }>): SceneGroup[] {
   const byKey = new Map<string, SceneGroup & { actions: string[]; emotions: Set<string> }>()
 
   for (const shot of shots) {
     const location = cleanText(shot.location) || cleanText(shot.shotName) || '未命名场景'
     const sceneTime = cleanText(shot.sceneTime)
-    const key = `${location.toLowerCase()}|${sceneTime.toLowerCase()}`
+    const key = getShotContinuityKey({
+      location,
+      sceneTime,
+      visual: shot.visual,
+    }) || `${location.toLowerCase()}|${sceneTime.toLowerCase()}`
     const name = sceneTime ? `${location} · ${sceneTime}` : location
 
     if (!byKey.has(key)) {
@@ -367,6 +373,9 @@ function parseScenePrompt(json: unknown, rawText: string): string {
 function buildSceneReferencePrompt(scenePrompt: string, referenceType: typeof SCENE_REFERENCE_TYPES[number]): string {
   if (referenceType === 'establishing') {
     return `${scenePrompt}\n\nReference type: establishing shot. Show the full environment layout, clear spatial structure, lighting, props, and color palette. No characters.`
+  }
+  if (referenceType === 'detail_props') {
+    return `${scenePrompt}\n\nReference type: detail props sheet. Show the stable reusable props, furniture, table layout, wall marks, light positions, object colors, and spatial identity details. No characters.`
   }
 
   return `${scenePrompt}\n\nReference type: key angle. Keep the same environment identity, but show a reusable camera angle for medium shots, with stable props, lighting, and composition. No characters.`

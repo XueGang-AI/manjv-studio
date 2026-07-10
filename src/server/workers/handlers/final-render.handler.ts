@@ -17,11 +17,13 @@ import { ffmpegService, sanitizeError, RenderError } from '@/server/services/ffm
 import { taskService } from '@/server/queues/task-queue.service'
 import { persistLocalVideoFile, persistVideoFromUrl, resolveMediaRenderSource } from '@/server/services/media-persist'
 import { emitTaskEvent, taskToUpdateEvent } from '../task-events'
+import { deriveTransitionPlan, normalizeTransitionMode } from '@/server/services/video-transition-plan'
 
 export interface FinalRenderInput {
   episodeId: string
   aspectRatio?: string
   normalizeAudio?: boolean
+  transitionMode?: 'auto' | 'none'
 }
 
 /**
@@ -68,10 +70,13 @@ export async function handleFinalRender(taskId: string): Promise<void> {
       include: { shotVideos: { where: { isConfirmed: true } } },
     })
 
-    const confirmedVideos = shots.flatMap(s => s.shotVideos)
+    const renderEntries = shots.flatMap(shot => shot.shotVideos.map(video => ({ shot, video })))
+    const confirmedVideos = renderEntries.map(entry => entry.video)
     if (confirmedVideos.length === 0) {
       throw new Error('没有已确认的视频片段')
     }
+    const transitionMode = normalizeTransitionMode(input.transitionMode)
+    const transitionPlan = deriveTransitionPlan(renderEntries.map(entry => entry.shot), { mode: transitionMode })
 
     // 更新项目状态
     await prisma.project.update({ where: { id: projectId }, data: { status: 'RENDERING' } })
@@ -97,16 +102,17 @@ export async function handleFinalRender(taskId: string): Promise<void> {
 
     if (ffAvailable) {
       await updateProgress(10)
-      const renderInputs = await Promise.all(confirmedVideos.map(async v => ({
-          videoUrl: await resolveMediaRenderSource(v.storageObjectKey, v.videoUrl) || '',
-          duration: v.duration || 5,
+      const renderInputs = await Promise.all(renderEntries.map(async ({ video }) => ({
+          videoUrl: await resolveMediaRenderSource(video.storageObjectKey, video.videoUrl) || '',
+          duration: video.duration || 5,
         })))
       result = await ffmpegService.concatVideos({
         shotVideos: renderInputs,
         outputFileName,
         aspectRatio,
         fps: 25,
-        addFadeTransition: confirmedVideos.length > 1,
+        addFadeTransition: transitionMode === 'auto' && transitionPlan.some(item => item.type === 'fade_to_black'),
+        transitions: transitionPlan,
         normalizeAudio: typeof input.normalizeAudio === 'boolean' ? input.normalizeAudio : undefined,
       })
     } else {
@@ -167,6 +173,8 @@ export async function handleFinalRender(taskId: string): Promise<void> {
         project_status: 'RENDERED',
         storage_object_key: persistedFinal.storageObjectKey,
         storage_provider: persistedFinal.storageProvider,
+        transition_mode: transitionMode,
+        transition_plan: transitionPlan,
       },
       changeType: 'GENERATE', description: '合成最终成片', sourceTaskId: taskId,
     })
@@ -178,6 +186,8 @@ export async function handleFinalRender(taskId: string): Promise<void> {
       audio_normalized: result.audioNormalized ?? false,
       storage_object_key: persistedFinal.storageObjectKey,
       storage_provider: persistedFinal.storageProvider,
+      transition_mode: transitionMode,
+      transition_plan: transitionPlan,
     })
 
     await emitTaskEvent('task.completed', taskToUpdateEvent(completed))

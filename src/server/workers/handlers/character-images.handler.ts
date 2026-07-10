@@ -55,7 +55,7 @@ export async function handleCharacterImages(taskId: string): Promise<void> {
   try {
     const projectId = task.projectId
     const input = (task.input || {}) as CharacterImagesInput
-    const mode = input.mode || 'quick'
+    const mode = input.mode || 'consistency'
     const types: RefType[] = Array.isArray(input.reference_types) && input.reference_types.length > 0
       ? input.reference_types
       : mode === 'consistency'

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Play, ShieldCheck } from 'lucide-react'
+import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Play, RefreshCcw, ShieldCheck } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -15,6 +15,7 @@ import {
   formatDateTime,
 } from '@/components/production-workbench/workbench-ui'
 import { cn } from '@/lib/utils'
+import { preferredRepairIssue, repairButtonLabel } from './repair-priority'
 
 interface QCIssue {
   level?: string
@@ -26,6 +27,16 @@ interface QCIssue {
   issueType?: string
   severity?: 'P0' | 'P1' | 'P2' | 'P3'
   recommendedAction?: string
+  regenerationIssueTypes?: string[]
+  fixNote?: string
+  repairTarget?: {
+    kind?: string
+    shotId?: string
+    shotNo?: number
+    issueTypes?: string[]
+    fixNote?: string
+  }
+  repairSequence?: Array<NonNullable<QCIssue['repairTarget']>>
 }
 
 interface QCResult {
@@ -68,6 +79,8 @@ export default function QCProjectPage() {
   const [loading, setLoading] = useState(true)
   const [selectedIssueIndex, setSelectedIssueIndex] = useState(0)
   const [shotImageGroups, setShotImageGroups] = useState<ShotImageGroup[]>([])
+  const [repairingKey, setRepairingKey] = useState<string | null>(null)
+  const [repairMessage, setRepairMessage] = useState<string | null>(null)
 
   const fetchReports = useCallback(async (resolvedEpisodeId?: string | null) => {
     const url = resolvedEpisodeId
@@ -133,6 +146,73 @@ export default function QCProjectPage() {
     }
   }
 
+  const runRepair = async (issue: QCIssue) => {
+    if (!episodeId) {
+      setError('缺少剧集 ID，无法执行返工')
+      return
+    }
+    const target = issue.repairTarget
+    if (!target?.kind) {
+      setError('该问题没有结构化修复目标')
+      return
+    }
+    if ((target.kind === 'shot_image' || target.kind === 'shot_video') && !target.shotId) {
+      setError('该问题未定位到具体镜头，需先人工确认问题镜头')
+      return
+    }
+
+    const label = repairTargetLabel(target)
+    if (!window.confirm(`${label} 会触发真实生成任务，可能消耗 Ark 额度。确认继续？`)) return
+
+    const key = repairTargetKey(issue)
+    setRepairingKey(key)
+    setRepairMessage(null)
+    setError(null)
+
+    try {
+      let url = ''
+      let body: Record<string, unknown> = {}
+      if (target.kind === 'shot_image') {
+        url = `/api/projects/${projectId}/episodes/${episodeId}/shots/${target.shotId}/images/regenerate`
+        body = {
+          issueTypes: target.issueTypes || issue.regenerationIssueTypes || [],
+          fixNote: target.fixNote || issue.fixNote || '',
+          clientRequestId: `qc-${Date.now()}-${target.kind}-${target.shotId}`,
+        }
+      } else if (target.kind === 'shot_video') {
+        url = `/api/projects/${projectId}/episodes/${episodeId}/shots/${target.shotId}/videos/regenerate`
+        body = {
+          issueTypes: target.issueTypes || issue.regenerationIssueTypes || [],
+          fixNote: target.fixNote || issue.fixNote || '',
+          clientRequestId: `qc-${Date.now()}-${target.kind}-${target.shotId}`,
+        }
+      } else if (target.kind === 'final_render') {
+        url = `/api/projects/${projectId}/episodes/${episodeId}/final-preview/render`
+        body = { transitionMode: 'auto' }
+      } else {
+        throw new Error('未知修复目标')
+      }
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.success) {
+        const message = typeof data.error === 'string' ? data.error : data.error?.message || '返工任务创建失败'
+        throw new Error(message)
+      }
+      setRepairMessage(data.data?.taskId
+        ? `${label}任务已创建：${data.data.taskId}`
+        : `${label}候选已创建：${data.data?.candidateId || data.data?.count || '已提交'}`)
+    } catch (repairError) {
+      setError((repairError as Error).message || '返工失败')
+    } finally {
+      setRepairingKey(null)
+    }
+  }
+
   const issues = useMemo(() => {
     const fresh = results.flatMap((result) => result.issues || [])
     if (results.length > 0) return fresh
@@ -141,6 +221,9 @@ export default function QCProjectPage() {
 
   const safeSelectedIssueIndex = issues.length ? Math.min(selectedIssueIndex, issues.length - 1) : 0
   const selectedIssue = issues[safeSelectedIssueIndex] || null
+  const selectedRepairIssue = selectedIssue ? preferredRepairIssue(selectedIssue, issues) : null
+  const selectedRepairKey = selectedRepairIssue ? repairTargetKey(selectedRepairIssue) : ''
+  const selectedCanRepair = !!selectedRepairIssue && canRunRepair(selectedRepairIssue)
   const selectedShotGroup = selectedIssue?.shotNo
     ? shotImageGroups.find((group) => group.shot?.shotNo === selectedIssue.shotNo)
     : shotImageGroups[0]
@@ -187,6 +270,11 @@ export default function QCProjectPage() {
       {error && (
         <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger-muted)] p-3 text-sm text-[var(--color-danger)]">
           {error}
+        </div>
+      )}
+      {repairMessage && (
+        <div className="rounded-[var(--radius-md)] border border-[var(--color-success)]/30 bg-[var(--color-success-muted)] p-3 text-sm text-[var(--color-success)]">
+          {repairMessage}
         </div>
       )}
 
@@ -287,6 +375,12 @@ export default function QCProjectPage() {
                     <Info label="镜头号" value={selectedIssue.shotNo ? String(selectedIssue.shotNo) : '-'} />
                     <Info label="问题类型" value={issueTypeLabel(selectedIssue.issueType || selectedIssue.field)} />
                     <Info label="建议动作" value={actionLabel(selectedIssue.recommendedAction)} />
+                    <Info label="重生参数" value={issueTypesLabel(selectedIssue.regenerationIssueTypes)} />
+                    <Info label="修复目标" value={repairTargetLabel(selectedIssue.repairTarget)} />
+                    <Info label="后续动作" value={repairSequenceLabel(selectedIssue.repairSequence)} />
+                    {selectedRepairIssue && selectedRepairIssue !== selectedIssue && (
+                      <Info label="优先目标" value={repairTargetLabel(selectedRepairIssue.repairTarget)} />
+                    )}
                   </div>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
@@ -297,8 +391,20 @@ export default function QCProjectPage() {
                   <div className="space-y-2 text-xs text-[var(--color-text-secondary)]">
                     <Info label="时间段" value={selectedIssue.timeRange || '-'} />
                     <Info label="字段" value={selectedIssue.field || '-'} />
+                    <Info label="镜头 ID" value={selectedIssue.repairTarget?.shotId || '-'} />
+                    <Info label="返工说明" value={selectedIssue.fixNote || '-'} />
                   </div>
                   <div className="grid gap-2">
+                    <Button
+                      size="sm"
+                      variant="aurora"
+                      className="w-full"
+                      icon={repairingKey === selectedRepairKey ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
+                      disabled={!selectedCanRepair || repairingKey === selectedRepairKey}
+                      onClick={() => selectedRepairIssue && runRepair(selectedRepairIssue)}
+                    >
+                      {repairingKey === selectedRepairKey ? '返工提交中' : repairButtonLabel(selectedRepairIssue)}
+                    </Button>
                     <Link href={episodeId ? `/projects/${projectId}/episodes/${episodeId}/shot-images` : `/projects/${projectId}/qc`}>
                       <Button size="sm" variant="outline" className="w-full">查看分镜证据</Button>
                     </Link>
@@ -382,8 +488,20 @@ function issueTypeLabel(value?: string | null) {
   const map: Record<string, string> = {
     reference_count: '参考图数量与一致性',
     prompt_phone_safety: '手机屏幕安全',
+    shot_image_partial_black: '分镜图局部黑边',
+    shot_video_partial_black: '视频局部黑边',
+    final_visual_partial_black: '成片局部黑边',
+    visual_qc_unavailable: '视觉检测不可用',
+    shot_image_missing: '分镜图缺失',
+    shot_video_missing: '视频缺失',
     final_media: '成片媒体校验',
     final_video_missing: '成片缺失',
+    final_media_unavailable: '成片媒体不可用',
+    final_media_invalid: '成片媒体无效',
+    final_audio_missing: '成片音轨缺失',
+    final_loudness_low: '成片响度偏低',
+    final_black_frames: '成片黑屏风险',
+    final_freeze: '成片冻结风险',
     black_frame: '黑屏风险',
     freeze_frame: '冻结风险',
     silent_audio: '静音风险',
@@ -392,6 +510,54 @@ function issueTypeLabel(value?: string | null) {
   }
   if (!value) return '-'
   return map[value] || value.replace(/_/g, ' ')
+}
+
+function issueTypesLabel(values?: string[]) {
+  if (!values || values.length === 0) return '-'
+  const map: Record<string, string> = {
+    character_drift: '人物漂移',
+    hair_inconsistent: '发型不一致',
+    scene_drift: '场景漂移',
+    phone_fake_ui_text: '手机伪 UI/文字',
+    fake_text_or_map: '伪文字/伪地图',
+    invalid_composition: '黑边/无效构图',
+    large_motion_or_hand_deform: '动作/手部问题',
+    audio_issue: '音频问题',
+    other: '其他',
+  }
+  return values.map(value => map[value] || value).join('、')
+}
+
+function repairTargetLabel(target?: QCIssue['repairTarget']) {
+  if (!target?.kind) return '-'
+  const map: Record<string, string> = {
+    shot_image: '重生分镜图',
+    shot_video: '重生视频片段',
+    final_render: '重新合成成片',
+  }
+  const base = map[target.kind] || target.kind
+  return target.shotNo ? `${base} · 镜头 ${target.shotNo}` : base
+}
+
+function repairSequenceLabel(sequence?: QCIssue['repairSequence']) {
+  if (!sequence || sequence.length <= 1) return '-'
+  return sequence.map(repairTargetLabel).join(' → ')
+}
+
+function repairTargetKey(issue: QCIssue) {
+  const target = issue.repairTarget
+  return [
+    target?.kind || 'none',
+    target?.shotId || target?.shotNo || 'global',
+    issue.issueType || issue.field || 'issue',
+  ].join(':')
+}
+
+function canRunRepair(issue: QCIssue) {
+  const target = issue.repairTarget
+  if (!target?.kind) return false
+  if (target.kind === 'shot_image' || target.kind === 'shot_video') return !!target.shotId
+  return target.kind === 'final_render'
 }
 
 function issueProblemLabel(issue: QCIssue) {

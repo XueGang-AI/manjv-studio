@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { persistReleasePackageJson, resolveMediaReadUrl } from '@/server/services/media-persist'
+import { deriveTransitionPlan } from '@/server/services/video-transition-plan'
 
 /**
  * POST /api/projects/:id/episodes/:episodeId/release-package/generate
@@ -35,6 +36,7 @@ export async function POST(
         shotVideos: { where: { isConfirmed: true }, take: 1 },
       },
     })
+    const transitionPlan = deriveTransitionPlan(shots)
 
     const manifest = {
       generatedAt: new Date().toISOString(),
@@ -60,11 +62,16 @@ export async function POST(
         aspectRatio: finalVideo.aspectRatio,
         fps: finalVideo.fps,
       },
-      shots: await Promise.all(shots.map(async shot => ({
+      transitionPlan,
+      shots: await Promise.all(shots.map(async (shot, index) => ({
         id: shot.id,
         shotNo: shot.shotNo,
         shotName: shot.shotName,
         duration: (shot.endTime || 0) - (shot.startTime || 0),
+        sceneKey: typeof shot.visual === 'object' && shot.visual && 'scene_key' in shot.visual
+          ? (shot.visual as Record<string, unknown>).scene_key
+          : null,
+        transitionToNext: transitionPlan[index] || null,
         imageStorageObjectKey: shot.shotImages[0]?.storageObjectKey || null,
         videoStorageObjectKey: shot.shotVideos[0]?.storageObjectKey || null,
         imageUrl: shot.shotImages[0]

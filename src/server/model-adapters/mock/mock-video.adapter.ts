@@ -24,6 +24,8 @@ export class MockVideoAdapter extends BaseVideoAdapter {
           params: {
             motion_strength: request.motionStrength,
             aspect_ratio: request.aspectRatio,
+            transition: request.transition,
+            last_image: request.lastImage ? 'provided' : undefined,
           },
         },
         {
@@ -32,6 +34,8 @@ export class MockVideoAdapter extends BaseVideoAdapter {
           params: {
             motion_strength: request.motionStrength,
             aspect_ratio: request.aspectRatio,
+            transition: request.transition,
+            last_image: request.lastImage ? 'provided' : undefined,
           },
         },
       ],

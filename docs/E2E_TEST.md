@@ -112,6 +112,7 @@ npm run test:e2e:real:blue:resume
 ### 真实接口注意事项
 
 - Seedance 图片输入模式互斥：`first_frame` / `last_frame` 不能与 `reference_image` 混用。生产链路用确认分镜图作为 `first_frame`；角色和场景参考图在分镜图生成阶段传入并固化到首帧。
+- `last_frame` 默认关闭（`ARK_VIDEO_ENABLE_LAST_FRAME` 未设或不为 `true`）。启用前先跑 `npm run probe:ark:video:last-frame`，结论见 `docs/ARK_LAST_FRAME_PROBE_REPORT.md`。仓库默认不自动打开；P1-2 策略为仅 `match_cut` + 下一镜确认分镜图时附加尾帧（批量与单镜重生共用 `seedance-last-frame`）。开启后需重启 Web + Worker，并检查 `params.seedance_input_mode === 'first_last_frame'`。
 - 当前 Medium Agent Plan 默认视频模型为 `ARK_VIDEO_MODEL=doubao-seedance-1-5-pro-251215`。Seedance 2.0 是高套餐/开通后可选能力；未开通时在 Agent Plan 下会返回 `UnsupportedModel`。
 - 单片段成片也必须走 FFmpeg `concatVideos()` 两阶段规范化链路。生产成片应上传到媒体存储并写入 `FinalVideo.storageObjectKey`，API 读取时动态生成 read URL。
 - 成片阶段默认启用 loudnorm 响度归一化；如需排障可临时设置 `FFMPEG_NORMALIZE_AUDIO=false`，但真实验收应保持默认开启。

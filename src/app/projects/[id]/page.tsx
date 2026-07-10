@@ -348,12 +348,12 @@ export default function ProjectWorkbenchPage() {
                   })}
                 </div>
 
-                <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
-                  <div className="space-y-3">
+                <div className="grid min-w-0 gap-3 2xl:grid-cols-[minmax(0,1fr)_360px]">
+                  <div className="min-w-0 space-y-3">
                     <WorkbenchImage
                       src={confirmedImage?.imageUrl}
                       alt={selectedShot?.shot?.shotName || '选中镜头'}
-                      className="aspect-[16/9] min-h-[330px]"
+                      className="aspect-[16/9] 2xl:min-h-[330px]"
                     />
                     <div className="grid gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-dim)] bg-[var(--bg-panel)] p-3 text-xs md:grid-cols-2">
                       <div className="flex items-start justify-between gap-3 md:col-span-2">
@@ -373,7 +373,7 @@ export default function ProjectWorkbenchPage() {
                       <InfoLine label="动作" value={selectedShot?.shot?.action || '未记录'} />
                     </div>
                   </div>
-                  <div className="flex min-h-0 flex-col gap-2">
+                  <div className="flex min-h-0 min-w-0 flex-col gap-2">
                     <div className="flex items-center justify-between rounded-[var(--radius-md)] border border-[var(--color-border-dim)] bg-[var(--bg-panel)] px-3 py-2">
                       <div>
                         <div className="text-xs font-semibold text-[var(--color-text-primary)]">候选方案（3/3）</div>
@@ -381,7 +381,7 @@ export default function ProjectWorkbenchPage() {
                       </div>
                       <Badge variant="primary">{selectedImages.length || 0} 张</Badge>
                     </div>
-                    <div className="grid flex-1 grid-cols-3 gap-2 lg:grid-cols-1">
+                    <div className="grid flex-1 grid-cols-3 gap-2 2xl:grid-cols-1">
                       {(selectedImages.length ? selectedImages.slice(0, 3) : [undefined, undefined, undefined]).map((image, index) => (
                         <button
                           key={image?.id || index}

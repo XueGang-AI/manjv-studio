@@ -135,18 +135,32 @@ npm run test:e2e:real:minimal # 真实 AI API 最小探针（本地 probes 输�
 
 ### Seedance 1.5 Pro 质量优化闭环
 
-当前视频模型继续使用 `doubao-seedance-1-5-pro-251215`。分镜图和视频片段页面支持问题驱动重跑，问题类型包括人物漂移、发型不一致、场景漂移、手机伪 UI/文字、动作过大/手部变形、音频问题和其他。重跑请求会把 `issueTypes`、`fixNote`、`motionStrength`、`clientRequestId` 传给后端，后端统一叠加共享角色/场景/Seedance 一致性约束。
+当前视频模型继续使用 `doubao-seedance-1-5-pro-251215`。分镜图和视频片段页面支持问题驱动重跑，问题类型包括人物漂移、发型不一致、场景漂移、手机伪 UI/文字、伪文字/伪地图、无效构图、动作过大/手部变形、音频问题和其他。重跑请求会把 `issueTypes`、`fixNote`、`motionStrength`、`clientRequestId` 传给后端，后端统一叠加共享角色/场景/Seedance 一致性约束。
 
 单镜头分镜图重生成采用候选追加模式：新图生成成功后追加候选，不删除旧确认图；用户确认候选后才替换确认态。视频重生成继续保留旧视频候选，并通过 `clientRequestId` 避免网络重试重复提交远端任务。
 
-FFmpeg 成片阶段默认启用 loudnorm 响度归一化，保持原有两阶段输入标准化、无音频补静音和 concat/re-encode 兜底。QC 报告会输出 `issueType`、`severity`、`recommendedAction`，并检查参考图数量、手机屏幕禁用项、成片音轨、响度、黑屏和冻结风险。
+#### 首尾帧（last_frame）
+
+- **默认关闭**。仅当 `ARK_VIDEO_ENABLE_LAST_FRAME=true` 时发送 `role: last_frame`。
+- 开启后仅 **match_cut** 边界、且存在下一镜已确认分镜图时附加尾帧（`src/server/services/seedance-last-frame.ts`）。
+- 首尾帧模式与 `reference_image` 互斥；有确认分镜图作 `first_frame` 时不混发角色/场景 reference。
+- 启用前请先跑真实账号探针；报告见 `docs/ARK_LAST_FRAME_PROBE_REPORT.md`。
+- 改 env 后必须重启 Web + Worker。
+
+#### FFmpeg / QC
+
+FFmpeg 成片阶段默认启用 loudnorm 响度归一化，保持原有两阶段输入标准化、无音频补静音、边界转场计划（`hard_cut` / `match_cut` / `fade_to_black`）和 concat/re-encode 兜底。QC 报告会输出 `issueType`、`severity`、`recommendedAction`、`repairTarget`，并检查参考图数量、手机屏幕禁用项、成片音轨、响度、黑屏、冻结与局部黑边/无效构图（视觉 QC）。QC 页支持按建议返工（确认后才触发真实生成）。
+
+视频确认不会把已进入 `RENDERED` / `FINAL_CONFIRMED` 的项目状态回退到更早阶段。
 
 AI Provider 连通性探针：
 
 ```bash
-npm run probe:ark:text        # Ark 文本
-npm run probe:ark:image       # Ark 图片
-npm run probe:ark:video       # Ark 视频
+npm run probe:ark:text              # Ark 文本
+npm run probe:ark:image             # Ark 图片
+npm run probe:ark:video             # Ark 视频创建参数
+npm run probe:ark:video:last-frame  # Seedance 首尾帧能力
+npm run probe:ark:video:poll        # 按 task_id 轮询视频任务
 ```
 
 完整探针列表见 `package.json` 的 `probe:*` 脚本。

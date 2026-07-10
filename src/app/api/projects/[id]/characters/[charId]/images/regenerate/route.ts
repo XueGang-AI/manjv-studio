@@ -34,7 +34,7 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, label = ''): P
 /**
  * POST /api/projects/:id/characters/:charId/images/regenerate?mode=quick|consistency
  *
- * mode=quick (默认): 1 张 front_full_body
+ * mode=quick: 1 张 front_full_body
  * mode=consistency:  5 张 (front_full_body, front_half_body, left_side, right_side, back_view)
  *
  * 策略：先生成新图，全部成功后删除旧图；失败则保留旧图不动
@@ -46,7 +46,7 @@ export async function POST(
   try {
     const { id: projectId, charId } = await params
     const url = new URL(request.url)
-    const mode = url.searchParams.get('mode') || 'quick'
+    const mode = url.searchParams.get('mode') || 'consistency'
 
     const character = await prisma.character.findFirst({
       where: { id: charId, projectId },

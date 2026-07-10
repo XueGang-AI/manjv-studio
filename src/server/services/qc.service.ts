@@ -13,23 +13,48 @@ import {
   safeCleanupDir,
   spawnSafe,
 } from './ffmpeg-utils'
-import { resolveMediaReadUrl } from './media-persist'
+import { resolveMediaReadUrl, resolveMediaRenderSource } from './media-persist'
+import {
+  analyzeImageVisualQuality,
+  analyzeVideoVisualQuality,
+  hasBlockingVisualIssues,
+  toStoredVisualQuality,
+  type VisualQualityResult,
+} from './media-visual-qc.service'
+import {
+  buildRegenerationRepairHint,
+  type RegenerationIssueType,
+} from './shot-regeneration-quality'
 
 type JsonValue = import('@prisma/client').Prisma.InputJsonValue
 
 export type QCSeverity = 'P0' | 'P1' | 'P2' | 'P3'
 export type QCRecommendedAction = 'accept' | 'rerun_shot_image' | 'rerun_shot_video' | 'rerender_final'
+export type QCRepairTargetKind = 'shot_image' | 'shot_video' | 'final_render'
+
+export interface QCRepairTarget {
+  kind: QCRepairTargetKind
+  shotId?: string
+  shotNo?: number
+  issueTypes?: RegenerationIssueType[]
+  fixNote?: string
+}
 
 export interface QCIssue {
   level: 'high' | 'medium' | 'low'
   field: string
   problem: string
   suggestion: string
+  shotId?: string
   shotNo?: number
   timeRange?: string
   issueType?: string
   severity?: QCSeverity
   recommendedAction?: QCRecommendedAction
+  regenerationIssueTypes?: RegenerationIssueType[]
+  fixNote?: string
+  repairTarget?: QCRepairTarget
+  repairSequence?: QCRepairTarget[]
 }
 
 export interface QCResult {
@@ -61,12 +86,139 @@ function toSortableNumber(value: unknown): number {
 }
 
 export class QCService {
+  private applyCrossStageRepairPriority(results: QCResult[]): QCResult[] {
+    const issues = results.flatMap(result => result.issues)
+    const imageRepairByShot = new Map<string, QCRepairTarget>()
+    for (const issue of issues) {
+      const target = issue.repairTarget
+      if (
+        target?.kind === 'shot_image' &&
+        target.shotId &&
+        (issue.issueType === 'shot_image_partial_black' || issue.regenerationIssueTypes?.includes('invalid_composition'))
+      ) {
+        imageRepairByShot.set(this.repairShotKey(issue), target)
+      }
+    }
+
+    if (imageRepairByShot.size === 0) return results
+
+    return results.map(result => ({
+      ...result,
+      issues: result.issues.map(issue => {
+        const originalTarget = issue.repairTarget
+        if (originalTarget?.kind !== 'shot_video') return issue
+
+        const imageTarget = imageRepairByShot.get(this.repairShotKey(issue))
+        if (!imageTarget) return issue
+
+        return {
+          ...issue,
+          recommendedAction: 'rerun_shot_image',
+          repairTarget: imageTarget,
+          repairSequence: this.mergeRepairSequence([imageTarget, originalTarget, ...(issue.repairSequence || [])]),
+        }
+      }),
+    }))
+  }
+
+  private repairShotKey(issue: QCIssue): string {
+    return issue.shotId || issue.repairTarget?.shotId || (issue.shotNo ? `shotNo:${issue.shotNo}` : '')
+  }
+
+  private mergeRepairSequence(targets: Array<QCRepairTarget | undefined>): QCRepairTarget[] {
+    const sequence: QCRepairTarget[] = []
+    const seen = new Set<string>()
+    for (const target of targets) {
+      if (!target?.kind) continue
+      const key = `${target.kind}:${target.shotId || target.shotNo || 'global'}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      sequence.push(target)
+    }
+    return sequence
+  }
+
+  private mergeVisualQualityParams(params: unknown, visualQuality: ReturnType<typeof toStoredVisualQuality>): JsonValue {
+    const base = params && typeof params === 'object' && !Array.isArray(params)
+      ? params as Record<string, unknown>
+      : {}
+    return { ...base, visual_quality: visualQuality } as unknown as JsonValue
+  }
+
+  private visualQualityProblem(result: VisualQualityResult): string {
+    const issue = result.issues.find(item => item.severity === 'high') || result.issues[0]
+    return issue?.message || '检测到疑似无效画面区域'
+  }
+
+  private visualQualityTimeRange(result: VisualQualityResult): string | undefined {
+    const timeSeconds = this.visualQualityIssueTime(result)
+    if (timeSeconds == null) return undefined
+    const start = Math.max(0, timeSeconds - 0.5)
+    const end = timeSeconds + 0.5
+    return `${start.toFixed(1)}-${end.toFixed(1)}s`
+  }
+
+  private visualQualityIssueTime(result: VisualQualityResult): number | undefined {
+    const sample = result.frameMetrics.find(metric =>
+      (metric.topMean <= 16 && metric.topDarkRatio >= 0.82) ||
+      (metric.bottomMean <= 16 && metric.bottomDarkRatio >= 0.82) ||
+      (metric.leftMean <= 16 && metric.leftDarkRatio >= 0.82) ||
+      (metric.rightMean <= 16 && metric.rightDarkRatio >= 0.82)
+    )
+    if (sample?.timeSeconds == null || !Number.isFinite(sample.timeSeconds)) return undefined
+    return sample.timeSeconds
+  }
+
+  private findShotForFinalTime(
+    shots: Array<{ id: string; shotNo: number; startTime?: number | null; endTime?: number | null }>,
+    timeSeconds?: number,
+  ): { id: string; shotNo: number; startTime?: number | null; endTime?: number | null } | null {
+    if (timeSeconds == null || !Number.isFinite(timeSeconds)) return null
+    const epsilon = 0.05
+    return shots.find(shot =>
+      shot.startTime != null &&
+      shot.endTime != null &&
+      timeSeconds >= shot.startTime - epsilon &&
+      timeSeconds < shot.endTime + epsilon
+    ) || null
+  }
+
   private normalizeIssue(issue: QCIssue): QCIssue {
+    const recommendedAction = issue.recommendedAction || this.actionFromLevel(issue.level)
+    const repairHint = buildRegenerationRepairHint({
+      ...issue,
+      recommendedAction,
+    })
+    const regenerationIssueTypes = issue.regenerationIssueTypes || repairHint.issueTypes
     return {
       ...issue,
       issueType: issue.issueType || issue.field,
       severity: issue.severity || this.severityFromLevel(issue.level),
-      recommendedAction: issue.recommendedAction || this.actionFromLevel(issue.level),
+      recommendedAction,
+      regenerationIssueTypes: regenerationIssueTypes.length > 0 ? regenerationIssueTypes : undefined,
+      fixNote: issue.fixNote || repairHint.fixNote,
+      repairTarget: issue.repairTarget || this.repairTargetFromIssue(issue, recommendedAction, regenerationIssueTypes, issue.fixNote || repairHint.fixNote),
+    }
+  }
+
+  private repairTargetFromIssue(
+    issue: QCIssue,
+    recommendedAction: QCRecommendedAction,
+    issueTypes: RegenerationIssueType[],
+    fixNote?: string,
+  ): QCRepairTarget | undefined {
+    if (recommendedAction === 'accept') return undefined
+    const kind: QCRepairTargetKind = recommendedAction === 'rerun_shot_image'
+      ? 'shot_image'
+      : recommendedAction === 'rerun_shot_video'
+        ? 'shot_video'
+        : 'final_render'
+    return {
+      kind,
+      shotId: issue.shotId,
+      shotNo: issue.shotNo,
+      issueTypes: issueTypes.length > 0 ? issueTypes : undefined,
+      fixNote,
     }
   }
 
@@ -195,12 +347,14 @@ export class QCService {
     // 成片 QC
     results.push(await this.qcFinalVideo(projectId, episodeId))
 
+    const prioritizedResults = this.applyCrossStageRepairPriority(results)
+
     // 保存报告
-    for (const result of results) {
+    for (const result of prioritizedResults) {
       await this.saveReport(projectId, episodeId || null, result)
     }
 
-    return results
+    return prioritizedResults
   }
 
   /** 故事方案 QC */
@@ -331,12 +485,53 @@ export class QCService {
         const confirmedImage = shotImages.find(i => i.shotId === shot.id && i.isConfirmed)
         const refCount = Array.isArray(confirmedImage?.referenceImages) ? confirmedImage.referenceImages.length : 0
         const charCount = Array.isArray(shot.characters) ? shot.characters.length : 0
+        if (confirmedImage) {
+          const renderSource = await resolveMediaRenderSource(confirmedImage.storageObjectKey, confirmedImage.imageUrl)
+          if (renderSource && !/^https?:\/\//i.test(renderSource)) {
+            try {
+              const visualQuality = await analyzeImageVisualQuality(renderSource)
+              const storedVisualQuality = toStoredVisualQuality(visualQuality)
+              await prisma.shotImage.update({
+                where: { id: confirmedImage.id },
+                data: { params: this.mergeVisualQualityParams(confirmedImage.params, storedVisualQuality) },
+              })
+              if (hasBlockingVisualIssues(visualQuality)) {
+                issues.push({
+                  level: 'high',
+                  field: `shot_${shot.shotNo}.image.visual_quality`,
+                  problem: `镜头 ${shot.shotNo} 确认分镜图存在视觉质量问题：${this.visualQualityProblem(visualQuality)}`,
+                  suggestion: '跳过该候选并重生成分镜图，再重新生成对应视频片段',
+                  shotId: shot.id,
+                  shotNo: shot.shotNo,
+                  timeRange: this.timeRangeForShot(shot),
+                  issueType: 'shot_image_partial_black',
+                  severity: 'P1',
+                  recommendedAction: 'rerun_shot_image',
+                })
+              }
+            } catch (error) {
+              issues.push({
+                level: 'low',
+                field: `shot_${shot.shotNo}.image.visual_quality`,
+                problem: `镜头 ${shot.shotNo} 分镜图视觉检测失败：${(error as Error).message}`,
+                suggestion: '人工复核该分镜图，必要时重跑 QC',
+                shotId: shot.id,
+                shotNo: shot.shotNo,
+                timeRange: this.timeRangeForShot(shot),
+                issueType: 'visual_qc_unavailable',
+                severity: 'P3',
+                recommendedAction: 'accept',
+              })
+            }
+          }
+        }
         if (confirmedImage && charCount > 0 && refCount === 0) {
           issues.push({
             level: 'medium',
             field: `shot_${shot.shotNo}.referenceImages`,
             problem: `镜头 ${shot.shotNo} 已确认分镜图缺少角色/场景参考记录`,
             suggestion: '使用带参考图约束的重生成入口追加候选',
+            shotId: shot.id,
             shotNo: shot.shotNo,
             timeRange: this.timeRangeForShot(shot),
             issueType: 'reference_count',
@@ -387,7 +582,8 @@ export class QCService {
 
     let confirmedCount = 0
     for (const shot of shots) {
-      if (videos.some(v => v.shotId === shot.id && v.isConfirmed)) confirmedCount++
+      const confirmedVideo = videos.find(v => v.shotId === shot.id && v.isConfirmed)
+      if (confirmedVideo) confirmedCount++
       const shotText = [
         shot.shotName,
         shot.location,
@@ -398,7 +594,6 @@ export class QCService {
       ].filter(Boolean).join(' ')
       const involvesPhone = /手机|直播|屏幕|支架|phone|livestream|screen/i.test(shotText)
       if (involvesPhone) {
-        const confirmedVideo = videos.find(v => v.shotId === shot.id && v.isConfirmed)
         const latestVideo = videos.filter(v => v.shotId === shot.id).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]
         const prompt = confirmedVideo?.prompt || latestVideo?.prompt || shot.videoPrompts[0]?.prompt
         if (!this.hasPhoneSafetyGuard(prompt)) {
@@ -407,12 +602,54 @@ export class QCService {
             field: `shot_${shot.shotNo}.videoPrompt`,
             problem: `镜头 ${shot.shotNo} 涉及手机/直播画面，但视频 prompt 缺少对平台 UI、对勾、爱心、logo 和伪文字的禁用项`,
             suggestion: '选择“手机伪 UI/文字”后重跑视频片段',
+            shotId: shot.id,
             shotNo: shot.shotNo,
             timeRange: this.timeRangeForShot(shot),
             issueType: 'prompt_phone_safety',
             severity: 'P1',
             recommendedAction: 'rerun_shot_video',
           })
+        }
+      }
+
+      if (confirmedVideo) {
+        const renderSource = await resolveMediaRenderSource(confirmedVideo.storageObjectKey, confirmedVideo.videoUrl)
+        if (renderSource && !/^https?:\/\//i.test(renderSource)) {
+          try {
+            const visualQuality = await analyzeVideoVisualQuality(renderSource, { duration: confirmedVideo.duration })
+            const storedVisualQuality = toStoredVisualQuality(visualQuality)
+            await prisma.shotVideo.update({
+              where: { id: confirmedVideo.id },
+              data: { params: this.mergeVisualQualityParams(confirmedVideo.params, storedVisualQuality) },
+            })
+            if (hasBlockingVisualIssues(visualQuality)) {
+              issues.push({
+                level: 'high',
+                field: `shot_${shot.shotNo}.video.visual_quality`,
+                problem: `镜头 ${shot.shotNo} 视频片段存在视觉质量问题：${this.visualQualityProblem(visualQuality)}`,
+                suggestion: '先重生成分镜图或视频片段，再重新合成最终成片',
+                shotId: shot.id,
+                shotNo: shot.shotNo,
+                timeRange: this.visualQualityTimeRange(visualQuality) || this.timeRangeForShot(shot),
+                issueType: 'shot_video_partial_black',
+                severity: 'P1',
+                recommendedAction: 'rerun_shot_video',
+              })
+            }
+          } catch (error) {
+            issues.push({
+              level: 'low',
+              field: `shot_${shot.shotNo}.video.visual_quality`,
+              problem: `镜头 ${shot.shotNo} 视频视觉检测失败：${(error as Error).message}`,
+              suggestion: '人工复核该视频片段，必要时重跑 QC',
+              shotId: shot.id,
+              shotNo: shot.shotNo,
+              timeRange: this.timeRangeForShot(shot),
+              issueType: 'visual_qc_unavailable',
+              severity: 'P3',
+              recommendedAction: 'accept',
+            })
+          }
         }
       }
     }
@@ -438,6 +675,12 @@ export class QCService {
       return this.buildResult(50, [{ level: 'medium', field: 'final_video', problem: '没有已生成的成片', suggestion: '合成最终视频' }], '尚无成片')
     }
 
+    const shots = await prisma.shot.findMany({
+      where: { episodeId, projectId },
+      orderBy: { shotNo: 'asc' },
+      select: { id: true, shotNo: true, startTime: true, endTime: true },
+    })
+
     if (!fv.videoUrl) issues.push({ level: 'high', field: 'videoUrl', problem: '缺少视频 URL', suggestion: '重新合成', issueType: 'final_video_missing', severity: 'P1', recommendedAction: 'rerender_final' })
     if (!fv.duration) issues.push({ level: 'medium', field: 'duration', problem: '缺少时长信息', suggestion: '', issueType: 'final_duration_missing', severity: 'P2', recommendedAction: 'rerender_final' })
     if (!fv.fps) issues.push({ level: 'low', field: 'fps', problem: '缺少帧率信息', suggestion: '' })
@@ -447,12 +690,22 @@ export class QCService {
     let tempDir: string | null = null
     if (!localPath && fv.storageObjectKey) {
       try {
-        fs.mkdirSync(tempRoot, { recursive: true })
-        tempDir = createTaskTempDir(tempRoot)
-        const readUrl = await resolveMediaReadUrl(fv.storageObjectKey, fv.videoUrl)
-        if (readUrl && /^https?:\/\//i.test(readUrl)) {
-          const downloaded = await downloadVideo(readUrl, tempDir)
+        const renderSource = await resolveMediaRenderSource(fv.storageObjectKey, fv.videoUrl)
+        if (renderSource && !/^https?:\/\//i.test(renderSource)) {
+          localPath = renderSource
+        } else if (renderSource && /^https?:\/\//i.test(renderSource)) {
+          fs.mkdirSync(tempRoot, { recursive: true })
+          tempDir = createTaskTempDir(tempRoot)
+          const downloaded = await downloadVideo(renderSource, tempDir)
           localPath = downloaded.localPath
+        } else {
+          const readUrl = await resolveMediaReadUrl(fv.storageObjectKey, fv.videoUrl)
+          if (readUrl && /^https?:\/\//i.test(readUrl)) {
+            fs.mkdirSync(tempRoot, { recursive: true })
+            tempDir = createTaskTempDir(tempRoot)
+            const downloaded = await downloadVideo(readUrl, tempDir)
+            localPath = downloaded.localPath
+          }
         }
       } catch (error) {
         issues.push({
@@ -522,6 +775,39 @@ export class QCService {
           issueType: 'final_freeze',
           severity: 'P2',
           recommendedAction: 'rerun_shot_video',
+        })
+      }
+      try {
+        const visualQuality = await analyzeVideoVisualQuality(localPath, {
+          duration: media.duration ?? fv.duration,
+          sampleIntervalSeconds: 1,
+          maxSamples: 90,
+        })
+        if (hasBlockingVisualIssues(visualQuality)) {
+          const issueTime = this.visualQualityIssueTime(visualQuality)
+          const issueShot = this.findShotForFinalTime(shots, issueTime)
+          issues.push({
+            level: 'high',
+            field: 'final_video.visual_quality',
+            problem: `成片存在局部大面积黑边或无效画面区域：${this.visualQualityProblem(visualQuality)}`,
+            suggestion: '定位对应镜头，重生成分镜图/视频片段后重新合成',
+            shotId: issueShot?.id,
+            shotNo: issueShot?.shotNo,
+            timeRange: this.visualQualityTimeRange(visualQuality) || (issueShot ? this.timeRangeForShot(issueShot) : undefined),
+            issueType: 'final_visual_partial_black',
+            severity: 'P1',
+            recommendedAction: 'rerun_shot_video',
+          })
+        }
+      } catch (error) {
+        issues.push({
+          level: 'low',
+          field: 'final_video.visual_quality',
+          problem: `成片视觉质量检测失败：${(error as Error).message}`,
+          suggestion: '人工复核成片抽帧，必要时重跑 QC',
+          issueType: 'visual_qc_unavailable',
+          severity: 'P3',
+          recommendedAction: 'accept',
         })
       }
     }

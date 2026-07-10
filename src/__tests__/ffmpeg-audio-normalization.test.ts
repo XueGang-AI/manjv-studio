@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  buildAudioFadeFilter,
   buildAudioNormalizationArgs,
+  buildVideoNormalizationFilter,
   isAudioNormalizationEnabled,
 } from '@/server/services/ffmpeg.service'
 
@@ -36,5 +38,21 @@ describe('成片音频响度归一化配置', () => {
   it('限制目标响度范围，避免传入异常值破坏渲染参数', () => {
     expect(buildAudioNormalizationArgs('/tmp/in.mp4', '/tmp/out.mp4', 0)).toContain('loudnorm=I=-8:TP=-1.5:LRA=11')
     expect(buildAudioNormalizationArgs('/tmp/in.mp4', '/tmp/out.mp4', -60)).toContain('loudnorm=I=-30:TP=-1.5:LRA=11')
+  })
+
+  it('按边界转场计划生成视频和音频淡入淡出滤镜', () => {
+    const videoFilter = buildVideoNormalizationFilter(
+      1080,
+      1920,
+      25,
+      6,
+      { fadeInSeconds: 0.4, fadeOutSeconds: 0.4 },
+    )
+    const audioFilter = buildAudioFadeFilter(6, { fadeInSeconds: 0.4, fadeOutSeconds: 0.4 })
+
+    expect(videoFilter).toContain('scale=1080:1920:force_original_aspect_ratio=decrease')
+    expect(videoFilter).toContain('fade=t=in:st=0:d=0.4')
+    expect(videoFilter).toContain('fade=t=out:st=5.6:d=0.4')
+    expect(audioFilter).toBe('afade=t=in:st=0:d=0.4,afade=t=out:st=5.6:d=0.4')
   })
 })

@@ -58,6 +58,8 @@ export interface VideoGenerationRequest {
   taskType: 'text_to_video' | 'image_to_video'
   prompt: string
   inputImage?: string
+  /** Optional last frame for providers/accounts where first+last frame mode has been explicitly enabled. */
+  lastImage?: string
   referenceImages?: string[]
   negativePrompt?: string
   duration?: number
@@ -68,6 +70,11 @@ export interface VideoGenerationRequest {
   voiceText?: string
   /** 是否自动生成音频 */
   generateAudio?: boolean
+  transition?: {
+    type: 'hard_cut' | 'match_cut' | 'fade_to_black'
+    durationFrames: number
+    reason?: string
+  }
   params?: Record<string, unknown>
 }
 

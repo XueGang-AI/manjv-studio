@@ -156,7 +156,8 @@ export async function handleStoryboard(taskId: string): Promise<void> {
           'Output ONLY one valid JSON object, with no markdown, no explanation, and no wrapper key. ' +
           'The root object MUST be exactly shaped as: { "episode": {...}, "shots": [...], "ending_hook": {...} }. ' +
           `The "shots" value MUST be a non-empty array with exactly ${targetShotCount} concise shot objects. ` +
-          'Every shot MUST include shot_no, shot_name, start_time, end_time, scene_time, location, characters, action, camera, visual, emotion, sfx, bgm, dialogue, purpose, and duration. ' +
+          'Every shot MUST include shot_no, shot_name, start_time, end_time, scene_time, location, characters, action, details, camera, visual, emotion, sfx, bgm, dialogue, purpose, technical_notes, and duration. ' +
+          'Each visual object MUST include scene_key, continuity_in, continuity_out, and transition_to_next. ' +
           'Keep every text field concise so the JSON closes completely.',
       })
       rawText = retryResponse.rawText
@@ -200,6 +201,8 @@ export async function handleStoryboard(taskId: string): Promise<void> {
     // 保存 Shots + ImagePrompts + VideoPrompts
     const createdShots = []
     for (const shot of shots) {
+      const visual = ((shot.visual as Record<string, unknown>) || {}) as Record<string, unknown>
+      const transitionToNext = visual.transition_to_next || visual.transitionToNext || null
       const shotRecord = await prisma.shot.create({
         data: {
           episodeId: episode.id, projectId,
@@ -211,13 +214,15 @@ export async function handleStoryboard(taskId: string): Promise<void> {
           location: (shot.location as string) || '',
           characters: ((shot.characters as unknown[]) || []) as unknown as JsonValue,
           action: (shot.action as string) || '',
+          details: (shot.details as string) || '',
           camera: ((shot.camera as Record<string, unknown>) || {}) as unknown as JsonValue,
-          visual: ((shot.visual as Record<string, unknown>) || {}) as unknown as JsonValue,
+          visual: visual as unknown as JsonValue,
           emotion: (shot.emotion as string) || '',
           sfx: (shot.sfx as string) || '',
           bgm: (shot.bgm as string) || '',
           dialogue: (shot.dialogue as string) || '',
           purpose: (shot.purpose as string) || '',
+          technicalNotes: (shot.technical_notes as string) || '',
         },
       })
 
@@ -245,7 +250,12 @@ export async function handleStoryboard(taskId: string): Promise<void> {
             duration: (shot.duration as number) || (shot.end_time as number || 10) - (shot.start_time as number || 0),
             motionStrength: 'medium',
             cameraMotion: ((shot.camera as Record<string, string>)?.movement) || '',
-            params: { fps: 24 } as unknown as JsonValue, confirmed: false,
+            params: {
+              fps: 24,
+              scene_key: visual.scene_key || visual.sceneKey || null,
+              continuity_out: visual.continuity_out || visual.continuityOut || null,
+              transition_to_next: transitionToNext,
+            } as unknown as JsonValue, confirmed: false,
           },
         })
       }
@@ -357,7 +367,9 @@ function buildRuntimeStoryboardInstruction(targetShotCount: number, episodeDurat
     `Generate exactly ${targetShotCount} shots for this ${episodeDuration}-second episode.`,
     'Keep JSON compact and fully closed. Do not over-explain.',
     'Each shot action/dialogue/purpose field should stay under 80 Chinese characters.',
-    'Do not add fields outside the required JSON object unless they are image_prompt or video_prompt.',
+    'Use visual.scene_key as a stable continuity key: adjacent shots in the same physical space must use exactly the same scene_key.',
+    'Use visual.transition_to_next.type as hard_cut, match_cut, or fade_to_black. Same scene continuity should prefer match_cut or hard_cut; use fade_to_black only for clear time/location/act breaks.',
+    'Do not add fields outside the required JSON object unless they are inside visual, image_prompt, or video_prompt.',
   ].join('\n')
 }
 

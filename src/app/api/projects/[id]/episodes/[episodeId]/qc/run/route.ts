@@ -9,13 +9,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     const { id: projectId, episodeId } = await params
     const task = await prisma.generationTask.create({
-      data: { projectId, episodeId, taskType: 'QUALITY_CHECK', modelName: 'QC-Service', status: 'running' },
+      data: {
+        projectId,
+        episodeId,
+        taskType: 'QUALITY_CHECK',
+        modelName: 'QC-Service',
+        status: 'running',
+        progress: 0,
+        startedAt: new Date(),
+      },
     })
     taskId = task.id
     const results = await qcService.runQC(projectId, episodeId)
     await prisma.generationTask.update({
       where: { id: task.id },
-      data: { status: 'success', output: { results } as unknown as JsonValue, finishedAt: new Date() },
+      data: {
+        status: 'success',
+        progress: 100,
+        output: { results } as unknown as JsonValue,
+        finishedAt: new Date(),
+      },
     })
     return NextResponse.json({ success: true, data: { results, taskId: task.id } })
   } catch (error) {
@@ -24,6 +37,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         where: { id: taskId },
         data: {
           status: 'failed',
+          progress: 100,
           errorMessage: (error as Error).message.substring(0, 500),
           finishedAt: new Date(),
         },

@@ -1,6 +1,78 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { qcService } from '@/server/services/qc.service'
+import { resolveMediaRenderSource } from '@/server/services/media-persist'
+import {
+  analyzePersistedVideoVisualQuality,
+  analyzeImageVisualQuality,
+  hasBlockingVisualIssues,
+  toStoredVisualQuality,
+} from '@/server/services/media-visual-qc.service'
+
+type JsonValue = import('@prisma/client').Prisma.InputJsonValue
+
+type ShotImageCandidate = {
+  id: string
+  shotId: string
+  imageUrl: string | null
+  storageObjectKey: string | null
+  params: unknown
+}
+
+type ShotVideoCandidate = {
+  id: string
+  shotId: string
+  videoUrl: string | null
+  storageObjectKey: string | null
+  duration: number | null
+  params: unknown
+}
+
+function mergeVisualQualityParams(params: unknown, visualQuality: ReturnType<typeof toStoredVisualQuality>): JsonValue {
+  const base = params && typeof params === 'object' && !Array.isArray(params)
+    ? params as Record<string, unknown>
+    : {}
+  return { ...base, visual_quality: visualQuality } as unknown as JsonValue
+}
+
+async function isShotImageVisuallyUsable(candidate: ShotImageCandidate): Promise<boolean> {
+  const renderSource = await resolveMediaRenderSource(candidate.storageObjectKey, candidate.imageUrl)
+  if (!renderSource || /^https?:\/\//i.test(renderSource)) return true
+
+  try {
+    const visualQuality = await analyzeImageVisualQuality(renderSource)
+    const storedVisualQuality = toStoredVisualQuality(visualQuality)
+    await prisma.shotImage.update({
+      where: { id: candidate.id },
+      data: { params: mergeVisualQualityParams(candidate.params, storedVisualQuality) },
+    })
+    return !hasBlockingVisualIssues(visualQuality)
+  } catch (error) {
+    console.warn(`[auto-confirm] ShotImage ${candidate.id} visual QC unavailable: ${(error as Error).message}`)
+    return true
+  }
+}
+
+async function isShotVideoVisuallyUsable(candidate: ShotVideoCandidate): Promise<boolean> {
+  if (!candidate.videoUrl) return false
+  try {
+    const visualQuality = await analyzePersistedVideoVisualQuality(
+      candidate.storageObjectKey,
+      candidate.videoUrl,
+      { duration: candidate.duration, sampleIntervalSeconds: 1, maxSamples: 40 },
+    )
+    if (!visualQuality) return true
+    const storedVisualQuality = toStoredVisualQuality(visualQuality)
+    await prisma.shotVideo.update({
+      where: { id: candidate.id },
+      data: { params: mergeVisualQualityParams(candidate.params, storedVisualQuality) },
+    })
+    return !hasBlockingVisualIssues(visualQuality)
+  } catch (error) {
+    console.warn(`[auto-confirm] ShotVideo ${candidate.id} visual QC unavailable: ${(error as Error).message}`)
+    return true
+  }
+}
 
 /**
  * POST /api/projects/:id/episodes/:episodeId/automation/auto-confirm
@@ -129,20 +201,16 @@ async function confirmShotImages(projectId: string, episodeId: string) {
   let missing = 0
 
   for (const shot of shots) {
-    let target = await prisma.shotImage.findFirst({
-      where: { projectId, shotId: shot.id, isConfirmed: true },
+    const candidates = await prisma.shotImage.findMany({
+      where: { projectId, shotId: shot.id },
+      orderBy: [{ isConfirmed: 'desc' }, { isSelected: 'desc' }, { createdAt: 'asc' }],
     })
-    if (!target) {
-      target = await prisma.shotImage.findFirst({
-        where: { projectId, shotId: shot.id, isSelected: true },
-        orderBy: { createdAt: 'desc' },
-      })
-    }
-    if (!target) {
-      target = await prisma.shotImage.findFirst({
-        where: { projectId, shotId: shot.id },
-        orderBy: { createdAt: 'asc' },
-      })
+    let target: (typeof candidates)[number] | null = null
+    for (const candidate of candidates) {
+      if (await isShotImageVisuallyUsable(candidate)) {
+        target = candidate
+        break
+      }
     }
     if (!target) {
       missing++
@@ -181,20 +249,16 @@ async function confirmShotVideos(projectId: string, episodeId: string) {
   let missing = 0
 
   for (const shot of shots) {
-    let target = await prisma.shotVideo.findFirst({
-      where: { projectId, shotId: shot.id, isConfirmed: true },
+    const candidates = await prisma.shotVideo.findMany({
+      where: { projectId, shotId: shot.id, videoUrl: { not: '' } },
+      orderBy: [{ isConfirmed: 'desc' }, { isSelected: 'desc' }, { createdAt: 'asc' }],
     })
-    if (!target) {
-      target = await prisma.shotVideo.findFirst({
-        where: { projectId, shotId: shot.id, isSelected: true, videoUrl: { not: '' } },
-        orderBy: { createdAt: 'desc' },
-      })
-    }
-    if (!target) {
-      target = await prisma.shotVideo.findFirst({
-        where: { projectId, shotId: shot.id, videoUrl: { not: '' } },
-        orderBy: { createdAt: 'asc' },
-      })
+    let target: (typeof candidates)[number] | null = null
+    for (const candidate of candidates) {
+      if (await isShotVideoVisuallyUsable(candidate)) {
+        target = candidate
+        break
+      }
     }
     if (!target) {
       missing++

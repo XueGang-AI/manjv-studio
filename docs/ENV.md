@@ -46,8 +46,38 @@
 | `ARK_IMAGE_MODEL` | 图片模型 | `doubao-seedream-5-0-260128` |
 | `ARK_VIDEO_MODEL` | 视频模型；Medium Agent Plan 默认使用 Seedance 1.5 Pro | `doubao-seedance-1-5-pro-251215` |
 | `ARK_VIDEO_RESOLUTION` | 视频分辨率 | `720p` |
+| `ARK_VIDEO_ENABLE_LAST_FRAME` | 是否在图生视频请求中发送 `role: last_frame`（需同时有 `lastImage`） | 未设置 / `false`（默认关闭） |
 
 文本模型走 OpenAI 兼容 `/chat/completions`；图片和视频走 Ark 专用接口。视频模型为异步任务，创建后由 Worker 轮询。配置中使用 `https://ark.cn-beijing.volces.com/api/plan`，代码会在实际请求前规范化为 `https://ark.cn-beijing.volces.com/api/plan/v3`，因此脚本和运行时不要再硬编码旧的普通 `/api/v3` 默认值。Seedance 2.0 是高套餐/开通后可选能力，当前 Medium Agent Plan 下不可作为默认视频模型。
+
+### `ARK_VIDEO_ENABLE_LAST_FRAME` 说明
+
+- **默认关闭**。生产 Adapter 与 `shot-videos` Handler 仅在该变量严格等于 `true` 时才会附带尾帧。
+- Handler 侧即使开启，也只在转场为 `match_cut` 且存在下一镜已确认分镜图时解析 `lastImage`。
+- Seedance 首帧/尾帧模式与 `reference_image` 互斥；有确认分镜图作 `first_frame` 时不会再混发角色/场景 reference。
+- **启用前必须先跑真实账号探针**，确认当前模型与套餐接受 `first_frame` + `last_frame`：
+
+```bash
+npm run probe:ark:video:last-frame
+# 可选：创建成功后继续轮询 A/B 完成态（更耗额度与时间）
+npm run probe:ark:video:last-frame -- --wait
+```
+
+- 探针报告见 `docs/ARK_LAST_FRAME_PROBE_REPORT.md`。当前默认模型真实探针结论为 **`SUPPORTED`**（create + wait 均成功）。
+- **P1-2 策略（已实现，默认仍关闭）**：
+  - 仅当 `ARK_VIDEO_ENABLE_LAST_FRAME=true` 时生效；
+  - 仅在边界转场为 **`match_cut`**（同 scene 连续性）且下一镜有已确认分镜图时附加 `last_frame`；
+  - 批量 `GENERATE_SHOT_VIDEOS` 与单镜视频重生共用同一策略（`seedance-last-frame` 服务）；
+  - `hard_cut` / `fade_to_black` 不发尾帧，避免跨场景强行衔接到错误构图；
+  - 有首帧时不混发 `reference_image`（与远端互斥一致）。
+- 推荐开启方式（需重启 Worker 与 Web，使 env 生效）：
+
+```bash
+# .env
+ARK_VIDEO_ENABLE_LAST_FRAME=true
+```
+
+- 切勿在未探针时对生产项目批量打开该开关。开启后请用 1–2 个同场景 `match_cut` 镜头做小流量回归，并检查 `ShotVideo.params.seedance_input_mode === 'first_last_frame'`。
 
 ## Worker
 

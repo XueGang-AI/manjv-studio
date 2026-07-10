@@ -1,5 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
+import { resolveMediaRenderSource } from '@/server/services/media-persist'
+import {
+  analyzeImageVisualQuality,
+  hasBlockingVisualIssues,
+  toStoredVisualQuality,
+} from '@/server/services/media-visual-qc.service'
+
+type JsonValue = import('@prisma/client').Prisma.InputJsonValue
+
+function mergeVisualQualityParams(params: unknown, visualQuality: ReturnType<typeof toStoredVisualQuality>): JsonValue {
+  const base = params && typeof params === 'object' && !Array.isArray(params)
+    ? params as Record<string, unknown>
+    : {}
+  return { ...base, visual_quality: visualQuality } as unknown as JsonValue
+}
 
 /**
  * POST /api/projects/:id/episodes/:eid/shot-images/:imageId/confirm
@@ -13,6 +28,27 @@ export async function POST(
 
     const image = await prisma.shotImage.findFirst({ where: { id: imageId, projectId } })
     if (!image) return NextResponse.json({ success: false, error: '图片不存在' }, { status: 404 })
+
+    const renderSource = await resolveMediaRenderSource(image.storageObjectKey, image.imageUrl)
+    if (renderSource && !/^https?:\/\//i.test(renderSource)) {
+      try {
+        const visualQuality = await analyzeImageVisualQuality(renderSource)
+        const storedVisualQuality = toStoredVisualQuality(visualQuality)
+        await prisma.shotImage.update({
+          where: { id: imageId },
+          data: { params: mergeVisualQualityParams(image.params, storedVisualQuality) },
+        })
+        if (hasBlockingVisualIssues(visualQuality)) {
+          return NextResponse.json({
+            success: false,
+            error: '分镜图存在大面积黑边或无效画面区域，请重生成后再确认',
+            data: { imageId, shotId: image.shotId, visualQuality: storedVisualQuality },
+          }, { status: 422 })
+        }
+      } catch (error) {
+        console.warn(`[shot-image-confirm] visual QC unavailable for ${imageId}: ${(error as Error).message}`)
+      }
+    }
 
     // 直接确认（无需先选择），同一镜头其他图取消确认和选中
     await prisma.shotImage.updateMany({

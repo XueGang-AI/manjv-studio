@@ -201,14 +201,21 @@ npm run db:push                # 推送 Prisma schema
 npm run db:seed                # 种子数据 + Prompt 模板
 npm run db:studio              # Prisma Studio
 npm run lint                   # ESLint
-# AI 探针：npm run probe:ark:text / probe:ark:image / probe:ark:video
+# AI 探针：npm run probe:ark:text / probe:ark:image / probe:ark:video / probe:ark:video:last-frame
 ```
 
 **npm 缓存**：本地有权限问题，使用 `npm install --cache ~/.npm-cache-new`。
 
+## Seedance last_frame（可选）
+
+- 默认关闭。`ARK_VIDEO_ENABLE_LAST_FRAME=true` 时，仅 `match_cut` + 下一镜确认分镜图会发送 `last_frame`。
+- 探针：`npm run probe:ark:video:last-frame`（可选 `--wait`）；结论见 `docs/ARK_LAST_FRAME_PROBE_REPORT.md`。
+- 策略实现：`src/server/services/seedance-last-frame.ts`；批量与单镜视频重生共用。改 env 后必须重启 Web + Worker。
+
 ## 已知问题
 
 - ⚠️ `npm run build` 可能因 Google Fonts 网络不可达而失败
+- ⚠️ 规则 QC 全通过不等于视觉完美：伪文字/伪地图、跨镜微漂移仍可能存在，成品交付需结合人工抽帧
 
 ## 禁止提交
 

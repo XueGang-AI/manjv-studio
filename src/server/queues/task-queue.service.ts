@@ -49,7 +49,12 @@ export class TaskService {
   async completeTask(taskId: string, output?: Record<string, unknown>) {
     return prisma.generationTask.update({
       where: { id: taskId },
-      data: { status: 'success', finishedAt: new Date(), output: (output || {}) as unknown as JsonValue },
+      data: {
+        status: 'success',
+        progress: 100,
+        finishedAt: new Date(),
+        output: (output || {}) as unknown as JsonValue,
+      },
     })
   }
 

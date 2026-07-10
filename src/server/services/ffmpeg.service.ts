@@ -32,6 +32,11 @@ import {
   type RenderErrorCode,
   type ProbeResult,
 } from './ffmpeg-utils'
+import {
+  buildClipFadePlan,
+  type ClipFadePlan,
+  type VideoTransitionPlanItem,
+} from './video-transition-plan'
 
 // Re-export for external consumers
 export type { RenderErrorCode }
@@ -43,6 +48,7 @@ export interface RenderInput {
   aspectRatio?: string
   fps?: number
   addFadeTransition?: boolean
+  transitions?: VideoTransitionPlanItem[]
   normalizeAudio?: boolean
   targetIntegratedLoudness?: number
 }
@@ -76,6 +82,63 @@ export function buildAudioNormalizationArgs(
     '-y',
     outputPath,
   ]
+}
+
+function formatSeconds(value: number): string {
+  return Number(Math.max(0, value).toFixed(3)).toString()
+}
+
+function clampFadeSeconds(duration: number, value: number): number {
+  const safeDuration = Math.max(0, duration)
+  if (safeDuration <= 0 || value <= 0) return 0
+  return Math.min(value, Math.max(0.1, safeDuration / 3))
+}
+
+export function buildVideoNormalizationFilter(
+  targetWidth: number,
+  targetHeight: number,
+  fps: number,
+  duration: number,
+  fade: ClipFadePlan = { fadeInSeconds: 0, fadeOutSeconds: 0 },
+): string {
+  const fadeIn = clampFadeSeconds(duration, fade.fadeInSeconds)
+  const fadeOut = clampFadeSeconds(duration, fade.fadeOutSeconds)
+  const filters = [
+    `scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease`,
+    `pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2`,
+    'setsar=1',
+    `fps=${fps}`,
+    'format=yuv420p',
+  ]
+
+  if (fadeIn > 0) {
+    filters.push(`fade=t=in:st=0:d=${formatSeconds(fadeIn)}`)
+  }
+  if (fadeOut > 0) {
+    const start = Math.max(0, duration - fadeOut)
+    filters.push(`fade=t=out:st=${formatSeconds(start)}:d=${formatSeconds(fadeOut)}`)
+  }
+
+  return filters.join(',')
+}
+
+export function buildAudioFadeFilter(
+  duration: number,
+  fade: ClipFadePlan = { fadeInSeconds: 0, fadeOutSeconds: 0 },
+): string | null {
+  const fadeIn = clampFadeSeconds(duration, fade.fadeInSeconds)
+  const fadeOut = clampFadeSeconds(duration, fade.fadeOutSeconds)
+  const filters: string[] = []
+
+  if (fadeIn > 0) {
+    filters.push(`afade=t=in:st=0:d=${formatSeconds(fadeIn)}`)
+  }
+  if (fadeOut > 0) {
+    const start = Math.max(0, duration - fadeOut)
+    filters.push(`afade=t=out:st=${formatSeconds(start)}:d=${formatSeconds(fadeOut)}`)
+  }
+
+  return filters.length > 0 ? filters.join(',') : null
 }
 
 export class FFmpegService {
@@ -185,6 +248,9 @@ export class FFmpegService {
       const safeW = Math.max(1, Math.round(w))
       const safeH = Math.max(1, Math.round(h))
       const safeFps = Math.max(1, Math.min(120, fps))
+      const fadePlan = input.addFadeTransition
+        ? buildClipFadePlan(input.shotVideos.length, input.transitions || [], safeFps)
+        : buildClipFadePlan(input.shotVideos.length, [], safeFps)
 
       // 2. Create task temp dir
       taskDir = createTaskTempDir(this.tempRoot)
@@ -258,7 +324,9 @@ export class FFmpegService {
           localPaths[i],
           normalizedPath,
           safeW, safeH, safeFps,
+          input.shotVideos[i]?.duration || probe.duration || 0,
           probe.hasAudioStream,
+          fadePlan[i],
         )
 
         normalizedPaths.push(normalizedPath)
@@ -372,7 +440,9 @@ export class FFmpegService {
     targetWidth: number,
     targetHeight: number,
     fps: number,
+    duration: number,
     hasAudio: boolean,
+    fade: ClipFadePlan = { fadeInSeconds: 0, fadeOutSeconds: 0 },
   ): Promise<void> {
     const args: string[] = []
 
@@ -383,15 +453,19 @@ export class FFmpegService {
       args.push('-i', inputPath, '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo')
     }
 
-    // 视频滤镜：缩放 + letterbox padding + 统一 SAR + 固定帧率 + 像素格式
+    // 视频滤镜：缩放 + letterbox padding + 统一 SAR + 固定帧率 + 像素格式 + 可选边界淡入淡出
     args.push(
-      '-vf', `scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease,pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fps},format=yuv420p`,
+      '-vf', buildVideoNormalizationFilter(targetWidth, targetHeight, fps, duration, fade),
     )
 
     // 视频编码 — CRF 18 保证中间文件高质量
     args.push('-c:v', 'libx264', '-preset', 'fast', '-crf', '18')
 
     // 音频编码 — 统一格式
+    const audioFade = buildAudioFadeFilter(duration, fade)
+    if (audioFade) {
+      args.push('-af', audioFade)
+    }
     args.push('-c:a', 'aac', '-b:a', '128k', '-ar', '44100', '-ac', '2')
 
     // 强制恒定帧率输出，避免 fps filter 产生时间戳不规则
